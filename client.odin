@@ -13,7 +13,7 @@ internal_state: struct {
 	wayland_socket:       linux.Fd,
 	requests_byte_buffer: [dynamic]byte,
 	outgoing_fds:         [dynamic]linux.Fd,
-	incoming_fds:          [dynamic]linux.Fd,
+	incoming_fds:         [dynamic]linux.Fd,
 	events_byte_buffer:   [dynamic]byte,
 	events:               [dynamic]Event,
 	event_index:          int,
