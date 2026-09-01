@@ -36,6 +36,7 @@ connect :: proc(allocator := context.allocator, temp_allocator := context.temp_a
 	internal_state.temp_allocator = temp_allocator
 
 	internal_state.requests_byte_buffer = make([dynamic]byte, 0, WAYLAND_BUFFER_LEN, internal_state.allocator) or_return
+	internal_state.events_byte_buffer   = make([dynamic]byte, 0, WAYLAND_BUFFER_LEN, internal_state.allocator) or_return
 	internal_state.incoming_fds         = make([dynamic]linux.Fd, 0, 28, internal_state.allocator) or_return
 	internal_state.outgoing_fds         = make([dynamic]linux.Fd, 0, 28, internal_state.allocator) or_return
 	internal_state.interface_map        = make(map[u32]string, internal_state.allocator)
@@ -76,7 +77,6 @@ new_id :: proc() -> u32 {
 roundtrip :: proc() -> Error {
 	free_all(internal_state.temp_allocator)
 	socket := internal_state.wayland_socket	
-	internal_state.events_byte_buffer = make([dynamic]byte, 0, WAYLAND_BUFFER_LEN, internal_state.temp_allocator) or_return
 	internal_state.events             = make([dynamic]Event, internal_state.temp_allocator) or_return
 	send(socket, internal_state.requests_byte_buffer[:], internal_state.outgoing_fds[:]) or_return
 	clear(&internal_state.requests_byte_buffer)
