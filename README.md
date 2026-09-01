@@ -53,7 +53,7 @@ main :: proc() {
 - `queue_request(req)`: Queues the request data into an internal buffer, the procedure is 
 essentially a big type switcher on `req`. This allows for a very straight forward surface API, 
 initialize a `*_Request` struct and pass it to proc.
-- `roundtrip`: Sends all buffered request data and reads all incoming event data, encoding in an 
+- `roundtrip()`: Sends all buffered request data and reads all incoming event data, encoding in an 
 internal `events` array. **Must be called before `poll_event`**
 - `poll_event()`: Returns `event, true` if available, `nil, false` otherwise. The `event` is a 
 double union, the first switch is to know which protocol the event comes from, the second switch 
