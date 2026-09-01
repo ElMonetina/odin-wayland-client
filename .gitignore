@@ -6,4 +6,6 @@
 !generator.py
 !protocols/
 !protocols/wayland.xml
+!wayland/
+!wayland/**
 !README.md
