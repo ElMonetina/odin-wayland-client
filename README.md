@@ -1,6 +1,6 @@
 # README
 
-This is a native to Odin implementation of Wayland, the project also includes a `generator.py` script,
+This is a native to Odin implementation of Wayland, an alternative to libwayland, the project also includes a `generator.py` script,
 
 ## Overview
 
