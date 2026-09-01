@@ -82,7 +82,6 @@ roundtrip :: proc() -> Error {
 	clear(&internal_state.requests_byte_buffer)
 	recv(socket, internal_state.events_byte_buffer[:], &internal_state.incoming_fds) or_return
 	parse_events(internal_state.events_byte_buffer[:], &internal_state.events)
-
 	return nil
 }
 
@@ -120,6 +119,9 @@ recv :: proc(socket: linux.Fd, data: []byte, fds: ^[dynamic]linux.Fd) -> (n: int
 		control = control[:]
 	}
 	n = linux.recvmsg(socket, &hdr, {.CMSG_CLOEXEC}) or_return
+	if n ==  0 {
+		return n, .EPIPE
+	}
 	if .CTRUNC in hdr.flags {
 		return n, .ENOBUFS
 	}
