@@ -400,6 +400,20 @@ def emit_types(proto):
 def emit_dispatch(protocols):
     iface_to_pkg = {i.name: proto.pkg for proto in protocols for i in proto.interfaces}
 
+    # Globals are the interfaces advertised by wl_registry and therefore bindable.
+    # Anything referenced as a new_id target (e.g. wl_surface from
+    # wl_compositor.create_surface, wl_buffer from wl_shm_pool.create_buffer) is a
+    # child object created by a request/event, never bound via the registry.
+    created = set()
+    for proto in protocols:
+        for iface in proto.interfaces:
+            for name, args, _, _ in iface.requests + iface.events:
+                for a in args:
+                    if a.get("type") == "new_id" and a.get("interface"):
+                        created.add(a["interface"])
+    global_consts = [(proto.pkg, i.base) for proto in protocols for i in proto.interfaces
+                     if i.name not in created and i.name != "wl_display"]
+
     out = []
     out.append("package client")
     out.append("")
@@ -407,7 +421,6 @@ def emit_dispatch(protocols):
         if proto.copyright:
             out.extend(copyright_lines(proto.copyright))
             out.append("")
-    out.append('import "core:strings"')
     for proto in protocols:
         out.append(f'import "{proto.pkg}"')
     out.append("")
@@ -446,7 +459,15 @@ def emit_dispatch(protocols):
                         pkg = iface_to_pkg[nid_iface]
                         out.append(f"\t\t\tinternal_state.interface_map[id] = {pkg}.{upper(base_ident(nid_iface))}_INTERFACE")
                     else:
-                        out.append("\t\t\tinternal_state.interface_map[id] = strings.clone(r.interface, internal_state.allocator)")
+                        # dynamic interface (bind): resolve the name to a static
+                        # constant instead of cloning, so the map never holds
+                        # heap-allocated strings
+                        out.append("\t\t\tswitch r.interface {")
+                        for pkg, base in global_consts:
+                            const = f"{pkg}.{upper(base)}_INTERFACE"
+                            out.append(f"\t\t\tcase {const}:")
+                            out.append(f"\t\t\t\tinternal_state.interface_map[id] = {const}")
+                        out.append("\t\t\t}")
                 out.append("\t\t\tappend(&internal_state.requests_byte_buffer, ..data[:])")
         out.append("\t\t}")
     out.append("\t}")
