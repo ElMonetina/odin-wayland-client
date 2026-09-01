@@ -5,7 +5,7 @@ This is a native to Odin implementation of Wayland, an alternative to libwayland
 ## Overview
 
 As of the time of writing, only client side generation is supported. It will be handled after I
-manage to solve an `interesting` problem.
+manage to solve an [`interesting`](https://wayland-book.com/surfaces/dmabuf.html) problem.
 
 ### API Design
 
