@@ -73,10 +73,6 @@ new_id :: proc() -> u32 {
 	return internal_state.global_current_id
 }
 
-delete_id :: proc(id: u32) {
-	delete_key(&internal_state.interface_map, id)
-}
-
 roundtrip :: proc() -> Error {
 	free_all(internal_state.temp_allocator)
 	socket := internal_state.wayland_socket	
