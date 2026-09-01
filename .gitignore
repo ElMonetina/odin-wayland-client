@@ -3,7 +3,6 @@
 !util/
 !util/**
 !client.odin
-!build.sh
 !generator.py
 !protocols/
 !protocols/wayland.xml
