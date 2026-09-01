@@ -188,8 +188,8 @@ class Interface:
         self.base = base_ident(name)
         self.summary = ""
         self.description = ""
-        self.requests = []   # (name, [args], summary, description)
-        self.events = []     # (name, [args], summary, description)
+        self.requests = []   # (name, [args], summary, description, destructor)
+        self.events = []     # (name, [args], summary, description, destructor)
         self.enums = []      # (name, is_bitfield, [(entry, value, summary)], summary, description)
 
 class Protocol:
@@ -216,11 +216,11 @@ def parse_files(paths):
                 args = [a.attrib for a in req.findall("arg")]
                 args = effective_args(iface.name, req.attrib["name"], args)
                 s, d = _desc(req)
-                iface.requests.append((req.attrib["name"], args, s, d))
+                iface.requests.append((req.attrib["name"], args, s, d, req.attrib.get("type") == "destructor"))
             for evt in el.findall("event"):
                 args = [a.attrib for a in evt.findall("arg")]
                 s, d = _desc(evt)
-                iface.events.append((evt.attrib["name"], args, s, d))
+                iface.events.append((evt.attrib["name"], args, s, d, evt.attrib.get("type") == "destructor"))
             for en in el.findall("enum"):
                 entries = [(e.attrib["name"], e.attrib["value"], e.attrib.get("summary", "")) for e in en.findall("entry")]
                 s, d = _desc(en)
@@ -357,8 +357,8 @@ def emit_types(proto):
         out.append("display := u32(1)")
         out.append("")
 
-    req_names = [f"{pascal(i.base)}_{pascal(r)}_Request" for i in proto.interfaces for r, _, _, _ in i.requests]
-    evt_names = [f"{pascal(i.base)}_{pascal(e)}_Event" for i in proto.interfaces for e, _, _, _ in i.events]
+    req_names = [f"{pascal(i.base)}_{pascal(r)}_Request" for i in proto.interfaces for r, _, _, _, _ in i.requests]
+    evt_names = [f"{pascal(i.base)}_{pascal(e)}_Event" for i in proto.interfaces for e, _, _, _, _ in i.events]
 
     out.append("Request :: union #no_nil {")
     for n in req_names:
@@ -377,14 +377,14 @@ def emit_types(proto):
         out.append(f"{upper(iface.base)}_VERSION :: {iface.version}")
         out.append("")
 
-        for i, (name, args, summary, description) in enumerate(iface.requests):
+        for i, (name, args, summary, description, _) in enumerate(iface.requests):
             out.extend(doc_lines(summary, description))
             out.append(f"{upper(iface.base)}_{upper(name)}_OPCODE :: {i}")
             out.extend(emit_struct(iface, name, args, True, "Request"))
             out.append(encode_proc(iface, name, args))
             out.append("")
 
-        for i, (name, args, summary, description) in enumerate(iface.events):
+        for i, (name, args, summary, description, _) in enumerate(iface.events):
             out.extend(doc_lines(summary, description))
             out.append(f"{upper(iface.base)}_{upper(name)}_OPCODE :: {i}")
             out.extend(emit_struct(iface, name, args, False, "Event"))
@@ -407,7 +407,7 @@ def emit_dispatch(protocols):
     created = set()
     for proto in protocols:
         for iface in proto.interfaces:
-            for name, args, _, _ in iface.requests + iface.events:
+            for name, args, _, _, _ in iface.requests + iface.events:
                 for a in args:
                     if a.get("type") == "new_id" and a.get("interface"):
                         created.add(a["interface"])
@@ -439,7 +439,7 @@ def emit_dispatch(protocols):
         out.append(f"\tcase {alias}.Request:")
         out.append("\t\tswitch r in p {")
         for iface in proto.interfaces:
-            for name, args, summary, description in iface.requests:
+            for name, args, summary, description, destructor in iface.requests:
                 struct = f"{alias}.{pascal(iface.base)}_{pascal(name)}_Request"
                 proc = f"{alias}.{iface.base}_{name}_encode"
                 out.append(f"\t\tcase {struct}:")
@@ -469,6 +469,8 @@ def emit_dispatch(protocols):
                             out.append(f"\t\t\t\tinternal_state.interface_map[id] = {const}")
                         out.append("\t\t\t}")
                 out.append("\t\t\tappend(&internal_state.requests_byte_buffer, ..data[:])")
+                if destructor:
+                    out.append(f"\t\t\tdelete_key(&internal_state.interface_map, r.{iface.base})")
         out.append("\t\t}")
     out.append("\t}")
     out.append("\treturn")
@@ -489,11 +491,14 @@ def emit_dispatch(protocols):
         for iface in proto.interfaces:
             out.append(f"\tcase {alias}.{upper(iface.base)}_INTERFACE:")
             out.append("\t\tswitch opcode {")
-            for i, (name, args, summary, description) in enumerate(iface.events):
+            for i, (name, args, summary, description, _) in enumerate(iface.events):
                 out.append(f"\t\tcase {alias}.{upper(iface.base)}_{upper(name)}_OPCODE:")
                 if iface.name == "wl_display" and name == "delete_id":
                     # server freed a server-created object: drop it from the table
                     out.append(f"\t\t\tdelete_key(&internal_state.interface_map, {alias}.{iface.base}_{name}_decode(data).id)")
+                elif iface.name == "wl_callback" and name == "done":
+                    # callbacks self-destruct after firing: drop their id
+                    out.append("\t\t\tdelete_key(&internal_state.interface_map, object_id)")
                 else:
                     call = f"{alias}.{iface.base}_{name}_decode(data"
                     if has_fd(args):
@@ -516,7 +521,7 @@ def check_deps(protocols):
     missing = set()
     for proto in protocols:
         for iface in proto.interfaces:
-            for name, args, summary, description in iface.requests + iface.events:
+            for name, args, summary, description, _ in iface.requests + iface.events:
                 for a in args:
                     if a.get("type") == "new_id" and a.get("interface") \
                        and a["interface"] not in known:
