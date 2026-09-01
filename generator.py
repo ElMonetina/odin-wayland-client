@@ -8,7 +8,7 @@ protocol, a package named after the protocol's <protocol name="..."> attribute:
     <pkg>/generated.odin   -- protocol types (structs, unions, enums) and the
                               per-message encode/decode procs.
 
-    generated.odin         -- the client-side dispatch: `request()` (marshal +
+    generated.odin         -- the client-side dispatch: `queue_request()` (marshal +
                               object registration) and `dispatch_event()`
                               (demarshal by interface string + opcode), spanning
                               every protocol passed in.
@@ -116,10 +116,18 @@ def write_stmt(arg, accessor: str):
 
 def decode_stmt(arg):
     name = arg.get("name")
-    fn = READ_FN[arg.get("type")]
+    t = arg.get("type")
+    fn = READ_FN[t]
     if fn is None:  # fd: travels via SCM_RIGHTS; pop it from the incoming queue
         return f"\te.{name} = pop_front(fds)"
-    return f"\te.{name}, r = util.{fn}(data[n:]); n += r"
+    line = f"\te.{name}, r = util.{fn}(data[n:]); n += r"
+    if t == "string":
+        # borrows from the decode buffer; clone (arena alloc) so the event
+        # owns it for this frame and remove_range can't clobber it
+        line += f"\n\te.{name} = strings.clone(e.{name}, allocator)"
+    elif t == "array":
+        line += f"\n\te.{name} = bytes.clone(e.{name}, allocator)"
+    return line
 
 # ---------------------------------------------------------------------------
 # The wl_registry.bind special case
@@ -261,6 +269,15 @@ def has_new_id(args):
 def has_fd(args):
     return any(a.get("type") == "fd" for a in args)
 
+def has_string(args):
+    return any(a.get("type") == "string" for a in args)
+
+def has_array(args):
+    return any(a.get("type") == "array" for a in args)
+
+def needs_allocator(args):
+    return has_string(args) or has_array(args)
+
 def _accessor(a):
     return "new_id" if a.get("type") == "new_id" else f"req.{a.get('name')}"
 
@@ -304,6 +321,8 @@ def decode_proc(iface, evt_name, args):
     sig = "data: []byte"
     if has_fd(args):
         sig += ", fds: ^[dynamic]linux.Fd"
+    if needs_allocator(args):
+        sig += ", allocator: mem.Allocator"
     lines = []
     lines.append(f"{proc} :: proc({sig}) -> {struct} {{")
     lines.append(f"\te: {struct}")
@@ -347,7 +366,9 @@ def emit_types(proto):
         out.extend(copyright_lines(proto.copyright))
         out.append("")
     out.append('import util "../util"')
+    out.append('import "core:bytes"')
     out.append('import "core:mem"')
+    out.append('import "core:strings"')
     out.append('import "core:sys/linux"')
     out.append("")
 
@@ -432,7 +453,7 @@ def emit_dispatch(protocols):
     out.append("")
 
     out.append("// Returns the ID of a new object, 0 if none was created.")
-    out.append("request :: proc(req: Request) -> (id: u32, err: Error) {")
+    out.append("queue_request :: proc(req: Request) -> (id: u32, err: Error) {")
     out.append("\tswitch p in req {")
     for proto in protocols:
         alias = proto.pkg
@@ -503,6 +524,8 @@ def emit_dispatch(protocols):
                     call = f"{alias}.{iface.base}_{name}_decode(data"
                     if has_fd(args):
                         call += ", &internal_state.incoming_fds"
+                    if needs_allocator(args):
+                        call += ", internal_state.temp_allocator"
                     call += ")"
                     out.append(f"\t\t\tappend(&internal_state.events, {call})")
             out.append("\t\t}")
