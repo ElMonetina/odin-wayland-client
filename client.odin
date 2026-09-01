@@ -30,7 +30,7 @@ Error :: union {
 	mem.Allocator_Error
 }
 
-// Connects the client to the wayland server
+// Connects the client to the wayland server, note that the temp allocator must be backed by an allocator that supports free_all(temp_allocator)
 connect :: proc(allocator := context.allocator, temp_allocator := context.temp_allocator) -> Error {
 	internal_state.allocator = allocator
 	internal_state.temp_allocator = temp_allocator
@@ -77,7 +77,7 @@ new_id :: proc() -> u32 {
 roundtrip :: proc() -> Error {
 	free_all(internal_state.temp_allocator)
 	socket := internal_state.wayland_socket	
-	internal_state.events             = make([dynamic]Event, internal_state.temp_allocator) or_return
+	internal_state.events = make([dynamic]Event, internal_state.temp_allocator) or_return
 	send(socket, internal_state.requests_byte_buffer[:], internal_state.outgoing_fds[:]) or_return
 	clear(&internal_state.requests_byte_buffer)
 	recv(socket, internal_state.events_byte_buffer[:], &internal_state.incoming_fds) or_return
