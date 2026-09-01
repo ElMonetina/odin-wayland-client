@@ -47,7 +47,7 @@ connect :: proc(allocator := context.allocator, temp_allocator := context.temp_a
 	xdg_runtime_dir := os.get_env("XDG_RUNTIME_DIR", internal_state.temp_allocator)
 	wayland_display := os.get_env("WAYLAND_DISPLAY", internal_state.temp_allocator)
 
-	socket_path       := strings.concatenate({xdg_runtime_dir, "/", wayland_display})
+	socket_path       := strings.concatenate({xdg_runtime_dir, "/", wayland_display}, internal_state.temp_allocator)
 	socket_path_bytes := transmute([]u8)socket_path
 	copy(addr.sun_path[:], socket_path_bytes)
 	linux.connect(internal_state.wayland_socket, &addr) or_return
