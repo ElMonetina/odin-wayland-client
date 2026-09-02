@@ -77,22 +77,10 @@ main :: proc() {
 
 	free_all(context.temp_allocator)
 
-	lib, ok := dynlib.load_library("libvulkan.so")
-	if !ok {
-		log.debug("failed to load")
-	}
-	proc_ptr, found := dynlib.symbol_address(lib, "vkCreateInstance")
-	if !found {
-		log.debug("Failed to find proc")
-	}
-
-	vk.load_proc_addresses(proc_ptr)
-
-	instance_create_info := vk.InstanceCreateInfo{
+	instance_ci := vk.InstanceCreateInfo{
 		sType = .INSTANCE_CREATE_INFO,
-
 	}
-	// vk.CreateInstance()
+	instance, _ := client.create_vulkan_instance(&instance_ci, nil)
 
 	for !state.quitting {
 		handle_event(&state)
