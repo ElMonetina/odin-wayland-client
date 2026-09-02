@@ -105,6 +105,12 @@ def ident(name: str) -> str:
 # Arg type mapping
 # ---------------------------------------------------------------------------
 
+# Populated during parse: (interface_name, enum_name) -> base of owning interface.
+# Used to resolve bitfield <arg enum="..."> references, including fully-qualified
+# cross-interface refs like "wl_data_device_manager.dnd_action".
+BITFIELD_ENUMS = {}     # (iface_name, enum_name) -> owning iface's base
+IFACE_BASE = {}         # iface_name -> base (current protocol)
+
 FIELD_TYPE = {
     "int":    "i32",
     "uint":   "u32",
@@ -129,6 +135,43 @@ READ_FN = {
     "fixed":  "read_fixed"
 }
 
+def resolve_enum_ref(iface, arg):
+    """Resolve an arg's enum attribute to (owning_iface_name, enum_name).
+
+    References may be bare (same interface) or fully-qualified
+    ("wl_data_device_manager.dnd_action"). Returns None if the arg has no
+    enum reference."""
+    ref = arg.get("enum")
+    if not ref:
+        return None
+    if "." in ref:
+        iname, ename = ref.split(".", 1)
+    else:
+        iname, ename = iface.name, ref
+    return iname, ename
+
+def is_bitfield_arg(iface, arg):
+    """True if this arg's type is a uint referencing a bitfield enum."""
+    if arg.get("type") != "uint":
+        return False
+    ref = resolve_enum_ref(iface, arg)
+    return ref is not None and ref in BITFIELD_ENUMS
+
+def bitfield_type(iface, arg):
+    """The named Odin bit_set type for a bitfield enum arg (e.g. Seat_Capability_Set).
+
+    The bit_set is declared with an explicit u32 underlying integer (see enum_decl)
+    so sizeof == 4 and it always matches the wire encoding."""
+    iname, ename = resolve_enum_ref(iface, arg)
+    owner_base = IFACE_BASE[iname]
+    return f"{pascal(owner_base)}_{pascal(ename)}_Set"
+
+def arg_field_type(iface, arg):
+    """Odin field type for an arg, honoring bitfield enums."""
+    if is_bitfield_arg(iface, arg):
+        return bitfield_type(iface, arg)
+    return FIELD_TYPE[arg.get("type")]
+
 def size_term(arg, accessor: str):
     t = arg.get("type")
     if t in ("int", "uint", "fixed", "object", "new_id"):
@@ -139,15 +182,22 @@ def size_term(arg, accessor: str):
         return f"util.compute_array_size({accessor})"
     return None  # fd: zero bytes in the body
 
-def write_stmt(arg, accessor: str):
+def write_stmt(arg, accessor: str, iface=None):
     t = arg.get("type")
     if t == "fd":
         return None
+    if iface is not None and is_bitfield_arg(iface, arg):
+        # bit_set has no util.write overload; emit the raw u32
+        return f"util.write_u32(&msg, transmute(u32){accessor})"
     return f"util.write(&msg, {accessor})"
 
-def decode_stmt(arg):
+def decode_stmt(iface, arg):
     name = arg.get("name")
     t = arg.get("type")
+    if is_bitfield_arg(iface, arg):
+        # read the raw u32, then cast to the bit_set (underlying u32)
+        return (f"\tval_{name}, _ := util.read_u32(data[n:]); n += 4\n"
+                f"\te.{name} = transmute({bitfield_type(iface, arg)})val_{name}")
     fn = READ_FN[t]
     if fn is None:  # fd: travels via SCM_RIGHTS; pop it from the incoming queue
         return f"\te.{name} = pop_front(fds)"
@@ -263,13 +313,17 @@ def parse_files(paths):
             for en in el.findall("enum"):
                 entries = [(e.attrib["name"], e.attrib["value"], e.attrib.get("summary", "")) for e in en.findall("entry")]
                 s, d = _desc(en)
-                iface.enums.append((en.attrib["name"], en.attrib.get("bitfield") == "true", entries, s, d))
+                is_bitfield = en.attrib.get("bitfield") == "true"
+                iface.enums.append((en.attrib["name"], is_bitfield, entries, s, d))
+                if is_bitfield:
+                    BITFIELD_ENUMS[(el.attrib["name"], en.attrib["name"])] = True
             proto.interfaces.append(iface)
         # finalize interface identifier bases: strip the prefix (namespace +
         # protocol name) shared by every interface in this protocol
         lcp = interface_lcp([strip_version(i.name) for i in proto.interfaces])
         for iface in proto.interfaces:
             iface.base = base_from(iface.name, lcp)
+            IFACE_BASE[iface.name] = iface.base
         protocols.append(proto)
     return protocols
 
@@ -287,7 +341,7 @@ def struct_fields(iface, args, target_object: bool, indent="\t"):
             # new_id in REQUESTS is the encode proc's param, not a field.
             # In EVENTS it is a server-assigned object id and IS a field.
             continue
-        fields.append((a.get("name"), FIELD_TYPE[t], a.get("summary", "")))
+        fields.append((a.get("name"), arg_field_type(iface, a), a.get("summary", "")))
     if not fields:
         return []
     width = max(len(n) for n, _, _ in fields)
@@ -340,7 +394,7 @@ def encode_proc(iface, req_name, args):
     lines.append("\tmsg := make([dynamic]byte, 0, size, allocator) or_return")
     lines.append("\tutil.write(&msg, object, opcode, size)")
     for a in args:
-        stmt = write_stmt(a, _accessor(a))
+        stmt = write_stmt(a, _accessor(a), iface)
         if stmt:
             lines.append(f"\t{stmt}")
         else:
@@ -365,21 +419,39 @@ def decode_proc(iface, evt_name, args):
     lines.append("\tr: int")
     lines.append("\tn := r")
     for a in args:
-        lines.append(decode_stmt(a))
+        lines.append(decode_stmt(iface, a))
     lines.append("\treturn e")
     lines.append("}")
     return "\n".join(lines)
+
+def _parse_int(s: str) -> int:
+    s = s.strip()
+    return int(s, 0) if s.lower().startswith("0x") else int(s)
 
 def enum_decl(iface, enum_name, is_bitfield, entries, summary, description):
     typ = f"{pascal(iface.base)}_{pascal(enum_name)}"
     lines = doc_lines(summary, description)
     lines.append(f"{typ} :: enum u32 {{")
     for ename, val, summ in entries:
-        line = f"\t{ident(pascal(ename))} = {val},"
+        i = _parse_int(val)
+        if is_bitfield:
+            # Wayland bitfield entries are power-of-two MASK values, but Odin's
+            # bit_set interprets each enum value as a BIT INDEX. Convert the mask
+            # to its bit position (index = log2(mask)) so the two line up; the
+            # underlying u32 then makes the storage bit pattern == the wire mask.
+            # Skip zero-valued (empty flags) and composite (non power-of-two,
+            # e.g. wl_shell_surface.resize.top_left = 5) entries.
+            if i == 0 or i & (i - 1):
+                continue
+            i = i.bit_length() - 1
+        line = f"\t{ident(pascal(ename))} = {i},"
         if summ:
             line += f"  // {summ.strip()}"
         lines.append(line)
     lines.append("}")
+    if is_bitfield:
+        # forced u32 underlying so sizeof == 4 (matches the u32 wire encoding)
+        lines.append(f"{typ}_Set :: bit_set[{typ}; u32]")
     return "\n".join(lines)
 
 # ---------------------------------------------------------------------------
