@@ -10,6 +10,5 @@
 !wayland/**
 !src/
 !src/main.odin
-!vulkan_wayland/
-!vulkan_wayland/vulkan_wayland.odin
+!vulkan_wayland.odin
 !README.md
