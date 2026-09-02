@@ -28,12 +28,17 @@ State :: struct {
 	quitting:      bool,
 }
 
+Vulkan_State :: struct {
+	instance: vk.Instance
+}
+
 Pixel :: [4]u8
 
 main :: proc() {
 	context.logger = log.create_console_logger()
 
 	state: State
+	vk_state: Vulkan_State
 
 	conn_err := client.connect()
 	if conn_err != nil {
@@ -80,7 +85,7 @@ main :: proc() {
 	instance_ci := vk.InstanceCreateInfo{
 		sType = .INSTANCE_CREATE_INFO,
 	}
-	instance, _ := client.create_vulkan_instance(&instance_ci, nil)
+	vk_state.instance, _ = client.vulkan_create_instance(&instance_ci, nil)
 
 	for !state.quitting {
 		handle_event(&state)

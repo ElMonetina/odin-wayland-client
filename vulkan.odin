@@ -3,7 +3,7 @@ package client
 import vk "vendor:vulkan"
 import "core:dynlib"
 
-create_vulkan_instance :: proc(create_info: ^vk.InstanceCreateInfo, allocator: ^vk.AllocationCallbacks) -> (instance: vk.Instance, ok: bool) {
+vulkan_create_instance :: proc(create_info: ^vk.InstanceCreateInfo, allocator: ^vk.AllocationCallbacks) -> (instance: vk.Instance, ok: bool) {
 	lib := dynlib.load_library("libvulkan.so", false, internal_state.temp_allocator) or_return
 	defer dynlib.unload_library(lib)
 
