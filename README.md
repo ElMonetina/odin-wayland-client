@@ -52,12 +52,12 @@ main :: proc() {
  temporary one supports calling `free_all(temp_allocator)`.
 - `queue_request(req)`: Queues the request data into an internal buffer, the procedure is 
 essentially a big type switcher on `req`. This allows for a very straight forward surface API, 
-initialize a `*_Request` struct and pass it to proc.
-- `roundtrip()`: Sends all buffered request data and reads all incoming event data, encoding in an 
+initialize a `*_Request` struct and pass it to the proc.
+- `roundtrip()`: Sends all buffered request data and reads all incoming event data, encoding it in an 
 internal `events` array. **Must be called before `poll_event`**
 - `poll_event()`: Returns `event, true` if available, `nil, false` otherwise. The `event` is a 
-double union, the first switch is to know which protocol the event comes from, the second switch 
-is the actual event. From it values can be read from to initialize requests for queueing.
+double union, the first switch is to know which protocol the event belongs to, the second switch 
+is to get the actual event. Finally its fields can be read from to initialize requests for queueing.
 
 ### The generator
 
