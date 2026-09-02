@@ -12,6 +12,7 @@ write :: proc {
 	write_i32,
 	write_string,
 	write_array,
+	write_fixed,
 }
 
 write_header :: proc(msg: ^[dynamic]byte, object: u32, opcode, size: u16) {
