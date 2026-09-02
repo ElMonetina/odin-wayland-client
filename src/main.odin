@@ -24,6 +24,7 @@ State :: struct {
 	linux_dmabuf:  u32,
 	w, h:          i32,
 	dt:            f64,
+	quitting:      bool,
 }
 
 Pixel :: [4]u8
@@ -74,8 +75,7 @@ main :: proc() {
 	state.shm_file, state.shm_pool_data, _ = client.create_shm_file(shm_file_size)
 
 	free_all(context.temp_allocator)
-	quitting: bool
-	for !quitting {
+	for !state.quitting {
 		handle_event(&state)
 	}
 }
@@ -189,6 +189,8 @@ handle_event :: proc(state: ^State) {
 					surface = state.wl_surface,
 				}
 				client.queue_request(commit)
+			case xdg.Toplevel_Close_Event:
+				state.quitting = true
 			}
 		}
 	}
