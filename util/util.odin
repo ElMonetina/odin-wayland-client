@@ -1,6 +1,9 @@
 package util
 
 import "core:mem"
+import "core:math/fixed"
+
+Fixed :: distinct fixed.Fixed(i32, 8)
 
 write :: proc {
 	write_header,
@@ -48,6 +51,10 @@ write_string :: proc(msg: ^[dynamic]byte, str: string) {
 	write_padding(msg, n_pad)
 }
 
+write_fixed :: proc(msg: ^[dynamic]byte, f: Fixed) {
+	write(msg, f.i)
+}
+
 write_padding :: proc(msg: ^[dynamic]byte, n: int) {
 	for i in 0 ..< n {
 		padding: byte
@@ -93,6 +100,13 @@ read_array :: proc(msg: []byte) -> (arr: []byte, consumed: int) {
 	n := int(length)
 	arr = msg[read:read + n]
 	return arr, read + n + round_up_word(n)
+}
+
+read_fixed :: proc(msg: []byte) -> (Fixed, int) {
+	f: Fixed
+	i, read := read_i32(msg)
+	f.i = i
+	return f, read
 }
 
 round_up_word :: proc(#any_int n: int) -> int {

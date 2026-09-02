@@ -1421,8 +1421,8 @@ DATA_DEVICE_ENTER_OPCODE :: 1
 Data_Device_Enter_Event :: struct {
 	serial  : u32,  // serial number of the enter event
 	surface : u32,  // client surface entered
-	x       : i32,  // surface-local x coordinate
-	y       : i32,  // surface-local y coordinate
+	x       : util.Fixed,  // surface-local x coordinate
+	y       : util.Fixed,  // surface-local y coordinate
 	id      : u32,  // source data_offer object
 }
 data_device_enter_decode :: proc(data: []byte) -> Data_Device_Enter_Event {
@@ -1431,8 +1431,8 @@ data_device_enter_decode :: proc(data: []byte) -> Data_Device_Enter_Event {
 	n := r
 	e.serial, r = util.read_u32(data[n:]); n += r
 	e.surface, r = util.read_u32(data[n:]); n += r
-	e.x, r = util.read_i32(data[n:]); n += r
-	e.y, r = util.read_i32(data[n:]); n += r
+	e.x, r = util.read_fixed(data[n:]); n += r
+	e.y, r = util.read_fixed(data[n:]); n += r
 	e.id, r = util.read_u32(data[n:]); n += r
 	return e
 }
@@ -1458,16 +1458,16 @@ data_device_leave_decode :: proc(data: []byte) -> Data_Device_Leave_Event {
 DATA_DEVICE_MOTION_OPCODE :: 3
 Data_Device_Motion_Event :: struct {
 	time : u32,  // timestamp with millisecond granularity
-	x    : i32,  // surface-local x coordinate
-	y    : i32,  // surface-local y coordinate
+	x    : util.Fixed,  // surface-local x coordinate
+	y    : util.Fixed,  // surface-local y coordinate
 }
 data_device_motion_decode :: proc(data: []byte) -> Data_Device_Motion_Event {
 	e: Data_Device_Motion_Event
 	r: int
 	n := r
 	e.time, r = util.read_u32(data[n:]); n += r
-	e.x, r = util.read_i32(data[n:]); n += r
-	e.y, r = util.read_i32(data[n:]); n += r
+	e.x, r = util.read_fixed(data[n:]); n += r
+	e.y, r = util.read_fixed(data[n:]); n += r
 	return e
 }
 
@@ -2906,8 +2906,8 @@ POINTER_ENTER_OPCODE :: 0
 Pointer_Enter_Event :: struct {
 	serial    : u32,  // serial number of the enter event
 	surface   : u32,  // surface entered by the pointer
-	surface_x : i32,  // surface-local x coordinate
-	surface_y : i32,  // surface-local y coordinate
+	surface_x : util.Fixed,  // surface-local x coordinate
+	surface_y : util.Fixed,  // surface-local y coordinate
 }
 pointer_enter_decode :: proc(data: []byte) -> Pointer_Enter_Event {
 	e: Pointer_Enter_Event
@@ -2915,8 +2915,8 @@ pointer_enter_decode :: proc(data: []byte) -> Pointer_Enter_Event {
 	n := r
 	e.serial, r = util.read_u32(data[n:]); n += r
 	e.surface, r = util.read_u32(data[n:]); n += r
-	e.surface_x, r = util.read_i32(data[n:]); n += r
-	e.surface_y, r = util.read_i32(data[n:]); n += r
+	e.surface_x, r = util.read_fixed(data[n:]); n += r
+	e.surface_y, r = util.read_fixed(data[n:]); n += r
 	return e
 }
 
@@ -2946,16 +2946,16 @@ pointer_leave_decode :: proc(data: []byte) -> Pointer_Leave_Event {
 POINTER_MOTION_OPCODE :: 2
 Pointer_Motion_Event :: struct {
 	time      : u32,  // timestamp with millisecond granularity
-	surface_x : i32,  // surface-local x coordinate
-	surface_y : i32,  // surface-local y coordinate
+	surface_x : util.Fixed,  // surface-local x coordinate
+	surface_y : util.Fixed,  // surface-local y coordinate
 }
 pointer_motion_decode :: proc(data: []byte) -> Pointer_Motion_Event {
 	e: Pointer_Motion_Event
 	r: int
 	n := r
 	e.time, r = util.read_u32(data[n:]); n += r
-	e.surface_x, r = util.read_i32(data[n:]); n += r
-	e.surface_y, r = util.read_i32(data[n:]); n += r
+	e.surface_x, r = util.read_fixed(data[n:]); n += r
+	e.surface_y, r = util.read_fixed(data[n:]); n += r
 	return e
 }
 
@@ -3006,7 +3006,7 @@ POINTER_AXIS_OPCODE :: 4
 Pointer_Axis_Event :: struct {
 	time  : u32,  // timestamp with millisecond granularity
 	axis  : u32,  // axis type
-	value : i32,  // length of vector in surface-local coordinate space
+	value : util.Fixed,  // length of vector in surface-local coordinate space
 }
 pointer_axis_decode :: proc(data: []byte) -> Pointer_Axis_Event {
 	e: Pointer_Axis_Event
@@ -3014,7 +3014,7 @@ pointer_axis_decode :: proc(data: []byte) -> Pointer_Axis_Event {
 	n := r
 	e.time, r = util.read_u32(data[n:]); n += r
 	e.axis, r = util.read_u32(data[n:]); n += r
-	e.value, r = util.read_i32(data[n:]); n += r
+	e.value, r = util.read_fixed(data[n:]); n += r
 	return e
 }
 
@@ -3244,15 +3244,15 @@ pointer_axis_relative_direction_decode :: proc(data: []byte) -> Pointer_Axis_Rel
 // wl_pointer.enter or wl_pointer.motion event.
 POINTER_WARP_OPCODE :: 11
 Pointer_Warp_Event :: struct {
-	surface_x : i32,  // surface-local x coordinate
-	surface_y : i32,  // surface-local y coordinate
+	surface_x : util.Fixed,  // surface-local x coordinate
+	surface_y : util.Fixed,  // surface-local y coordinate
 }
 pointer_warp_decode :: proc(data: []byte) -> Pointer_Warp_Event {
 	e: Pointer_Warp_Event
 	r: int
 	n := r
-	e.surface_x, r = util.read_i32(data[n:]); n += r
-	e.surface_y, r = util.read_i32(data[n:]); n += r
+	e.surface_x, r = util.read_fixed(data[n:]); n += r
+	e.surface_y, r = util.read_fixed(data[n:]); n += r
 	return e
 }
 
@@ -3559,8 +3559,8 @@ Touch_Down_Event :: struct {
 	time    : u32,  // timestamp with millisecond granularity
 	surface : u32,  // surface touched
 	id      : i32,  // the unique ID of this touch point
-	x       : i32,  // surface-local x coordinate
-	y       : i32,  // surface-local y coordinate
+	x       : util.Fixed,  // surface-local x coordinate
+	y       : util.Fixed,  // surface-local y coordinate
 }
 touch_down_decode :: proc(data: []byte) -> Touch_Down_Event {
 	e: Touch_Down_Event
@@ -3570,8 +3570,8 @@ touch_down_decode :: proc(data: []byte) -> Touch_Down_Event {
 	e.time, r = util.read_u32(data[n:]); n += r
 	e.surface, r = util.read_u32(data[n:]); n += r
 	e.id, r = util.read_i32(data[n:]); n += r
-	e.x, r = util.read_i32(data[n:]); n += r
-	e.y, r = util.read_i32(data[n:]); n += r
+	e.x, r = util.read_fixed(data[n:]); n += r
+	e.y, r = util.read_fixed(data[n:]); n += r
 	return e
 }
 
@@ -3601,8 +3601,8 @@ TOUCH_MOTION_OPCODE :: 2
 Touch_Motion_Event :: struct {
 	time : u32,  // timestamp with millisecond granularity
 	id   : i32,  // the unique ID of this touch point
-	x    : i32,  // surface-local x coordinate
-	y    : i32,  // surface-local y coordinate
+	x    : util.Fixed,  // surface-local x coordinate
+	y    : util.Fixed,  // surface-local y coordinate
 }
 touch_motion_decode :: proc(data: []byte) -> Touch_Motion_Event {
 	e: Touch_Motion_Event
@@ -3610,8 +3610,8 @@ touch_motion_decode :: proc(data: []byte) -> Touch_Motion_Event {
 	n := r
 	e.time, r = util.read_u32(data[n:]); n += r
 	e.id, r = util.read_i32(data[n:]); n += r
-	e.x, r = util.read_i32(data[n:]); n += r
-	e.y, r = util.read_i32(data[n:]); n += r
+	e.x, r = util.read_fixed(data[n:]); n += r
+	e.y, r = util.read_fixed(data[n:]); n += r
 	return e
 }
 
@@ -3674,16 +3674,16 @@ touch_cancel_decode :: proc(data: []byte) -> Touch_Cancel_Event {
 TOUCH_SHAPE_OPCODE :: 5
 Touch_Shape_Event :: struct {
 	id    : i32,  // the unique ID of this touch point
-	major : i32,  // length of the major axis in surface-local coordinates
-	minor : i32,  // length of the minor axis in surface-local coordinates
+	major : util.Fixed,  // length of the major axis in surface-local coordinates
+	minor : util.Fixed,  // length of the minor axis in surface-local coordinates
 }
 touch_shape_decode :: proc(data: []byte) -> Touch_Shape_Event {
 	e: Touch_Shape_Event
 	r: int
 	n := r
 	e.id, r = util.read_i32(data[n:]); n += r
-	e.major, r = util.read_i32(data[n:]); n += r
-	e.minor, r = util.read_i32(data[n:]); n += r
+	e.major, r = util.read_fixed(data[n:]); n += r
+	e.minor, r = util.read_fixed(data[n:]); n += r
 	return e
 }
 
@@ -3710,14 +3710,14 @@ touch_shape_decode :: proc(data: []byte) -> Touch_Shape_Event {
 TOUCH_ORIENTATION_OPCODE :: 6
 Touch_Orientation_Event :: struct {
 	id          : i32,  // the unique ID of this touch point
-	orientation : i32,  // angle between major axis and positive surface y-axis in degrees
+	orientation : util.Fixed,  // angle between major axis and positive surface y-axis in degrees
 }
 touch_orientation_decode :: proc(data: []byte) -> Touch_Orientation_Event {
 	e: Touch_Orientation_Event
 	r: int
 	n := r
 	e.id, r = util.read_i32(data[n:]); n += r
-	e.orientation, r = util.read_i32(data[n:]); n += r
+	e.orientation, r = util.read_fixed(data[n:]); n += r
 	return e
 }
 

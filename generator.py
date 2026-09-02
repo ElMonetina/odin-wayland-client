@@ -114,6 +114,7 @@ FIELD_TYPE = {
     "string": "string",
     "array":  "[]u8",
     "fd":     "linux.Fd",
+    "fixed":  "util.Fixed",
 }
 
 READ_FN = {
@@ -125,6 +126,7 @@ READ_FN = {
     "string": "read_string",
     "array":  "read_array",
     "fd":     None,       # fds arrive via SCM_RIGHTS, not the message body
+    "fixed":  "read_fixed"
 }
 
 def size_term(arg, accessor: str):
