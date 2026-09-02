@@ -21,10 +21,13 @@ Every `*.xml` found under that directory is parsed together, so the dispatch
 accounts for all protocols in a single pass (rather than being overwritten by
 whichever protocol was generated last).
 
-Interface identifiers are derived by dropping everything up to and including the
-first underscore, e.g. 'wl_display' -> 'display', 'xdg_wm_base' -> 'wm_base'.
-Because each protocol gets its own package, short names can't collide across
-protocols.
+Interface identifiers follow the protocol's own naming convention: an interface
+is '<z-namespace>_<protocol name>[_<role>]_vN', so the generator strips the
+prefix shared by every interface in the protocol (namespace + protocol name),
+leaving the distinguishing part: zwp_linux_dmabuf_v1 -> 'dmabuf',
+zwp_linux_buffer_params_v1 -> 'buffer_params', xdg_wm_base -> 'wm_base'.
+Each protocol is its own package, so short names can't collide across protocols;
+a collision inside one package would be a compile error, not silent.
 """
 
 import re
@@ -46,15 +49,41 @@ def sanitize_pkg(name: str) -> str:
     """Protocol name -> Odin package/folder name (hyphens become underscores)."""
     return name.replace("-", "_")
 
-def base_ident(name: str) -> str:
-    """Interface name -> identifier base: drop a trailing '_vN' version suffix,
-    then drop everything up to and including the first underscore.
-    'wl_display' -> 'display', 'xdg_wm_base' -> 'wm_base',
-    'zwp_linux_dmabuf_v1' -> 'linux_dmabuf'."""
-    n = re.sub(r"_v\d+$", "", name)
-    if "_" in n:
-        n = n[n.index("_") + 1:]
-    return n
+def strip_version(name: str) -> str:
+    """Drop the trailing '_vN' unstable-version suffix."""
+    return re.sub(r"_v\d+$", "", name)
+
+def interface_lcp(names):
+    """Longest common prefix of a protocol's interface names.
+
+    Per the wayland-protocols naming convention an interface is
+    '<z-namespace>_<protocol name>[_<role>]_vN', so the common prefix is the
+    namespace plus whatever part of the protocol name every interface shares.
+    If the prefix is exactly one of the names (the primary interface the
+    protocol is named after), it is used whole; otherwise it is trimmed back to
+    the last '_' so it never cuts a word in half
+    (wp_color_manage[ment] -> wp_color_).
+    """
+    if not names:
+        return ""
+    prefix = names[0]
+    for n in names[1:]:
+        while not n.startswith(prefix):
+            prefix = prefix[:-1]
+            if not prefix:
+                return ""
+    if prefix and prefix not in names:
+        cut = prefix.rfind("_")
+        prefix = prefix[:cut + 1] if cut != -1 else ""
+    return prefix
+
+def base_from(name: str, lcp: str) -> str:
+    """Interface name -> identifier base, given the protocol's common prefix.
+    An interface whose name is fully consumed by the prefix (the primary
+    interface a protocol is named after) falls back to its last token."""
+    deversioned = strip_version(name)
+    base = deversioned[len(lcp):].lstrip("_") if lcp else deversioned
+    return base or deversioned.split("_")[-1]
 
 def pascal(s: str) -> str:
     """snake_case -> PascalCase_with_underscores."""
@@ -193,7 +222,7 @@ class Interface:
         self.name = name
         self.version = version
         self.pkg = pkg
-        self.base = base_ident(name)
+        self.base = strip_version(name)   # finalized per-protocol in parse_files
         self.summary = ""
         self.description = ""
         self.requests = []   # (name, [args], summary, description, destructor)
@@ -234,6 +263,11 @@ def parse_files(paths):
                 s, d = _desc(en)
                 iface.enums.append((en.attrib["name"], en.attrib.get("bitfield") == "true", entries, s, d))
             proto.interfaces.append(iface)
+        # finalize interface identifier bases: strip the prefix (namespace +
+        # protocol name) shared by every interface in this protocol
+        lcp = interface_lcp([strip_version(i.name) for i in proto.interfaces])
+        for iface in proto.interfaces:
+            iface.base = base_from(iface.name, lcp)
         protocols.append(proto)
     return protocols
 
@@ -420,6 +454,7 @@ def emit_types(proto):
 
 def emit_dispatch(protocols):
     iface_to_pkg = {i.name: proto.pkg for proto in protocols for i in proto.interfaces}
+    iface_to_base = {i.name: i.base for proto in protocols for i in proto.interfaces}
 
     # Globals are the interfaces advertised by wl_registry and therefore bindable.
     # Anything referenced as a new_id target (e.g. wl_surface from
@@ -478,7 +513,7 @@ def emit_dispatch(protocols):
                     nid_iface = new_id_arg.get("interface")
                     if nid_iface is not None:
                         pkg = iface_to_pkg[nid_iface]
-                        out.append(f"\t\t\tinternal_state.interface_map[id] = {pkg}.{upper(base_ident(nid_iface))}_INTERFACE")
+                        out.append(f"\t\t\tinternal_state.interface_map[id] = {pkg}.{upper(iface_to_base[nid_iface])}_INTERFACE")
                     else:
                         # dynamic interface (bind): resolve the name to a static
                         # constant instead of cloning, so the map never holds
