@@ -645,152 +645,152 @@ Shm_Error :: enum u32 {
 Shm_Format :: enum u32 {
 	Argb8888 = 0,  // 32-bit ARGB format, [31:0] A:R:G:B 8:8:8:8 little endian
 	Xrgb8888 = 1,  // 32-bit RGB format, [31:0] x:R:G:B 8:8:8:8 little endian
-	C8 = 0x20203843,  // 8-bit color index format, [7:0] C
-	Rgb332 = 0x38424752,  // 8-bit RGB format, [7:0] R:G:B 3:3:2
-	Bgr233 = 0x38524742,  // 8-bit BGR format, [7:0] B:G:R 2:3:3
-	Xrgb4444 = 0x32315258,  // 16-bit xRGB format, [15:0] x:R:G:B 4:4:4:4 little endian
-	Xbgr4444 = 0x32314258,  // 16-bit xBGR format, [15:0] x:B:G:R 4:4:4:4 little endian
-	Rgbx4444 = 0x32315852,  // 16-bit RGBx format, [15:0] R:G:B:x 4:4:4:4 little endian
-	Bgrx4444 = 0x32315842,  // 16-bit BGRx format, [15:0] B:G:R:x 4:4:4:4 little endian
-	Argb4444 = 0x32315241,  // 16-bit ARGB format, [15:0] A:R:G:B 4:4:4:4 little endian
-	Abgr4444 = 0x32314241,  // 16-bit ABGR format, [15:0] A:B:G:R 4:4:4:4 little endian
-	Rgba4444 = 0x32314152,  // 16-bit RGBA format, [15:0] R:G:B:A 4:4:4:4 little endian
-	Bgra4444 = 0x32314142,  // 16-bit BGRA format, [15:0] B:G:R:A 4:4:4:4 little endian
-	Xrgb1555 = 0x35315258,  // 16-bit xRGB format, [15:0] x:R:G:B 1:5:5:5 little endian
-	Xbgr1555 = 0x35314258,  // 16-bit xBGR 1555 format, [15:0] x:B:G:R 1:5:5:5 little endian
-	Rgbx5551 = 0x35315852,  // 16-bit RGBx 5551 format, [15:0] R:G:B:x 5:5:5:1 little endian
-	Bgrx5551 = 0x35315842,  // 16-bit BGRx 5551 format, [15:0] B:G:R:x 5:5:5:1 little endian
-	Argb1555 = 0x35315241,  // 16-bit ARGB 1555 format, [15:0] A:R:G:B 1:5:5:5 little endian
-	Abgr1555 = 0x35314241,  // 16-bit ABGR 1555 format, [15:0] A:B:G:R 1:5:5:5 little endian
-	Rgba5551 = 0x35314152,  // 16-bit RGBA 5551 format, [15:0] R:G:B:A 5:5:5:1 little endian
-	Bgra5551 = 0x35314142,  // 16-bit BGRA 5551 format, [15:0] B:G:R:A 5:5:5:1 little endian
-	Rgb565 = 0x36314752,  // 16-bit RGB 565 format, [15:0] R:G:B 5:6:5 little endian
-	Bgr565 = 0x36314742,  // 16-bit BGR 565 format, [15:0] B:G:R 5:6:5 little endian
-	Rgb888 = 0x34324752,  // 24-bit RGB format, [23:0] R:G:B little endian
-	Bgr888 = 0x34324742,  // 24-bit BGR format, [23:0] B:G:R little endian
-	Xbgr8888 = 0x34324258,  // 32-bit xBGR format, [31:0] x:B:G:R 8:8:8:8 little endian
-	Rgbx8888 = 0x34325852,  // 32-bit RGBx format, [31:0] R:G:B:x 8:8:8:8 little endian
-	Bgrx8888 = 0x34325842,  // 32-bit BGRx format, [31:0] B:G:R:x 8:8:8:8 little endian
-	Abgr8888 = 0x34324241,  // 32-bit ABGR format, [31:0] A:B:G:R 8:8:8:8 little endian
-	Rgba8888 = 0x34324152,  // 32-bit RGBA format, [31:0] R:G:B:A 8:8:8:8 little endian
-	Bgra8888 = 0x34324142,  // 32-bit BGRA format, [31:0] B:G:R:A 8:8:8:8 little endian
-	Xrgb2101010 = 0x30335258,  // 32-bit xRGB format, [31:0] x:R:G:B 2:10:10:10 little endian
-	Xbgr2101010 = 0x30334258,  // 32-bit xBGR format, [31:0] x:B:G:R 2:10:10:10 little endian
-	Rgbx1010102 = 0x30335852,  // 32-bit RGBx format, [31:0] R:G:B:x 10:10:10:2 little endian
-	Bgrx1010102 = 0x30335842,  // 32-bit BGRx format, [31:0] B:G:R:x 10:10:10:2 little endian
-	Argb2101010 = 0x30335241,  // 32-bit ARGB format, [31:0] A:R:G:B 2:10:10:10 little endian
-	Abgr2101010 = 0x30334241,  // 32-bit ABGR format, [31:0] A:B:G:R 2:10:10:10 little endian
-	Rgba1010102 = 0x30334152,  // 32-bit RGBA format, [31:0] R:G:B:A 10:10:10:2 little endian
-	Bgra1010102 = 0x30334142,  // 32-bit BGRA format, [31:0] B:G:R:A 10:10:10:2 little endian
-	Yuyv = 0x56595559,  // packed YCbCr format, [31:0] Cr0:Y1:Cb0:Y0 8:8:8:8 little endian
-	Yvyu = 0x55595659,  // packed YCbCr format, [31:0] Cb0:Y1:Cr0:Y0 8:8:8:8 little endian
-	Uyvy = 0x59565955,  // packed YCbCr format, [31:0] Y1:Cr0:Y0:Cb0 8:8:8:8 little endian
-	Vyuy = 0x59555956,  // packed YCbCr format, [31:0] Y1:Cb0:Y0:Cr0 8:8:8:8 little endian
-	Ayuv = 0x56555941,  // packed AYCbCr format, [31:0] A:Y:Cb:Cr 8:8:8:8 little endian
-	Nv12 = 0x3231564e,  // 2 plane YCbCr Cr:Cb format, 2x2 subsampled Cr:Cb plane
-	Nv21 = 0x3132564e,  // 2 plane YCbCr Cb:Cr format, 2x2 subsampled Cb:Cr plane
-	Nv16 = 0x3631564e,  // 2 plane YCbCr Cr:Cb format, 2x1 subsampled Cr:Cb plane
-	Nv61 = 0x3136564e,  // 2 plane YCbCr Cb:Cr format, 2x1 subsampled Cb:Cr plane
-	Yuv410 = 0x39565559,  // 3 plane YCbCr format, 4x4 subsampled Cb (1) and Cr (2) planes
-	Yvu410 = 0x39555659,  // 3 plane YCbCr format, 4x4 subsampled Cr (1) and Cb (2) planes
-	Yuv411 = 0x31315559,  // 3 plane YCbCr format, 4x1 subsampled Cb (1) and Cr (2) planes
-	Yvu411 = 0x31315659,  // 3 plane YCbCr format, 4x1 subsampled Cr (1) and Cb (2) planes
-	Yuv420 = 0x32315559,  // 3 plane YCbCr format, 2x2 subsampled Cb (1) and Cr (2) planes
-	Yvu420 = 0x32315659,  // 3 plane YCbCr format, 2x2 subsampled Cr (1) and Cb (2) planes
-	Yuv422 = 0x36315559,  // 3 plane YCbCr format, 2x1 subsampled Cb (1) and Cr (2) planes
-	Yvu422 = 0x36315659,  // 3 plane YCbCr format, 2x1 subsampled Cr (1) and Cb (2) planes
-	Yuv444 = 0x34325559,  // 3 plane YCbCr format, non-subsampled Cb (1) and Cr (2) planes
-	Yvu444 = 0x34325659,  // 3 plane YCbCr format, non-subsampled Cr (1) and Cb (2) planes
-	R8 = 0x20203852,  // [7:0] R
-	R16 = 0x20363152,  // [15:0] R little endian
-	Rg88 = 0x38384752,  // [15:0] R:G 8:8 little endian
-	Gr88 = 0x38385247,  // [15:0] G:R 8:8 little endian
-	Rg1616 = 0x32334752,  // [31:0] R:G 16:16 little endian
-	Gr1616 = 0x32335247,  // [31:0] G:R 16:16 little endian
-	Xrgb16161616f = 0x48345258,  // [63:0] x:R:G:B 16:16:16:16 little endian
-	Xbgr16161616f = 0x48344258,  // [63:0] x:B:G:R 16:16:16:16 little endian
-	Argb16161616f = 0x48345241,  // [63:0] A:R:G:B 16:16:16:16 little endian
-	Abgr16161616f = 0x48344241,  // [63:0] A:B:G:R 16:16:16:16 little endian
-	Xyuv8888 = 0x56555958,  // [31:0] X:Y:Cb:Cr 8:8:8:8 little endian
-	Vuy888 = 0x34325556,  // [23:0] Cr:Cb:Y 8:8:8 little endian
-	Vuy101010 = 0x30335556,  // Y followed by U then V, 10:10:10. Non-linear modifier only
-	Y210 = 0x30313259,  // [63:0] Cr0:0:Y1:0:Cb0:0:Y0:0 10:6:10:6:10:6:10:6 little endian per 2 Y pixels
-	Y212 = 0x32313259,  // [63:0] Cr0:0:Y1:0:Cb0:0:Y0:0 12:4:12:4:12:4:12:4 little endian per 2 Y pixels
-	Y216 = 0x36313259,  // [63:0] Cr0:Y1:Cb0:Y0 16:16:16:16 little endian per 2 Y pixels
-	Y410 = 0x30313459,  // [31:0] A:Cr:Y:Cb 2:10:10:10 little endian
-	Y412 = 0x32313459,  // [63:0] A:0:Cr:0:Y:0:Cb:0 12:4:12:4:12:4:12:4 little endian
-	Y416 = 0x36313459,  // [63:0] A:Cr:Y:Cb 16:16:16:16 little endian
-	Xvyu2101010 = 0x30335658,  // [31:0] X:Cr:Y:Cb 2:10:10:10 little endian
-	Xvyu12_16161616 = 0x36335658,  // [63:0] X:0:Cr:0:Y:0:Cb:0 12:4:12:4:12:4:12:4 little endian
-	Xvyu16161616 = 0x38345658,  // [63:0] X:Cr:Y:Cb 16:16:16:16 little endian
-	Y0l0 = 0x304c3059,  // [63:0]   A3:A2:Y3:0:Cr0:0:Y2:0:A1:A0:Y1:0:Cb0:0:Y0:0  1:1:8:2:8:2:8:2:1:1:8:2:8:2:8:2 little endian
-	X0l0 = 0x304c3058,  // [63:0]   X3:X2:Y3:0:Cr0:0:Y2:0:X1:X0:Y1:0:Cb0:0:Y0:0  1:1:8:2:8:2:8:2:1:1:8:2:8:2:8:2 little endian
-	Y0l2 = 0x324c3059,  // [63:0]   A3:A2:Y3:Cr0:Y2:A1:A0:Y1:Cb0:Y0  1:1:10:10:10:1:1:10:10:10 little endian
-	X0l2 = 0x324c3058,  // [63:0]   X3:X2:Y3:Cr0:Y2:X1:X0:Y1:Cb0:Y0  1:1:10:10:10:1:1:10:10:10 little endian
-	Yuv420_8bit = 0x38305559,
-	Yuv420_10bit = 0x30315559,
-	Xrgb8888_A8 = 0x38415258,
-	Xbgr8888_A8 = 0x38414258,
-	Rgbx8888_A8 = 0x38415852,
-	Bgrx8888_A8 = 0x38415842,
-	Rgb888_A8 = 0x38413852,
-	Bgr888_A8 = 0x38413842,
-	Rgb565_A8 = 0x38413552,
-	Bgr565_A8 = 0x38413542,
-	Nv24 = 0x3432564e,  // non-subsampled Cr:Cb plane
-	Nv42 = 0x3234564e,  // non-subsampled Cb:Cr plane
-	P210 = 0x30313250,  // 2x1 subsampled Cr:Cb plane, 10 bit per channel
-	P010 = 0x30313050,  // 2x2 subsampled Cr:Cb plane 10 bits per channel
-	P012 = 0x32313050,  // 2x2 subsampled Cr:Cb plane 12 bits per channel
-	P016 = 0x36313050,  // 2x2 subsampled Cr:Cb plane 16 bits per channel
-	Axbxgxrx106106106106 = 0x30314241,  // [63:0] A:x:B:x:G:x:R:x 10:6:10:6:10:6:10:6 little endian
-	Nv15 = 0x3531564e,  // 2x2 subsampled Cr:Cb plane
-	Q410 = 0x30313451,
-	Q401 = 0x31303451,
-	Xrgb16161616 = 0x38345258,  // [63:0] x:R:G:B 16:16:16:16 little endian
-	Xbgr16161616 = 0x38344258,  // [63:0] x:B:G:R 16:16:16:16 little endian
-	Argb16161616 = 0x38345241,  // [63:0] A:R:G:B 16:16:16:16 little endian
-	Abgr16161616 = 0x38344241,  // [63:0] A:B:G:R 16:16:16:16 little endian
-	C1 = 0x20203143,  // [7:0] C0:C1:C2:C3:C4:C5:C6:C7 1:1:1:1:1:1:1:1 eight pixels/byte
-	C2 = 0x20203243,  // [7:0] C0:C1:C2:C3 2:2:2:2 four pixels/byte
-	C4 = 0x20203443,  // [7:0] C0:C1 4:4 two pixels/byte
-	D1 = 0x20203144,  // [7:0] D0:D1:D2:D3:D4:D5:D6:D7 1:1:1:1:1:1:1:1 eight pixels/byte
-	D2 = 0x20203244,  // [7:0] D0:D1:D2:D3 2:2:2:2 four pixels/byte
-	D4 = 0x20203444,  // [7:0] D0:D1 4:4 two pixels/byte
-	D8 = 0x20203844,  // [7:0] D
-	R1 = 0x20203152,  // [7:0] R0:R1:R2:R3:R4:R5:R6:R7 1:1:1:1:1:1:1:1 eight pixels/byte
-	R2 = 0x20203252,  // [7:0] R0:R1:R2:R3 2:2:2:2 four pixels/byte
-	R4 = 0x20203452,  // [7:0] R0:R1 4:4 two pixels/byte
-	R10 = 0x20303152,  // [15:0] x:R 6:10 little endian
-	R12 = 0x20323152,  // [15:0] x:R 4:12 little endian
-	Avuy8888 = 0x59555641,  // [31:0] A:Cr:Cb:Y 8:8:8:8 little endian
-	Xvuy8888 = 0x59555658,  // [31:0] X:Cr:Cb:Y 8:8:8:8 little endian
-	P030 = 0x30333050,  // 2x2 subsampled Cr:Cb plane 10 bits per channel packed
-	Rgb161616 = 0x38344752,  // [47:0] R:G:B 16:16:16 little endian
-	Bgr161616 = 0x38344742,  // [47:0] B:G:R 16:16:16 little endian
-	R16f = 0x48202052,  // [15:0] R 16 little endian
-	Gr1616f = 0x48205247,  // [31:0] G:R 16:16 little endian
-	Bgr161616f = 0x48524742,  // [47:0] B:G:R 16:16:16 little endian
-	R32f = 0x46202052,  // [31:0] R 32 little endian
-	Gr3232f = 0x46205247,  // [63:0] G:R 32:32 little endian
-	Bgr323232f = 0x46524742,  // [95:0] B:G:R 32:32:32 little endian
-	Abgr32323232f = 0x46384241,  // [127:0] A:B:G:R 32:32:32:32 little endian
-	Nv20 = 0x3032564e,  // 2x1 subsampled Cr:Cb plane
-	Nv30 = 0x3033564e,  // non-subsampled Cr:Cb plane
-	S010 = 0x30313053,  // 2x2 subsampled Cb (1) and Cr (2) planes 10 bits per channel
-	S210 = 0x30313253,  // 2x1 subsampled Cb (1) and Cr (2) planes 10 bits per channel
-	S410 = 0x30313453,  // non-subsampled Cb (1) and Cr (2) planes 10 bits per channel
-	S012 = 0x32313053,  // 2x2 subsampled Cb (1) and Cr (2) planes 12 bits per channel
-	S212 = 0x32313253,  // 2x1 subsampled Cb (1) and Cr (2) planes 12 bits per channel
-	S412 = 0x32313453,  // non-subsampled Cb (1) and Cr (2) planes 12 bits per channel
-	S016 = 0x36313053,  // 2x2 subsampled Cb (1) and Cr (2) planes 16 bits per channel
-	S216 = 0x36313253,  // 2x1 subsampled Cb (1) and Cr (2) planes 16 bits per channel
-	S416 = 0x36313453,  // non-subsampled Cb (1) and Cr (2) planes 16 bits per channel
-	Xvuy2101010 = 0x30335958,  // [31:0] x:Cr:Cb:Y 2:10:10:10 little endian
-	P230 = 0x30333250,  // 2x1 subsampled Cr:Cb plane 10 bits per channel packed
-	T430 = 0x30333454,
-	Y8 = 0x59455247,  // 8-bit Y-only
-	Xyyy2101010 = 0x34415059,  // [31:0] x:Y2:Y1:Y0 2:10:10:10 little endian
+	C8 = 538982467,  // 8-bit color index format, [7:0] C
+	Rgb332 = 943867730,  // 8-bit RGB format, [7:0] R:G:B 3:3:2
+	Bgr233 = 944916290,  // 8-bit BGR format, [7:0] B:G:R 2:3:3
+	Xrgb4444 = 842093144,  // 16-bit xRGB format, [15:0] x:R:G:B 4:4:4:4 little endian
+	Xbgr4444 = 842089048,  // 16-bit xBGR format, [15:0] x:B:G:R 4:4:4:4 little endian
+	Rgbx4444 = 842094674,  // 16-bit RGBx format, [15:0] R:G:B:x 4:4:4:4 little endian
+	Bgrx4444 = 842094658,  // 16-bit BGRx format, [15:0] B:G:R:x 4:4:4:4 little endian
+	Argb4444 = 842093121,  // 16-bit ARGB format, [15:0] A:R:G:B 4:4:4:4 little endian
+	Abgr4444 = 842089025,  // 16-bit ABGR format, [15:0] A:B:G:R 4:4:4:4 little endian
+	Rgba4444 = 842088786,  // 16-bit RGBA format, [15:0] R:G:B:A 4:4:4:4 little endian
+	Bgra4444 = 842088770,  // 16-bit BGRA format, [15:0] B:G:R:A 4:4:4:4 little endian
+	Xrgb1555 = 892424792,  // 16-bit xRGB format, [15:0] x:R:G:B 1:5:5:5 little endian
+	Xbgr1555 = 892420696,  // 16-bit xBGR 1555 format, [15:0] x:B:G:R 1:5:5:5 little endian
+	Rgbx5551 = 892426322,  // 16-bit RGBx 5551 format, [15:0] R:G:B:x 5:5:5:1 little endian
+	Bgrx5551 = 892426306,  // 16-bit BGRx 5551 format, [15:0] B:G:R:x 5:5:5:1 little endian
+	Argb1555 = 892424769,  // 16-bit ARGB 1555 format, [15:0] A:R:G:B 1:5:5:5 little endian
+	Abgr1555 = 892420673,  // 16-bit ABGR 1555 format, [15:0] A:B:G:R 1:5:5:5 little endian
+	Rgba5551 = 892420434,  // 16-bit RGBA 5551 format, [15:0] R:G:B:A 5:5:5:1 little endian
+	Bgra5551 = 892420418,  // 16-bit BGRA 5551 format, [15:0] B:G:R:A 5:5:5:1 little endian
+	Rgb565 = 909199186,  // 16-bit RGB 565 format, [15:0] R:G:B 5:6:5 little endian
+	Bgr565 = 909199170,  // 16-bit BGR 565 format, [15:0] B:G:R 5:6:5 little endian
+	Rgb888 = 875710290,  // 24-bit RGB format, [23:0] R:G:B little endian
+	Bgr888 = 875710274,  // 24-bit BGR format, [23:0] B:G:R little endian
+	Xbgr8888 = 875709016,  // 32-bit xBGR format, [31:0] x:B:G:R 8:8:8:8 little endian
+	Rgbx8888 = 875714642,  // 32-bit RGBx format, [31:0] R:G:B:x 8:8:8:8 little endian
+	Bgrx8888 = 875714626,  // 32-bit BGRx format, [31:0] B:G:R:x 8:8:8:8 little endian
+	Abgr8888 = 875708993,  // 32-bit ABGR format, [31:0] A:B:G:R 8:8:8:8 little endian
+	Rgba8888 = 875708754,  // 32-bit RGBA format, [31:0] R:G:B:A 8:8:8:8 little endian
+	Bgra8888 = 875708738,  // 32-bit BGRA format, [31:0] B:G:R:A 8:8:8:8 little endian
+	Xrgb2101010 = 808669784,  // 32-bit xRGB format, [31:0] x:R:G:B 2:10:10:10 little endian
+	Xbgr2101010 = 808665688,  // 32-bit xBGR format, [31:0] x:B:G:R 2:10:10:10 little endian
+	Rgbx1010102 = 808671314,  // 32-bit RGBx format, [31:0] R:G:B:x 10:10:10:2 little endian
+	Bgrx1010102 = 808671298,  // 32-bit BGRx format, [31:0] B:G:R:x 10:10:10:2 little endian
+	Argb2101010 = 808669761,  // 32-bit ARGB format, [31:0] A:R:G:B 2:10:10:10 little endian
+	Abgr2101010 = 808665665,  // 32-bit ABGR format, [31:0] A:B:G:R 2:10:10:10 little endian
+	Rgba1010102 = 808665426,  // 32-bit RGBA format, [31:0] R:G:B:A 10:10:10:2 little endian
+	Bgra1010102 = 808665410,  // 32-bit BGRA format, [31:0] B:G:R:A 10:10:10:2 little endian
+	Yuyv = 1448695129,  // packed YCbCr format, [31:0] Cr0:Y1:Cb0:Y0 8:8:8:8 little endian
+	Yvyu = 1431918169,  // packed YCbCr format, [31:0] Cb0:Y1:Cr0:Y0 8:8:8:8 little endian
+	Uyvy = 1498831189,  // packed YCbCr format, [31:0] Y1:Cr0:Y0:Cb0 8:8:8:8 little endian
+	Vyuy = 1498765654,  // packed YCbCr format, [31:0] Y1:Cb0:Y0:Cr0 8:8:8:8 little endian
+	Ayuv = 1448433985,  // packed AYCbCr format, [31:0] A:Y:Cb:Cr 8:8:8:8 little endian
+	Nv12 = 842094158,  // 2 plane YCbCr Cr:Cb format, 2x2 subsampled Cr:Cb plane
+	Nv21 = 825382478,  // 2 plane YCbCr Cb:Cr format, 2x2 subsampled Cb:Cr plane
+	Nv16 = 909203022,  // 2 plane YCbCr Cr:Cb format, 2x1 subsampled Cr:Cb plane
+	Nv61 = 825644622,  // 2 plane YCbCr Cb:Cr format, 2x1 subsampled Cb:Cr plane
+	Yuv410 = 961959257,  // 3 plane YCbCr format, 4x4 subsampled Cb (1) and Cr (2) planes
+	Yvu410 = 961893977,  // 3 plane YCbCr format, 4x4 subsampled Cr (1) and Cb (2) planes
+	Yuv411 = 825316697,  // 3 plane YCbCr format, 4x1 subsampled Cb (1) and Cr (2) planes
+	Yvu411 = 825316953,  // 3 plane YCbCr format, 4x1 subsampled Cr (1) and Cb (2) planes
+	Yuv420 = 842093913,  // 3 plane YCbCr format, 2x2 subsampled Cb (1) and Cr (2) planes
+	Yvu420 = 842094169,  // 3 plane YCbCr format, 2x2 subsampled Cr (1) and Cb (2) planes
+	Yuv422 = 909202777,  // 3 plane YCbCr format, 2x1 subsampled Cb (1) and Cr (2) planes
+	Yvu422 = 909203033,  // 3 plane YCbCr format, 2x1 subsampled Cr (1) and Cb (2) planes
+	Yuv444 = 875713881,  // 3 plane YCbCr format, non-subsampled Cb (1) and Cr (2) planes
+	Yvu444 = 875714137,  // 3 plane YCbCr format, non-subsampled Cr (1) and Cb (2) planes
+	R8 = 538982482,  // [7:0] R
+	R16 = 540422482,  // [15:0] R little endian
+	Rg88 = 943212370,  // [15:0] R:G 8:8 little endian
+	Gr88 = 943215175,  // [15:0] G:R 8:8 little endian
+	Rg1616 = 842221394,  // [31:0] R:G 16:16 little endian
+	Gr1616 = 842224199,  // [31:0] G:R 16:16 little endian
+	Xrgb16161616f = 1211388504,  // [63:0] x:R:G:B 16:16:16:16 little endian
+	Xbgr16161616f = 1211384408,  // [63:0] x:B:G:R 16:16:16:16 little endian
+	Argb16161616f = 1211388481,  // [63:0] A:R:G:B 16:16:16:16 little endian
+	Abgr16161616f = 1211384385,  // [63:0] A:B:G:R 16:16:16:16 little endian
+	Xyuv8888 = 1448434008,  // [31:0] X:Y:Cb:Cr 8:8:8:8 little endian
+	Vuy888 = 875713878,  // [23:0] Cr:Cb:Y 8:8:8 little endian
+	Vuy101010 = 808670550,  // Y followed by U then V, 10:10:10. Non-linear modifier only
+	Y210 = 808530521,  // [63:0] Cr0:0:Y1:0:Cb0:0:Y0:0 10:6:10:6:10:6:10:6 little endian per 2 Y pixels
+	Y212 = 842084953,  // [63:0] Cr0:0:Y1:0:Cb0:0:Y0:0 12:4:12:4:12:4:12:4 little endian per 2 Y pixels
+	Y216 = 909193817,  // [63:0] Cr0:Y1:Cb0:Y0 16:16:16:16 little endian per 2 Y pixels
+	Y410 = 808531033,  // [31:0] A:Cr:Y:Cb 2:10:10:10 little endian
+	Y412 = 842085465,  // [63:0] A:0:Cr:0:Y:0:Cb:0 12:4:12:4:12:4:12:4 little endian
+	Y416 = 909194329,  // [63:0] A:Cr:Y:Cb 16:16:16:16 little endian
+	Xvyu2101010 = 808670808,  // [31:0] X:Cr:Y:Cb 2:10:10:10 little endian
+	Xvyu12_16161616 = 909334104,  // [63:0] X:0:Cr:0:Y:0:Cb:0 12:4:12:4:12:4:12:4 little endian
+	Xvyu16161616 = 942954072,  // [63:0] X:Cr:Y:Cb 16:16:16:16 little endian
+	Y0l0 = 810299481,  // [63:0]   A3:A2:Y3:0:Cr0:0:Y2:0:A1:A0:Y1:0:Cb0:0:Y0:0  1:1:8:2:8:2:8:2:1:1:8:2:8:2:8:2 little endian
+	X0l0 = 810299480,  // [63:0]   X3:X2:Y3:0:Cr0:0:Y2:0:X1:X0:Y1:0:Cb0:0:Y0:0  1:1:8:2:8:2:8:2:1:1:8:2:8:2:8:2 little endian
+	Y0l2 = 843853913,  // [63:0]   A3:A2:Y3:Cr0:Y2:A1:A0:Y1:Cb0:Y0  1:1:10:10:10:1:1:10:10:10 little endian
+	X0l2 = 843853912,  // [63:0]   X3:X2:Y3:Cr0:Y2:X1:X0:Y1:Cb0:Y0  1:1:10:10:10:1:1:10:10:10 little endian
+	Yuv420_8bit = 942691673,
+	Yuv420_10bit = 808539481,
+	Xrgb8888_A8 = 943805016,
+	Xbgr8888_A8 = 943800920,
+	Rgbx8888_A8 = 943806546,
+	Bgrx8888_A8 = 943806530,
+	Rgb888_A8 = 943798354,
+	Bgr888_A8 = 943798338,
+	Rgb565_A8 = 943797586,
+	Bgr565_A8 = 943797570,
+	Nv24 = 875714126,  // non-subsampled Cr:Cb plane
+	Nv42 = 842290766,  // non-subsampled Cb:Cr plane
+	P210 = 808530512,  // 2x1 subsampled Cr:Cb plane, 10 bit per channel
+	P010 = 808530000,  // 2x2 subsampled Cr:Cb plane 10 bits per channel
+	P012 = 842084432,  // 2x2 subsampled Cr:Cb plane 12 bits per channel
+	P016 = 909193296,  // 2x2 subsampled Cr:Cb plane 16 bits per channel
+	Axbxgxrx106106106106 = 808534593,  // [63:0] A:x:B:x:G:x:R:x 10:6:10:6:10:6:10:6 little endian
+	Nv15 = 892425806,  // 2x2 subsampled Cr:Cb plane
+	Q410 = 808531025,
+	Q401 = 825242705,
+	Xrgb16161616 = 942953048,  // [63:0] x:R:G:B 16:16:16:16 little endian
+	Xbgr16161616 = 942948952,  // [63:0] x:B:G:R 16:16:16:16 little endian
+	Argb16161616 = 942953025,  // [63:0] A:R:G:B 16:16:16:16 little endian
+	Abgr16161616 = 942948929,  // [63:0] A:B:G:R 16:16:16:16 little endian
+	C1 = 538980675,  // [7:0] C0:C1:C2:C3:C4:C5:C6:C7 1:1:1:1:1:1:1:1 eight pixels/byte
+	C2 = 538980931,  // [7:0] C0:C1:C2:C3 2:2:2:2 four pixels/byte
+	C4 = 538981443,  // [7:0] C0:C1 4:4 two pixels/byte
+	D1 = 538980676,  // [7:0] D0:D1:D2:D3:D4:D5:D6:D7 1:1:1:1:1:1:1:1 eight pixels/byte
+	D2 = 538980932,  // [7:0] D0:D1:D2:D3 2:2:2:2 four pixels/byte
+	D4 = 538981444,  // [7:0] D0:D1 4:4 two pixels/byte
+	D8 = 538982468,  // [7:0] D
+	R1 = 538980690,  // [7:0] R0:R1:R2:R3:R4:R5:R6:R7 1:1:1:1:1:1:1:1 eight pixels/byte
+	R2 = 538980946,  // [7:0] R0:R1:R2:R3 2:2:2:2 four pixels/byte
+	R4 = 538981458,  // [7:0] R0:R1 4:4 two pixels/byte
+	R10 = 540029266,  // [15:0] x:R 6:10 little endian
+	R12 = 540160338,  // [15:0] x:R 4:12 little endian
+	Avuy8888 = 1498764865,  // [31:0] A:Cr:Cb:Y 8:8:8:8 little endian
+	Xvuy8888 = 1498764888,  // [31:0] X:Cr:Cb:Y 8:8:8:8 little endian
+	P030 = 808661072,  // 2x2 subsampled Cr:Cb plane 10 bits per channel packed
+	Rgb161616 = 942950226,  // [47:0] R:G:B 16:16:16 little endian
+	Bgr161616 = 942950210,  // [47:0] B:G:R 16:16:16 little endian
+	R16f = 1210064978,  // [15:0] R 16 little endian
+	Gr1616f = 1210077767,  // [31:0] G:R 16:16 little endian
+	Bgr161616f = 1213351746,  // [47:0] B:G:R 16:16:16 little endian
+	R32f = 1176510546,  // [31:0] R 32 little endian
+	Gr3232f = 1176523335,  // [63:0] G:R 32:32 little endian
+	Bgr323232f = 1179797314,  // [95:0] B:G:R 32:32:32 little endian
+	Abgr32323232f = 1178092097,  // [127:0] A:B:G:R 32:32:32:32 little endian
+	Nv20 = 808605262,  // 2x1 subsampled Cr:Cb plane
+	Nv30 = 808670798,  // non-subsampled Cr:Cb plane
+	S010 = 808530003,  // 2x2 subsampled Cb (1) and Cr (2) planes 10 bits per channel
+	S210 = 808530515,  // 2x1 subsampled Cb (1) and Cr (2) planes 10 bits per channel
+	S410 = 808531027,  // non-subsampled Cb (1) and Cr (2) planes 10 bits per channel
+	S012 = 842084435,  // 2x2 subsampled Cb (1) and Cr (2) planes 12 bits per channel
+	S212 = 842084947,  // 2x1 subsampled Cb (1) and Cr (2) planes 12 bits per channel
+	S412 = 842085459,  // non-subsampled Cb (1) and Cr (2) planes 12 bits per channel
+	S016 = 909193299,  // 2x2 subsampled Cb (1) and Cr (2) planes 16 bits per channel
+	S216 = 909193811,  // 2x1 subsampled Cb (1) and Cr (2) planes 16 bits per channel
+	S416 = 909194323,  // non-subsampled Cb (1) and Cr (2) planes 16 bits per channel
+	Xvuy2101010 = 808671576,  // [31:0] x:Cr:Cb:Y 2:10:10:10 little endian
+	P230 = 808661584,  // 2x1 subsampled Cr:Cb plane 10 bits per channel packed
+	T430 = 808662100,
+	Y8 = 1497715271,  // 8-bit Y-only
+	Xyyy2101010 = 876695641,  // [31:0] x:Y2:Y1:Y0 2:10:10:10 little endian
 }
 
 // content for a wl_surface
@@ -994,8 +994,8 @@ data_offer_finish_encode :: proc(req: Data_Offer_Finish_Request, allocator: mem.
 DATA_OFFER_SET_ACTIONS_OPCODE :: 4
 Data_Offer_Set_Actions_Request :: struct {
 	data_offer       : u32,
-	dnd_actions      : u32,  // actions supported by the destination client
-	preferred_action : u32,  // action preferred by the destination client
+	dnd_actions      : Data_Device_Manager_Dnd_Action_Set,  // actions supported by the destination client
+	preferred_action : Data_Device_Manager_Dnd_Action_Set,  // action preferred by the destination client
 }
 data_offer_set_actions_encode :: proc(req: Data_Offer_Set_Actions_Request, allocator: mem.Allocator) -> (encoded: []byte, err: mem.Allocator_Error) {
 	object := req.data_offer
@@ -1003,8 +1003,8 @@ data_offer_set_actions_encode :: proc(req: Data_Offer_Set_Actions_Request, alloc
 	size := u16(8 + size_of(req.dnd_actions) + size_of(req.preferred_action))
 	msg := make([dynamic]byte, 0, size, allocator) or_return
 	util.write(&msg, object, opcode, size)
-	util.write(&msg, req.dnd_actions)
-	util.write(&msg, req.preferred_action)
+	util.write_u32(&msg, transmute(u32)req.dnd_actions)
+	util.write_u32(&msg, transmute(u32)req.preferred_action)
 	encoded = msg[:]
 	return
 }
@@ -1032,13 +1032,14 @@ data_offer_offer_decode :: proc(data: []byte, allocator: mem.Allocator) -> Data_
 // wl_data_source.set_actions.
 DATA_OFFER_SOURCE_ACTIONS_OPCODE :: 1
 Data_Offer_Source_Actions_Event :: struct {
-	source_actions : u32,  // actions offered by the data source
+	source_actions : Data_Device_Manager_Dnd_Action_Set,  // actions offered by the data source
 }
 data_offer_source_actions_decode :: proc(data: []byte) -> Data_Offer_Source_Actions_Event {
 	e: Data_Offer_Source_Actions_Event
 	r: int
 	n := r
-	e.source_actions, r = util.read_u32(data[n:]); n += r
+	val_source_actions, _ := util.read_u32(data[n:]); n += 4
+	e.source_actions = transmute(Data_Device_Manager_Dnd_Action_Set)val_source_actions
 	return e
 }
 
@@ -1074,13 +1075,14 @@ data_offer_source_actions_decode :: proc(data: []byte) -> Data_Offer_Source_Acti
 // must happen before the call to wl_data_offer.finish.
 DATA_OFFER_ACTION_OPCODE :: 2
 Data_Offer_Action_Event :: struct {
-	dnd_action : u32,  // action selected by the compositor
+	dnd_action : Data_Device_Manager_Dnd_Action_Set,  // action selected by the compositor
 }
 data_offer_action_decode :: proc(data: []byte) -> Data_Offer_Action_Event {
 	e: Data_Offer_Action_Event
 	r: int
 	n := r
-	e.dnd_action, r = util.read_u32(data[n:]); n += r
+	val_dnd_action, _ := util.read_u32(data[n:]); n += 4
+	e.dnd_action = transmute(Data_Device_Manager_Dnd_Action_Set)val_dnd_action
 	return e
 }
 
@@ -1150,7 +1152,7 @@ data_source_destroy_encode :: proc(req: Data_Source_Destroy_Request, allocator: 
 DATA_SOURCE_SET_ACTIONS_OPCODE :: 2
 Data_Source_Set_Actions_Request :: struct {
 	data_source : u32,
-	dnd_actions : u32,  // actions supported by the data source
+	dnd_actions : Data_Device_Manager_Dnd_Action_Set,  // actions supported by the data source
 }
 data_source_set_actions_encode :: proc(req: Data_Source_Set_Actions_Request, allocator: mem.Allocator) -> (encoded: []byte, err: mem.Allocator_Error) {
 	object := req.data_source
@@ -1158,7 +1160,7 @@ data_source_set_actions_encode :: proc(req: Data_Source_Set_Actions_Request, all
 	size := u16(8 + size_of(req.dnd_actions))
 	msg := make([dynamic]byte, 0, size, allocator) or_return
 	util.write(&msg, object, opcode, size)
-	util.write(&msg, req.dnd_actions)
+	util.write_u32(&msg, transmute(u32)req.dnd_actions)
 	encoded = msg[:]
 	return
 }
@@ -1281,13 +1283,14 @@ data_source_dnd_finished_decode :: proc(data: []byte) -> Data_Source_Dnd_Finishe
 // they reflect the current action.
 DATA_SOURCE_ACTION_OPCODE :: 5
 Data_Source_Action_Event :: struct {
-	dnd_action : u32,  // action selected by the compositor
+	dnd_action : Data_Device_Manager_Dnd_Action_Set,  // action selected by the compositor
 }
 data_source_action_decode :: proc(data: []byte) -> Data_Source_Action_Event {
 	e: Data_Source_Action_Event
 	r: int
 	n := r
-	e.dnd_action, r = util.read_u32(data[n:]); n += r
+	val_dnd_action, _ := util.read_u32(data[n:]); n += 4
+	e.dnd_action = transmute(Data_Device_Manager_Dnd_Action_Set)val_dnd_action
 	return e
 }
 
@@ -1609,11 +1612,11 @@ data_device_manager_release_encode :: proc(req: Data_Device_Manager_Release_Requ
 // or drags initiated with other buttons than BTN_LEFT to specific
 // actions (e.g. "ask").
 Data_Device_Manager_Dnd_Action :: enum u32 {
-	None = 0,  // no action
-	Copy = 1,  // copy action
-	Move = 2,  // move action
-	Ask = 4,  // ask action
+	Copy = 0,  // copy action
+	Move = 1,  // move action
+	Ask = 2,  // ask action
 }
+Data_Device_Manager_Dnd_Action_Set :: bit_set[Data_Device_Manager_Dnd_Action; u32]
 
 // create desktop-style surfaces
 // This interface is implemented by servers that provide
@@ -1717,7 +1720,7 @@ Shell_Surface_Resize_Request :: struct {
 	shell_surface : u32,
 	seat          : u32,  // seat whose pointer is used
 	serial        : u32,  // serial number of the implicit grab on the pointer
-	edges         : u32,  // which edge or corner is being dragged
+	edges         : Shell_Surface_Resize_Set,  // which edge or corner is being dragged
 }
 shell_surface_resize_encode :: proc(req: Shell_Surface_Resize_Request, allocator: mem.Allocator) -> (encoded: []byte, err: mem.Allocator_Error) {
 	object := req.shell_surface
@@ -1727,7 +1730,7 @@ shell_surface_resize_encode :: proc(req: Shell_Surface_Resize_Request, allocator
 	util.write(&msg, object, opcode, size)
 	util.write(&msg, req.seat)
 	util.write(&msg, req.serial)
-	util.write(&msg, req.edges)
+	util.write_u32(&msg, transmute(u32)req.edges)
 	encoded = msg[:]
 	return
 }
@@ -1761,7 +1764,7 @@ Shell_Surface_Set_Transient_Request :: struct {
 	parent        : u32,  // parent surface
 	x             : i32,  // surface-local x coordinate
 	y             : i32,  // surface-local y coordinate
-	flags         : u32,  // transient surface behavior
+	flags         : Shell_Surface_Transient_Set,  // transient surface behavior
 }
 shell_surface_set_transient_encode :: proc(req: Shell_Surface_Set_Transient_Request, allocator: mem.Allocator) -> (encoded: []byte, err: mem.Allocator_Error) {
 	object := req.shell_surface
@@ -1772,7 +1775,7 @@ shell_surface_set_transient_encode :: proc(req: Shell_Surface_Set_Transient_Requ
 	util.write(&msg, req.parent)
 	util.write(&msg, req.x)
 	util.write(&msg, req.y)
-	util.write(&msg, req.flags)
+	util.write_u32(&msg, transmute(u32)req.flags)
 	encoded = msg[:]
 	return
 }
@@ -1849,7 +1852,7 @@ Shell_Surface_Set_Popup_Request :: struct {
 	parent        : u32,  // parent surface
 	x             : i32,  // surface-local x coordinate
 	y             : i32,  // surface-local y coordinate
-	flags         : u32,  // transient surface behavior
+	flags         : Shell_Surface_Transient_Set,  // transient surface behavior
 }
 shell_surface_set_popup_encode :: proc(req: Shell_Surface_Set_Popup_Request, allocator: mem.Allocator) -> (encoded: []byte, err: mem.Allocator_Error) {
 	object := req.shell_surface
@@ -1862,7 +1865,7 @@ shell_surface_set_popup_encode :: proc(req: Shell_Surface_Set_Popup_Request, all
 	util.write(&msg, req.parent)
 	util.write(&msg, req.x)
 	util.write(&msg, req.y)
-	util.write(&msg, req.flags)
+	util.write_u32(&msg, transmute(u32)req.flags)
 	encoded = msg[:]
 	return
 }
@@ -1973,7 +1976,7 @@ shell_surface_ping_decode :: proc(data: []byte) -> Shell_Surface_Ping_Event {
 // in surface-local coordinates.
 SHELL_SURFACE_CONFIGURE_OPCODE :: 1
 Shell_Surface_Configure_Event :: struct {
-	edges  : u32,  // how the surface was resized
+	edges  : Shell_Surface_Resize_Set,  // how the surface was resized
 	width  : i32,  // new width of the surface
 	height : i32,  // new height of the surface
 }
@@ -1981,7 +1984,8 @@ shell_surface_configure_decode :: proc(data: []byte) -> Shell_Surface_Configure_
 	e: Shell_Surface_Configure_Event
 	r: int
 	n := r
-	e.edges, r = util.read_u32(data[n:]); n += r
+	val_edges, _ := util.read_u32(data[n:]); n += 4
+	e.edges = transmute(Shell_Surface_Resize_Set)val_edges
 	e.width, r = util.read_i32(data[n:]); n += r
 	e.height, r = util.read_i32(data[n:]); n += r
 	return e
@@ -2006,23 +2010,20 @@ shell_surface_popup_done_decode :: proc(data: []byte) -> Shell_Surface_Popup_Don
 // use this information to adapt its behavior, e.g. choose
 // an appropriate cursor image.
 Shell_Surface_Resize :: enum u32 {
-	None = 0,  // no edge
-	Top = 1,  // top edge
-	Bottom = 2,  // bottom edge
-	Left = 4,  // left edge
-	Top_Left = 5,  // top and left edges
-	Bottom_Left = 6,  // bottom and left edges
-	Right = 8,  // right edge
-	Top_Right = 9,  // top and right edges
-	Bottom_Right = 10,  // bottom and right edges
+	Top = 0,  // top edge
+	Bottom = 1,  // bottom edge
+	Left = 2,  // left edge
+	Right = 3,  // right edge
 }
+Shell_Surface_Resize_Set :: bit_set[Shell_Surface_Resize; u32]
 
 // details of transient behaviour
 // These flags specify details of the expected behaviour
 // of transient surfaces. Used in the set_transient request.
 Shell_Surface_Transient :: enum u32 {
-	Inactive = 0x1,  // do not set keyboard focus
+	Inactive = 0,  // do not set keyboard focus
 }
+Shell_Surface_Transient_Set :: bit_set[Shell_Surface_Transient; u32]
 
 // different method to set the surface fullscreen
 // Hints to indicate to the compositor how to deal with a conflict
@@ -2765,13 +2766,14 @@ seat_release_encode :: proc(req: Seat_Release_Request, allocator: mem.Allocator)
 // keyboard and touch capabilities, respectively.
 SEAT_CAPABILITIES_OPCODE :: 0
 Seat_Capabilities_Event :: struct {
-	capabilities : u32,  // capabilities of the seat
+	capabilities : Seat_Capability_Set,  // capabilities of the seat
 }
 seat_capabilities_decode :: proc(data: []byte) -> Seat_Capabilities_Event {
 	e: Seat_Capabilities_Event
 	r: int
 	n := r
-	e.capabilities, r = util.read_u32(data[n:]); n += r
+	val_capabilities, _ := util.read_u32(data[n:]); n += 4
+	e.capabilities = transmute(Seat_Capability_Set)val_capabilities
 	return e
 }
 
@@ -2805,10 +2807,11 @@ seat_name_decode :: proc(data: []byte, allocator: mem.Allocator) -> Seat_Name_Ev
 // This is a bitmask of capabilities this seat has; if a member is
 // set, then it is present on the seat.
 Seat_Capability :: enum u32 {
-	Pointer = 1,  // the seat has pointer devices
-	Keyboard = 2,  // the seat has one or more keyboards
-	Touch = 4,  // the seat has touch devices
+	Pointer = 0,  // the seat has pointer devices
+	Keyboard = 1,  // the seat has one or more keyboards
+	Touch = 2,  // the seat has touch devices
 }
+Seat_Capability_Set :: bit_set[Seat_Capability; u32]
 
 // wl_seat error values
 // These errors can be emitted in response to wl_seat requests.
@@ -3822,7 +3825,7 @@ output_geometry_decode :: proc(data: []byte, allocator: mem.Allocator) -> Output
 // refresh rate or the size.
 OUTPUT_MODE_OPCODE :: 1
 Output_Mode_Event :: struct {
-	flags   : u32,  // bitfield of mode flags
+	flags   : Output_Mode_Set,  // bitfield of mode flags
 	width   : i32,  // width of the mode in hardware units
 	height  : i32,  // height of the mode in hardware units
 	refresh : i32,  // vertical refresh rate in mHz
@@ -3831,7 +3834,8 @@ output_mode_decode :: proc(data: []byte) -> Output_Mode_Event {
 	e: Output_Mode_Event
 	r: int
 	n := r
-	e.flags, r = util.read_u32(data[n:]); n += r
+	val_flags, _ := util.read_u32(data[n:]); n += 4
+	e.flags = transmute(Output_Mode_Set)val_flags
 	e.width, r = util.read_i32(data[n:]); n += r
 	e.height, r = util.read_i32(data[n:]); n += r
 	e.refresh, r = util.read_i32(data[n:]); n += r
@@ -3977,9 +3981,10 @@ Output_Transform :: enum u32 {
 // These flags describe properties of an output mode.
 // They are used in the flags bitfield of the mode event.
 Output_Mode :: enum u32 {
-	Current = 0x1,  // indicates this is the current mode
-	Preferred = 0x2,  // indicates this is the preferred mode
+	Current = 0,  // indicates this is the current mode
+	Preferred = 1,  // indicates this is the preferred mode
 }
+Output_Mode_Set :: bit_set[Output_Mode; u32]
 
 // region interface
 // A region object describes an area.
