@@ -548,10 +548,6 @@ def emit_dispatch(protocols):
     out.append("package client")
     out.append("")
     for proto in protocols:
-        if proto.copyright:
-            out.extend(copyright_lines(proto.copyright))
-            out.append("")
-    for proto in protocols:
         out.append(f'import "{proto.pkg}"')
     out.append("")
 
