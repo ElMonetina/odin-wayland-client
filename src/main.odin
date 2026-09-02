@@ -6,8 +6,9 @@ import dmabuf "../linux_dmabuf_v1"
 import wl "../wayland"
 import xdg "../xdg_shell"
 import "core:log"
-import "core:math"
 import "core:sys/linux"
+import vk "vendor:vulkan"
+import "core:dynlib"
 
 State :: struct {
 	wl_registry:   u32,
@@ -75,6 +76,24 @@ main :: proc() {
 	state.shm_file, state.shm_pool_data, _ = client.create_shm_file(shm_file_size)
 
 	free_all(context.temp_allocator)
+
+	lib, ok := dynlib.load_library("libvulkan.so")
+	if !ok {
+		log.debug("failed to load")
+	}
+	proc_ptr, found := dynlib.symbol_address(lib, "vkCreateInstance")
+	if !found {
+		log.debug("Failed to find proc")
+	}
+
+	vk.load_proc_addresses(proc_ptr)
+
+	instance_create_info := vk.InstanceCreateInfo{
+		sType = .INSTANCE_CREATE_INFO,
+
+	}
+	// vk.CreateInstance()
+
 	for !state.quitting {
 		handle_event(&state)
 	}
