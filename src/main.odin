@@ -1,14 +1,14 @@
 package main
 
-import "core:slice"
 import client "../"
 import dmabuf "../linux_dmabuf_v1"
 import wl "../wayland"
 import xdg "../xdg_shell"
+import "core:dynlib"
 import "core:log"
+import "core:slice"
 import "core:sys/linux"
 import vk "vendor:vulkan"
-import "core:dynlib"
 
 State :: struct {
 	wl_registry:   u32,
@@ -28,11 +28,16 @@ State :: struct {
 	quitting:      bool,
 }
 
+Pixel :: [4]u8
+
 Vulkan_State :: struct {
-	instance: vk.Instance
+	instance: vk.Instance,
+	p_device: vk.PhysicalDevice,
 }
 
-Pixel :: [4]u8
+ENABLED_LAYERS :: []cstring{"VK_LAYER_KHRONOS_validation"}
+
+ENABLED_DEVICE_EXTENSIONS :: []cstring{vk.EXT_EXTERNAL_MEMORY_DMA_BUF_EXTENSION_NAME, vk.EXT_IMAGE_DRM_FORMAT_MODIFIER_EXTENSION_NAME}
 
 main :: proc() {
 	context.logger = log.create_console_logger()
@@ -80,12 +85,56 @@ main :: proc() {
 	shm_file_size := state.w * state.h * 4 * 2
 	state.shm_file, state.shm_pool_data, _ = client.create_shm_file(shm_file_size)
 
-	free_all(context.temp_allocator)
-
-	instance_ci := vk.InstanceCreateInfo{
-		sType = .INSTANCE_CREATE_INFO,
+	app_info := vk.ApplicationInfo {
+		sType      = .APPLICATION_INFO,
+		apiVersion = vk.API_VERSION_1_1,
 	}
-	vk_state.instance, _ = client.vulkan_create_instance(&instance_ci, nil)
+	instance_ci := vk.InstanceCreateInfo {
+		sType               = .INSTANCE_CREATE_INFO,
+		enabledLayerCount   = u32(len(ENABLED_LAYERS)),
+		ppEnabledLayerNames = raw_data(ENABLED_LAYERS),
+		pApplicationInfo    = &app_info,
+	}
+	lib, _ := dynlib.load_library("libvulkan.so", false, context.temp_allocator)
+
+	get_proc_addr := dynlib.symbol_address(lib, "vkGetInstanceProcAddr", context.temp_allocator)
+	vk.load_proc_addresses(get_proc_addr)
+	defer dynlib.unload_library(lib)
+
+	if err := vk.CreateInstance(&instance_ci, nil, &vk_state.instance); err != .SUCCESS {
+		log.error(err)
+		return
+	}
+	defer vk.DestroyInstance(vk_state.instance, nil)
+	vk.load_proc_addresses(vk_state.instance)
+
+	p_device_count: u32
+	res: vk.Result
+	res = vk.EnumeratePhysicalDevices(vk_state.instance, &p_device_count, nil)
+	if res != .SUCCESS {
+		log.error(res)
+		return
+	}
+	p_devices := make([]vk.PhysicalDevice, p_device_count, context.temp_allocator)
+	res = vk.EnumeratePhysicalDevices(vk_state.instance, &p_device_count, raw_data(p_devices))
+	if res != .SUCCESS {
+		log.error(res)
+		return
+	}
+
+	for p_device in p_devices {
+		props :=  vk.PhysicalDeviceProperties2 {
+			sType = .PHYSICAL_DEVICE_PROPERTIES_2
+		}
+		vk.GetPhysicalDeviceProperties2(p_device, &props)
+		if props.properties.deviceType == .DISCRETE_GPU {
+			vk_state.p_device = p_device
+			break
+		}
+		vk_state.p_device = p_device
+	}
+
+	free_all(context.temp_allocator)
 
 	for !state.quitting {
 		handle_event(&state)
@@ -169,7 +218,7 @@ handle_event :: proc(state: ^State) {
 					}
 					state.wl_buffer, _ = client.queue_request(create_buffer)
 				}
-				
+
 				i := 0
 				pixels := slice.reinterpret([]Pixel, state.shm_pool_data)
 				for &pixel in pixels {
@@ -207,5 +256,3 @@ handle_event :: proc(state: ^State) {
 		}
 	}
 }
-
-
