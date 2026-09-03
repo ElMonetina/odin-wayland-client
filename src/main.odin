@@ -31,13 +31,17 @@ State :: struct {
 Pixel :: [4]u8
 
 Vulkan_State :: struct {
-	instance: vk.Instance,
-	p_device: vk.PhysicalDevice,
+	instance:       vk.Instance,
+	p_device:       vk.PhysicalDevice,
+	device:         vk.Device,
+	gfx_family_idx: u32,
 }
 
 ENABLED_LAYERS :: []cstring{"VK_LAYER_KHRONOS_validation"}
 
-ENABLED_DEVICE_EXTENSIONS :: []cstring{vk.EXT_EXTERNAL_MEMORY_DMA_BUF_EXTENSION_NAME, vk.EXT_IMAGE_DRM_FORMAT_MODIFIER_EXTENSION_NAME}
+EXT_EXTERNAL_MEMORY_FD :: "VK_KHR_external_memory_fd"
+
+ENABLED_DEVICE_EXTENSIONS :: []cstring{vk.EXT_EXTERNAL_MEMORY_DMA_BUF_EXTENSION_NAME, vk.EXT_IMAGE_DRM_FORMAT_MODIFIER_EXTENSION_NAME, vk.KHR_IMAGE_FORMAT_LIST_EXTENSION_NAME, EXT_EXTERNAL_MEMORY_FD}
 
 main :: proc() {
 	context.logger = log.create_console_logger()
@@ -85,6 +89,8 @@ main :: proc() {
 	shm_file_size := state.w * state.h * 4 * 2
 	state.shm_file, state.shm_pool_data, _ = client.create_shm_file(shm_file_size)
 
+	// Vulkan initialization
+
 	app_info := vk.ApplicationInfo {
 		sType      = .APPLICATION_INFO,
 		apiVersion = vk.API_VERSION_1_1,
@@ -123,8 +129,8 @@ main :: proc() {
 	}
 
 	for p_device in p_devices {
-		props :=  vk.PhysicalDeviceProperties2 {
-			sType = .PHYSICAL_DEVICE_PROPERTIES_2
+		props := vk.PhysicalDeviceProperties2 {
+			sType = .PHYSICAL_DEVICE_PROPERTIES_2,
 		}
 		vk.GetPhysicalDeviceProperties2(p_device, &props)
 		if props.properties.deviceType == .DISCRETE_GPU {
@@ -133,6 +139,37 @@ main :: proc() {
 		}
 		vk_state.p_device = p_device
 	}
+
+	qfp_count: u32
+	vk.GetPhysicalDeviceQueueFamilyProperties(vk_state.p_device, &qfp_count, nil)
+	qfps := make([]vk.QueueFamilyProperties, qfp_count, context.temp_allocator)
+	vk.GetPhysicalDeviceQueueFamilyProperties(vk_state.p_device, &qfp_count, raw_data(qfps))
+	for qfp, i in qfps {
+		if .GRAPHICS in qfp.queueFlags {
+			vk_state.gfx_family_idx = u32(i)
+			break
+		}
+	}
+	q_priority := f32(1.0)
+	queue_ci := vk.DeviceQueueCreateInfo {
+		sType            = .DEVICE_QUEUE_CREATE_INFO,
+		queueCount       = 1,
+		queueFamilyIndex = vk_state.gfx_family_idx,
+		pQueuePriorities = &q_priority,
+	}
+	device_ci := vk.DeviceCreateInfo {
+		sType                   = .DEVICE_CREATE_INFO,
+		enabledExtensionCount   = u32(len(ENABLED_DEVICE_EXTENSIONS)),
+		ppEnabledExtensionNames = raw_data(ENABLED_DEVICE_EXTENSIONS),
+		queueCreateInfoCount    = 1,
+		pQueueCreateInfos       = &queue_ci,
+	}
+	res = vk.CreateDevice(vk_state.p_device, &device_ci, nil, &vk_state.device)
+	if res != .SUCCESS {
+		log.error(res)
+		return
+	}
+	defer vk.DestroyDevice(vk_state.device, nil)
 
 	free_all(context.temp_allocator)
 
