@@ -30,7 +30,8 @@ Error :: union {
 	mem.Allocator_Error
 }
 
-// Connects the client to the wayland server, note that the temp allocator must be backed by an allocator that supports free_all(temp_allocator)
+// Connects the client to the wayland server and initializes internal resources.
+// Note that the temp allocator must be backed by an allocator that supports free_all(temp_allocator)
 connect :: proc(allocator := context.allocator, temp_allocator := context.temp_allocator) -> Error {
 	internal_state.allocator = allocator
 	internal_state.temp_allocator = temp_allocator
@@ -61,6 +62,7 @@ connect :: proc(allocator := context.allocator, temp_allocator := context.temp_a
 	return nil
 }
 
+// Closes the connection with the server and cleans up internal resources
 disconnect :: proc() {
 	delete(internal_state.requests_byte_buffer)
 	delete(internal_state.outgoing_fds)
