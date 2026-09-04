@@ -8,7 +8,15 @@
 !generated.odin
 !generator.py
 !protocols/
-!protocols/wayland.xml
+!protocols/**
 !wayland/
 !wayland/**
+!src/
+!src/main.odin
+!vulkan.odin
+!generated.odin
+!linux_dmabuf_v1/
+!linux_dmabuf_v1/generated.odin
+!xdg_shell/
+!xdg_shell/generated.odin
 !README.md
