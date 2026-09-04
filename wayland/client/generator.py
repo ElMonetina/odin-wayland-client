@@ -670,6 +670,10 @@ def main():
         print("usage: python3 generator.py <protocols-dir>")
         sys.exit(1)
 
+    # All output is anchored relative to the generator's own directory, so the
+    # script works no matter what the current working directory is.
+    base = Path(__file__).resolve().parent
+
     d = Path(sys.argv[1])
     if not d.is_dir():
         print(f"not a directory: {d}")
@@ -684,13 +688,14 @@ def main():
     check_deps(protocols)
 
     for proto in protocols:
-        out = Path(f"{proto.pkg}/generated.odin")
+        out = base / f"{proto.pkg}/generated.odin"
         out.parent.mkdir(parents=True, exist_ok=True)
         out.write_text(emit_types(proto))
         print(f"  -> {out} ({len(proto.interfaces)} interfaces)")
 
-    Path(OUT_DISPATCH).write_text(emit_dispatch(protocols))
-    print(f"  -> {OUT_DISPATCH}")
+    out_dispatch = base / OUT_DISPATCH
+    out_dispatch.write_text(emit_dispatch(protocols))
+    print(f"  -> {out_dispatch}")
 
 if __name__ == "__main__":
     main()
