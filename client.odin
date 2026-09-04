@@ -5,7 +5,7 @@ import "core:os"
 import "core:strings"
 import "core:sys/linux"
 import wl "wayland"
-import "/util"
+import "util"
 
 @(private)
 internal_state: struct {
