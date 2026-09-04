@@ -1,9 +1,9 @@
 package main
 
-import client "../"
-import dmabuf "../linux_dmabuf_v1"
-import wl "../wayland"
-import xdg "../xdg_shell"
+import "wayland:client"
+import dmabuf "wayland:client/linux_dmabuf_v1"
+import wl "wayland:client/wayland"
+import xdg "wayland:client/xdg_shell"
 import "core:dynlib"
 import "core:log"
 import "core:slice"
