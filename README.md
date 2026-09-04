@@ -1,5 +1,10 @@
 # README
 
+# DISCLAIMER
+Unions of unions seem to be broken, I was developing this project with compiler version 2026-08-06. When updating to the September release,
+it stopped compiling. 
+I will look into a solution.
+
 This is a native to Odin implementation of Wayland, an alternative to libwayland, the project also includes a `generator.py` script,
 
 ## Overview
