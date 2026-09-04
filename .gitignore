@@ -1,8 +1,11 @@
 *
 !.gitignore
+!src/
+!src/**
 !util/
 !util/**
 !client.odin
+!generated.odin
 !generator.py
 !protocols/
 !protocols/**

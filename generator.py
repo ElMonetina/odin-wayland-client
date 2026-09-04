@@ -551,56 +551,53 @@ def emit_dispatch(protocols):
         out.append(f'import "{proto.pkg}"')
     out.append("")
 
-    out.append("Request :: union {")
-    for proto in protocols:
-        out.append(f"\t{proto.pkg}.Request,")
-    out.append("}")
-    out.append("")
-
+    # queue_request is a procedure group: one overload per protocol, each taking
+    # that protocol's single-level Request union. The concrete request struct is
+    # implicitly converted to the package union, which selects the right overload;
+    # this avoids the nested-union implicit conversion that newer compilers reject.
     out.append("// Returns the ID of a new object, 0 if none was created.")
-    out.append("queue_request :: proc(req: Request) -> (id: u32, err: Error) {")
-    out.append("\tswitch p in req {")
+    out.append("queue_request :: proc { " + ", ".join(f"queue_request_{p.pkg}" for p in protocols) + " }")
     for proto in protocols:
         alias = proto.pkg
-        out.append(f"\tcase {alias}.Request:")
-        out.append("\t\tswitch r in p {")
+        out.append("")
+        out.append(f"queue_request_{alias} :: proc(req: {alias}.Request) -> (id: u32, err: Error) {{")
+        out.append("\tswitch r in req {")
         for iface in proto.interfaces:
             for name, args, summary, description, destructor in iface.requests:
                 struct = f"{alias}.{pascal(iface.base)}_{pascal(name)}_Request"
                 proc = f"{alias}.{iface.base}_{name}_encode"
-                out.append(f"\t\tcase {struct}:")
+                out.append(f"\tcase {struct}:")
                 new_id_arg = next((a for a in args if a.get("type") == "new_id"), None)
                 if new_id_arg is not None:
-                    out.append("\t\t\tid = new_id()")
+                    out.append("\t\tid = new_id()")
                 for a in args:
                     if a.get("type") == "fd":
-                        out.append(f"\t\t\tappend(&internal_state.outgoing_fds, r.{a.get('name')})")
+                        out.append(f"\t\tappend(&internal_state.outgoing_fds, r.{a.get('name')})")
                 if new_id_arg is not None:
-                    out.append(f"\t\t\tdata := {proc}(r, id, internal_state.temp_allocator) or_return")
+                    out.append(f"\t\tdata := {proc}(r, id, internal_state.temp_allocator) or_return")
                 else:
-                    out.append(f"\t\t\tdata := {proc}(r, internal_state.temp_allocator) or_return")
+                    out.append(f"\t\tdata := {proc}(r, internal_state.temp_allocator) or_return")
                 if new_id_arg is not None:
                     nid_iface = new_id_arg.get("interface")
                     if nid_iface is not None:
                         pkg = iface_to_pkg[nid_iface]
-                        out.append(f"\t\t\tinternal_state.interface_map[id] = {pkg}.{upper(iface_to_base[nid_iface])}_INTERFACE")
+                        out.append(f"\t\tinternal_state.interface_map[id] = {pkg}.{upper(iface_to_base[nid_iface])}_INTERFACE")
                     else:
                         # dynamic interface (bind): resolve the name to a static
                         # constant instead of cloning, so the map never holds
                         # heap-allocated strings
-                        out.append("\t\t\tswitch r.interface {")
+                        out.append("\t\tswitch r.interface {")
                         for pkg, base in global_consts:
                             const = f"{pkg}.{upper(base)}_INTERFACE"
                             out.append(f"\t\t\tcase {const}:")
                             out.append(f"\t\t\t\tinternal_state.interface_map[id] = {const}")
-                        out.append("\t\t\t}")
-                out.append("\t\t\tappend(&internal_state.requests_byte_buffer, ..data[:])")
+                        out.append("\t\t}")
+                out.append("\t\tappend(&internal_state.requests_byte_buffer, ..data[:])")
                 if destructor:
-                    out.append(f"\t\t\tdelete_key(&internal_state.interface_map, r.{iface.base})")
-        out.append("\t\t}")
-    out.append("\t}")
-    out.append("\treturn")
-    out.append("}")
+                    out.append(f"\t\tdelete_key(&internal_state.interface_map, r.{iface.base})")
+        out.append("\t}")
+        out.append("\treturn")
+        out.append("}")
     out.append("")
 
     out.append("Event :: union {")
@@ -609,7 +606,7 @@ def emit_dispatch(protocols):
     out.append("}")
     out.append("")
 
-    out.append("dispatch_event :: proc(object_id: u32, opcode: u16, data: []byte) {")
+    out.append("parse_event :: proc(object_id: u32, opcode: u16, data: []byte) -> (ev: Event, ok: bool) {")
     out.append("\tinterface := internal_state.interface_map[object_id]")
     out.append("\tswitch interface {")
     for proto in protocols:
@@ -622,9 +619,11 @@ def emit_dispatch(protocols):
                 if iface.name == "wl_display" and name == "delete_id":
                     # server freed a server-created object: drop it from the table
                     out.append(f"\t\t\tdelete_key(&internal_state.interface_map, {alias}.{iface.base}_{name}_decode(data).id)")
+                    out.append("\t\t\treturn {}, false")
                 elif iface.name == "wl_callback" and name == "done":
                     # callbacks self-destruct after firing: drop their id
                     out.append("\t\t\tdelete_key(&internal_state.interface_map, object_id)")
+                    out.append("\t\t\treturn {}, false")
                 else:
                     call = f"{alias}.{iface.base}_{name}_decode(data"
                     if has_fd(args):
@@ -632,9 +631,12 @@ def emit_dispatch(protocols):
                     if needs_allocator(args):
                         call += ", internal_state.temp_allocator"
                     call += ")"
-                    out.append(f"\t\t\tappend(&internal_state.events, {call})")
+                    # wrap the decoded concrete event into the package union and
+                    # then into the client union with explicit single-level casts
+                    out.append(f"\t\t\treturn Event({alias}.Event({call})), true")
             out.append("\t\t}")
     out.append("\t}")
+    out.append("\treturn {}, false")
     out.append("}")
     out.append("")
 
