@@ -1,9 +1,59 @@
 package client
 
+import "linux_dmabuf_v1"
 import "wayland"
+import "xdg_shell"
 
 // Returns the ID of a new object, 0 if none was created.
-queue_request :: proc { queue_request_wayland }
+queue_request :: proc { queue_request_linux_dmabuf_v1, queue_request_wayland, queue_request_xdg_shell }
+
+queue_request_linux_dmabuf_v1 :: proc(req: linux_dmabuf_v1.Request) -> (id: u32, err: Error) {
+	switch r in req {
+	case linux_dmabuf_v1.Dmabuf_Destroy_Request:
+		data := linux_dmabuf_v1.dmabuf_destroy_encode(r, internal_state.temp_allocator) or_return
+		append(&internal_state.requests_byte_buffer, ..data[:])
+		delete_key(&internal_state.interface_map, r.dmabuf)
+	case linux_dmabuf_v1.Dmabuf_Create_Params_Request:
+		id = new_id()
+		data := linux_dmabuf_v1.dmabuf_create_params_encode(r, id, internal_state.temp_allocator) or_return
+		internal_state.interface_map[id] = linux_dmabuf_v1.BUFFER_PARAMS_INTERFACE
+		append(&internal_state.requests_byte_buffer, ..data[:])
+	case linux_dmabuf_v1.Dmabuf_Get_Default_Feedback_Request:
+		id = new_id()
+		data := linux_dmabuf_v1.dmabuf_get_default_feedback_encode(r, id, internal_state.temp_allocator) or_return
+		internal_state.interface_map[id] = linux_dmabuf_v1.DMABUF_FEEDBACK_INTERFACE
+		append(&internal_state.requests_byte_buffer, ..data[:])
+	case linux_dmabuf_v1.Dmabuf_Get_Surface_Feedback_Request:
+		id = new_id()
+		data := linux_dmabuf_v1.dmabuf_get_surface_feedback_encode(r, id, internal_state.temp_allocator) or_return
+		internal_state.interface_map[id] = linux_dmabuf_v1.DMABUF_FEEDBACK_INTERFACE
+		append(&internal_state.requests_byte_buffer, ..data[:])
+	case linux_dmabuf_v1.Buffer_Params_Destroy_Request:
+		data := linux_dmabuf_v1.buffer_params_destroy_encode(r, internal_state.temp_allocator) or_return
+		append(&internal_state.requests_byte_buffer, ..data[:])
+		delete_key(&internal_state.interface_map, r.buffer_params)
+	case linux_dmabuf_v1.Buffer_Params_Add_Request:
+		append(&internal_state.outgoing_fds, r.fd)
+		data := linux_dmabuf_v1.buffer_params_add_encode(r, internal_state.temp_allocator) or_return
+		append(&internal_state.requests_byte_buffer, ..data[:])
+	case linux_dmabuf_v1.Buffer_Params_Create_Request:
+		data := linux_dmabuf_v1.buffer_params_create_encode(r, internal_state.temp_allocator) or_return
+		append(&internal_state.requests_byte_buffer, ..data[:])
+	case linux_dmabuf_v1.Buffer_Params_Create_Immed_Request:
+		id = new_id()
+		data := linux_dmabuf_v1.buffer_params_create_immed_encode(r, id, internal_state.temp_allocator) or_return
+		internal_state.interface_map[id] = wayland.BUFFER_INTERFACE
+		append(&internal_state.requests_byte_buffer, ..data[:])
+	case linux_dmabuf_v1.Buffer_Params_Set_Sampling_Device_Request:
+		data := linux_dmabuf_v1.buffer_params_set_sampling_device_encode(r, internal_state.temp_allocator) or_return
+		append(&internal_state.requests_byte_buffer, ..data[:])
+	case linux_dmabuf_v1.Dmabuf_Feedback_Destroy_Request:
+		data := linux_dmabuf_v1.dmabuf_feedback_destroy_encode(r, internal_state.temp_allocator) or_return
+		append(&internal_state.requests_byte_buffer, ..data[:])
+		delete_key(&internal_state.interface_map, r.dmabuf_feedback)
+	}
+	return
+}
 
 queue_request_wayland :: proc(req: wayland.Request) -> (id: u32, err: Error) {
 	switch r in req {
@@ -21,6 +71,8 @@ queue_request_wayland :: proc(req: wayland.Request) -> (id: u32, err: Error) {
 		id = new_id()
 		data := wayland.registry_bind_encode(r, id, internal_state.temp_allocator) or_return
 		switch r.interface {
+			case linux_dmabuf_v1.DMABUF_INTERFACE:
+				internal_state.interface_map[id] = linux_dmabuf_v1.DMABUF_INTERFACE
 			case wayland.COMPOSITOR_INTERFACE:
 				internal_state.interface_map[id] = wayland.COMPOSITOR_INTERFACE
 			case wayland.SHM_INTERFACE:
@@ -37,6 +89,8 @@ queue_request_wayland :: proc(req: wayland.Request) -> (id: u32, err: Error) {
 				internal_state.interface_map[id] = wayland.SUBCOMPOSITOR_INTERFACE
 			case wayland.FIXES_INTERFACE:
 				internal_state.interface_map[id] = wayland.FIXES_INTERFACE
+			case xdg_shell.WM_BASE_INTERFACE:
+				internal_state.interface_map[id] = xdg_shell.WM_BASE_INTERFACE
 		}
 		append(&internal_state.requests_byte_buffer, ..data[:])
 	case wayland.Compositor_Create_Surface_Request:
@@ -296,13 +350,173 @@ queue_request_wayland :: proc(req: wayland.Request) -> (id: u32, err: Error) {
 	return
 }
 
+queue_request_xdg_shell :: proc(req: xdg_shell.Request) -> (id: u32, err: Error) {
+	switch r in req {
+	case xdg_shell.Wm_Base_Destroy_Request:
+		data := xdg_shell.wm_base_destroy_encode(r, internal_state.temp_allocator) or_return
+		append(&internal_state.requests_byte_buffer, ..data[:])
+		delete_key(&internal_state.interface_map, r.wm_base)
+	case xdg_shell.Wm_Base_Create_Positioner_Request:
+		id = new_id()
+		data := xdg_shell.wm_base_create_positioner_encode(r, id, internal_state.temp_allocator) or_return
+		internal_state.interface_map[id] = xdg_shell.POSITIONER_INTERFACE
+		append(&internal_state.requests_byte_buffer, ..data[:])
+	case xdg_shell.Wm_Base_Get_Xdg_Surface_Request:
+		id = new_id()
+		data := xdg_shell.wm_base_get_xdg_surface_encode(r, id, internal_state.temp_allocator) or_return
+		internal_state.interface_map[id] = xdg_shell.SURFACE_INTERFACE
+		append(&internal_state.requests_byte_buffer, ..data[:])
+	case xdg_shell.Wm_Base_Pong_Request:
+		data := xdg_shell.wm_base_pong_encode(r, internal_state.temp_allocator) or_return
+		append(&internal_state.requests_byte_buffer, ..data[:])
+	case xdg_shell.Positioner_Destroy_Request:
+		data := xdg_shell.positioner_destroy_encode(r, internal_state.temp_allocator) or_return
+		append(&internal_state.requests_byte_buffer, ..data[:])
+		delete_key(&internal_state.interface_map, r.positioner)
+	case xdg_shell.Positioner_Set_Size_Request:
+		data := xdg_shell.positioner_set_size_encode(r, internal_state.temp_allocator) or_return
+		append(&internal_state.requests_byte_buffer, ..data[:])
+	case xdg_shell.Positioner_Set_Anchor_Rect_Request:
+		data := xdg_shell.positioner_set_anchor_rect_encode(r, internal_state.temp_allocator) or_return
+		append(&internal_state.requests_byte_buffer, ..data[:])
+	case xdg_shell.Positioner_Set_Anchor_Request:
+		data := xdg_shell.positioner_set_anchor_encode(r, internal_state.temp_allocator) or_return
+		append(&internal_state.requests_byte_buffer, ..data[:])
+	case xdg_shell.Positioner_Set_Gravity_Request:
+		data := xdg_shell.positioner_set_gravity_encode(r, internal_state.temp_allocator) or_return
+		append(&internal_state.requests_byte_buffer, ..data[:])
+	case xdg_shell.Positioner_Set_Constraint_Adjustment_Request:
+		data := xdg_shell.positioner_set_constraint_adjustment_encode(r, internal_state.temp_allocator) or_return
+		append(&internal_state.requests_byte_buffer, ..data[:])
+	case xdg_shell.Positioner_Set_Offset_Request:
+		data := xdg_shell.positioner_set_offset_encode(r, internal_state.temp_allocator) or_return
+		append(&internal_state.requests_byte_buffer, ..data[:])
+	case xdg_shell.Positioner_Set_Reactive_Request:
+		data := xdg_shell.positioner_set_reactive_encode(r, internal_state.temp_allocator) or_return
+		append(&internal_state.requests_byte_buffer, ..data[:])
+	case xdg_shell.Positioner_Set_Parent_Size_Request:
+		data := xdg_shell.positioner_set_parent_size_encode(r, internal_state.temp_allocator) or_return
+		append(&internal_state.requests_byte_buffer, ..data[:])
+	case xdg_shell.Positioner_Set_Parent_Configure_Request:
+		data := xdg_shell.positioner_set_parent_configure_encode(r, internal_state.temp_allocator) or_return
+		append(&internal_state.requests_byte_buffer, ..data[:])
+	case xdg_shell.Surface_Destroy_Request:
+		data := xdg_shell.surface_destroy_encode(r, internal_state.temp_allocator) or_return
+		append(&internal_state.requests_byte_buffer, ..data[:])
+		delete_key(&internal_state.interface_map, r.surface)
+	case xdg_shell.Surface_Get_Toplevel_Request:
+		id = new_id()
+		data := xdg_shell.surface_get_toplevel_encode(r, id, internal_state.temp_allocator) or_return
+		internal_state.interface_map[id] = xdg_shell.TOPLEVEL_INTERFACE
+		append(&internal_state.requests_byte_buffer, ..data[:])
+	case xdg_shell.Surface_Get_Popup_Request:
+		id = new_id()
+		data := xdg_shell.surface_get_popup_encode(r, id, internal_state.temp_allocator) or_return
+		internal_state.interface_map[id] = xdg_shell.POPUP_INTERFACE
+		append(&internal_state.requests_byte_buffer, ..data[:])
+	case xdg_shell.Surface_Set_Window_Geometry_Request:
+		data := xdg_shell.surface_set_window_geometry_encode(r, internal_state.temp_allocator) or_return
+		append(&internal_state.requests_byte_buffer, ..data[:])
+	case xdg_shell.Surface_Ack_Configure_Request:
+		data := xdg_shell.surface_ack_configure_encode(r, internal_state.temp_allocator) or_return
+		append(&internal_state.requests_byte_buffer, ..data[:])
+	case xdg_shell.Toplevel_Destroy_Request:
+		data := xdg_shell.toplevel_destroy_encode(r, internal_state.temp_allocator) or_return
+		append(&internal_state.requests_byte_buffer, ..data[:])
+		delete_key(&internal_state.interface_map, r.toplevel)
+	case xdg_shell.Toplevel_Set_Parent_Request:
+		data := xdg_shell.toplevel_set_parent_encode(r, internal_state.temp_allocator) or_return
+		append(&internal_state.requests_byte_buffer, ..data[:])
+	case xdg_shell.Toplevel_Set_Title_Request:
+		data := xdg_shell.toplevel_set_title_encode(r, internal_state.temp_allocator) or_return
+		append(&internal_state.requests_byte_buffer, ..data[:])
+	case xdg_shell.Toplevel_Set_App_Id_Request:
+		data := xdg_shell.toplevel_set_app_id_encode(r, internal_state.temp_allocator) or_return
+		append(&internal_state.requests_byte_buffer, ..data[:])
+	case xdg_shell.Toplevel_Show_Window_Menu_Request:
+		data := xdg_shell.toplevel_show_window_menu_encode(r, internal_state.temp_allocator) or_return
+		append(&internal_state.requests_byte_buffer, ..data[:])
+	case xdg_shell.Toplevel_Move_Request:
+		data := xdg_shell.toplevel_move_encode(r, internal_state.temp_allocator) or_return
+		append(&internal_state.requests_byte_buffer, ..data[:])
+	case xdg_shell.Toplevel_Resize_Request:
+		data := xdg_shell.toplevel_resize_encode(r, internal_state.temp_allocator) or_return
+		append(&internal_state.requests_byte_buffer, ..data[:])
+	case xdg_shell.Toplevel_Set_Max_Size_Request:
+		data := xdg_shell.toplevel_set_max_size_encode(r, internal_state.temp_allocator) or_return
+		append(&internal_state.requests_byte_buffer, ..data[:])
+	case xdg_shell.Toplevel_Set_Min_Size_Request:
+		data := xdg_shell.toplevel_set_min_size_encode(r, internal_state.temp_allocator) or_return
+		append(&internal_state.requests_byte_buffer, ..data[:])
+	case xdg_shell.Toplevel_Set_Maximized_Request:
+		data := xdg_shell.toplevel_set_maximized_encode(r, internal_state.temp_allocator) or_return
+		append(&internal_state.requests_byte_buffer, ..data[:])
+	case xdg_shell.Toplevel_Unset_Maximized_Request:
+		data := xdg_shell.toplevel_unset_maximized_encode(r, internal_state.temp_allocator) or_return
+		append(&internal_state.requests_byte_buffer, ..data[:])
+	case xdg_shell.Toplevel_Set_Fullscreen_Request:
+		data := xdg_shell.toplevel_set_fullscreen_encode(r, internal_state.temp_allocator) or_return
+		append(&internal_state.requests_byte_buffer, ..data[:])
+	case xdg_shell.Toplevel_Unset_Fullscreen_Request:
+		data := xdg_shell.toplevel_unset_fullscreen_encode(r, internal_state.temp_allocator) or_return
+		append(&internal_state.requests_byte_buffer, ..data[:])
+	case xdg_shell.Toplevel_Set_Minimized_Request:
+		data := xdg_shell.toplevel_set_minimized_encode(r, internal_state.temp_allocator) or_return
+		append(&internal_state.requests_byte_buffer, ..data[:])
+	case xdg_shell.Popup_Destroy_Request:
+		data := xdg_shell.popup_destroy_encode(r, internal_state.temp_allocator) or_return
+		append(&internal_state.requests_byte_buffer, ..data[:])
+		delete_key(&internal_state.interface_map, r.popup)
+	case xdg_shell.Popup_Grab_Request:
+		data := xdg_shell.popup_grab_encode(r, internal_state.temp_allocator) or_return
+		append(&internal_state.requests_byte_buffer, ..data[:])
+	case xdg_shell.Popup_Reposition_Request:
+		data := xdg_shell.popup_reposition_encode(r, internal_state.temp_allocator) or_return
+		append(&internal_state.requests_byte_buffer, ..data[:])
+	}
+	return
+}
+
 Event :: union {
+	linux_dmabuf_v1.Event,
 	wayland.Event,
+	xdg_shell.Event,
 }
 
 parse_event :: proc(object_id: u32, opcode: u16, data: []byte) -> (ev: Event, ok: bool) {
 	interface := internal_state.interface_map[object_id]
 	switch interface {
+	case linux_dmabuf_v1.DMABUF_INTERFACE:
+		switch opcode {
+		case linux_dmabuf_v1.DMABUF_FORMAT_OPCODE:
+			return Event(linux_dmabuf_v1.Event(linux_dmabuf_v1.dmabuf_format_decode(data))), true
+		case linux_dmabuf_v1.DMABUF_MODIFIER_OPCODE:
+			return Event(linux_dmabuf_v1.Event(linux_dmabuf_v1.dmabuf_modifier_decode(data))), true
+		}
+	case linux_dmabuf_v1.BUFFER_PARAMS_INTERFACE:
+		switch opcode {
+		case linux_dmabuf_v1.BUFFER_PARAMS_CREATED_OPCODE:
+			return Event(linux_dmabuf_v1.Event(linux_dmabuf_v1.buffer_params_created_decode(data))), true
+		case linux_dmabuf_v1.BUFFER_PARAMS_FAILED_OPCODE:
+			return Event(linux_dmabuf_v1.Event(linux_dmabuf_v1.buffer_params_failed_decode(data))), true
+		}
+	case linux_dmabuf_v1.DMABUF_FEEDBACK_INTERFACE:
+		switch opcode {
+		case linux_dmabuf_v1.DMABUF_FEEDBACK_DONE_OPCODE:
+			return Event(linux_dmabuf_v1.Event(linux_dmabuf_v1.dmabuf_feedback_done_decode(data))), true
+		case linux_dmabuf_v1.DMABUF_FEEDBACK_FORMAT_TABLE_OPCODE:
+			return Event(linux_dmabuf_v1.Event(linux_dmabuf_v1.dmabuf_feedback_format_table_decode(data, &internal_state.incoming_fds))), true
+		case linux_dmabuf_v1.DMABUF_FEEDBACK_MAIN_DEVICE_OPCODE:
+			return Event(linux_dmabuf_v1.Event(linux_dmabuf_v1.dmabuf_feedback_main_device_decode(data, internal_state.temp_allocator))), true
+		case linux_dmabuf_v1.DMABUF_FEEDBACK_TRANCHE_DONE_OPCODE:
+			return Event(linux_dmabuf_v1.Event(linux_dmabuf_v1.dmabuf_feedback_tranche_done_decode(data))), true
+		case linux_dmabuf_v1.DMABUF_FEEDBACK_TRANCHE_TARGET_DEVICE_OPCODE:
+			return Event(linux_dmabuf_v1.Event(linux_dmabuf_v1.dmabuf_feedback_tranche_target_device_decode(data, internal_state.temp_allocator))), true
+		case linux_dmabuf_v1.DMABUF_FEEDBACK_TRANCHE_FORMATS_OPCODE:
+			return Event(linux_dmabuf_v1.Event(linux_dmabuf_v1.dmabuf_feedback_tranche_formats_decode(data, internal_state.temp_allocator))), true
+		case linux_dmabuf_v1.DMABUF_FEEDBACK_TRANCHE_FLAGS_OPCODE:
+			return Event(linux_dmabuf_v1.Event(linux_dmabuf_v1.dmabuf_feedback_tranche_flags_decode(data))), true
+		}
 	case wayland.DISPLAY_INTERFACE:
 		switch opcode {
 		case wayland.DISPLAY_ERROR_OPCODE:
@@ -497,6 +711,39 @@ parse_event :: proc(object_id: u32, opcode: u16, data: []byte) -> (ev: Event, ok
 		}
 	case wayland.FIXES_INTERFACE:
 		switch opcode {
+		}
+	case xdg_shell.WM_BASE_INTERFACE:
+		switch opcode {
+		case xdg_shell.WM_BASE_PING_OPCODE:
+			return Event(xdg_shell.Event(xdg_shell.wm_base_ping_decode(data))), true
+		}
+	case xdg_shell.POSITIONER_INTERFACE:
+		switch opcode {
+		}
+	case xdg_shell.SURFACE_INTERFACE:
+		switch opcode {
+		case xdg_shell.SURFACE_CONFIGURE_OPCODE:
+			return Event(xdg_shell.Event(xdg_shell.surface_configure_decode(data))), true
+		}
+	case xdg_shell.TOPLEVEL_INTERFACE:
+		switch opcode {
+		case xdg_shell.TOPLEVEL_CONFIGURE_OPCODE:
+			return Event(xdg_shell.Event(xdg_shell.toplevel_configure_decode(data, internal_state.temp_allocator))), true
+		case xdg_shell.TOPLEVEL_CLOSE_OPCODE:
+			return Event(xdg_shell.Event(xdg_shell.toplevel_close_decode(data))), true
+		case xdg_shell.TOPLEVEL_CONFIGURE_BOUNDS_OPCODE:
+			return Event(xdg_shell.Event(xdg_shell.toplevel_configure_bounds_decode(data))), true
+		case xdg_shell.TOPLEVEL_WM_CAPABILITIES_OPCODE:
+			return Event(xdg_shell.Event(xdg_shell.toplevel_wm_capabilities_decode(data, internal_state.temp_allocator))), true
+		}
+	case xdg_shell.POPUP_INTERFACE:
+		switch opcode {
+		case xdg_shell.POPUP_CONFIGURE_OPCODE:
+			return Event(xdg_shell.Event(xdg_shell.popup_configure_decode(data))), true
+		case xdg_shell.POPUP_POPUP_DONE_OPCODE:
+			return Event(xdg_shell.Event(xdg_shell.popup_popup_done_decode(data))), true
+		case xdg_shell.POPUP_REPOSITIONED_OPCODE:
+			return Event(xdg_shell.Event(xdg_shell.popup_repositioned_decode(data))), true
 		}
 	}
 	return {}, false
