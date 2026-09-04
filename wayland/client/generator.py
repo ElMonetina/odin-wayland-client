@@ -507,15 +507,15 @@ def emit_types(proto):
         out.append("")
 
         for i, (name, args, summary, description, _) in enumerate(iface.requests):
-            out.extend(doc_lines(summary, description))
             out.append(f"{upper(iface.base)}_{upper(name)}_OPCODE :: {i}")
+            out.extend(doc_lines(summary, description))
             out.extend(emit_struct(iface, name, args, True, "Request"))
             out.append(encode_proc(iface, name, args))
             out.append("")
 
         for i, (name, args, summary, description, _) in enumerate(iface.events):
-            out.extend(doc_lines(summary, description))
             out.append(f"{upper(iface.base)}_{upper(name)}_OPCODE :: {i}")
+            out.extend(doc_lines(summary, description))
             out.extend(emit_struct(iface, name, args, False, "Event"))
             out.append(decode_proc(iface, name, args))
             out.append("")
