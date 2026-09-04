@@ -81,7 +81,7 @@ roundtrip :: proc() -> Error {
 	send(socket, internal_state.requests_byte_buffer[:], internal_state.outgoing_fds[:]) or_return
 	clear(&internal_state.requests_byte_buffer)
 	recv(socket, internal_state.events_byte_buffer[:], &internal_state.incoming_fds) or_return
-	parse_events(internal_state.events_byte_buffer[:], &internal_state.events)
+	parse_events_data(internal_state.events_byte_buffer[:], &internal_state.events)
 	return nil
 }
 
@@ -140,14 +140,16 @@ recv :: proc(socket: linux.Fd, data: []byte, fds: ^[dynamic]linux.Fd) -> (n: int
 	return
 }
 
-parse_events :: proc(data: []byte, events: ^[dynamic]Event) {
+parse_events_data :: proc(data: []byte, events: ^[dynamic]Event) {
 	pos: int
 	for pos + WAYLAND_HEADER_SIZE <= len(data) {
 		object_id, opcode, size, n := util.read_header(data[pos:])
 		if pos + int(size) > len(data) {
 			break
 		}
-		dispatch_event(object_id, opcode, data[pos + WAYLAND_HEADER_SIZE: pos + int(size)])
+		if ev, ok := parse_event(object_id, opcode, data[pos + WAYLAND_HEADER_SIZE: pos + int(size)]); ok {
+			append(events, ev)
+		}
 		pos += int(size)
 	}
 	remove_range(&internal_state.events_byte_buffer, 0, pos)
