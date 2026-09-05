@@ -1,5 +1,6 @@
 package main
 
+import "core:os"
 import "core:log"
 import "core:sys/linux"
 import vk "vendor:vulkan"
@@ -7,8 +8,10 @@ import "wayland:client"
 import dmabuf "wayland:client/linux_dmabuf_v1"
 import wl "wayland:client/wayland"
 import xdg "wayland:client/xdg_shell"
+import vki "wayland:client/vulkan_integration"
 
 Wayland_State :: struct {
+	client_state:     client.Client,
 	wl_registry:      u32,
 	wl_compositor:    u32,
 	wl_shm:           u32,
@@ -44,6 +47,8 @@ Vulkan_State :: struct {
 	mem_type_bit:   u32,
 	img_view:       vk.ImageView,
 	present_fence:  vk.Fence,
+
+	lib:            vki.Library,
 }
 
 ENABLED_LAYERS :: []cstring{"VK_LAYER_KHRONOS_validation"}
@@ -64,15 +69,14 @@ main :: proc() {
 
 	vk_state: Vulkan_State
 
-	conn_err := client.connect()
-	if conn_err != nil {
-		log.error(conn_err)
-		return
-	}
-	defer client.disconnect()
-
 	wl_state: Wayland_State
+	client_err: client.Error
+	wl_state.client_state, client_err = client.create()
+	ensure(client_err == nil)
+	defer client.destroy(&wl_state.client_state)
+
 	init_wayland_state(&wl_state, 1280, 720)
+	free_all(context.temp_allocator)
 	// Vulkan initialization
 
 	app_info := vk.ApplicationInfo {
@@ -85,7 +89,9 @@ main :: proc() {
 		ppEnabledLayerNames = raw_data(ENABLED_LAYERS),
 		pApplicationInfo    = &app_info,
 	}
-	client.load_vulkan_instance_proc_addr()
+	loaded: bool
+	vk_state.lib, loaded = vki.load_instance_proc_addr()
+	ensure(loaded == true)
 
 	res: vk.Result
 	res = vk.CreateInstance(&instance_ci, nil, &vk_state.instance)
@@ -255,7 +261,7 @@ main :: proc() {
 	create_params := dmabuf.Dmabuf_Create_Params_Request {
 		dmabuf = wl_state.linux_dmabuf,
 	}
-	wl_state.dmabuf_params_id, _ = client.queue_request(create_params)
+	wl_state.dmabuf_params_id, _ = client.queue_request(&wl_state.client_state, create_params)
 
 	params_add := dmabuf.Buffer_Params_Add_Request {
 		buffer_params = wl_state.dmabuf_params_id,
@@ -265,7 +271,7 @@ main :: proc() {
 		modifier_lo   = u32(DRM_FORMAT_MOD_LINEAR),
 		modifier_hi   = u32(DRM_FORMAT_MOD_LINEAR >> 32),
 	}
-	client.queue_request(params_add)
+	client.queue_request(&wl_state.client_state, params_add)
 
 	create_immed := dmabuf.Buffer_Params_Create_Immed_Request {
 		buffer_params = wl_state.dmabuf_params_id,
@@ -273,7 +279,7 @@ main :: proc() {
 		height        = wl_state.h,
 		format        = DRM_FORMAT_ARGB8888, // same as the vulkan side
 	}
-	wl_state.dmabuf_buffer, _ = client.queue_request(create_immed)
+	wl_state.dmabuf_buffer, _ = client.queue_request(&wl_state.client_state, create_immed)
 
 	fence_ci := vk.FenceCreateInfo {
 		sType = .FENCE_CREATE_INFO,
@@ -355,9 +361,8 @@ main :: proc() {
 	res = vk.WaitForFences(vk_state.device, 1, &vk_state.present_fence, true, max(u64))
 	ensure(res == .SUCCESS)
 
-	free_all(context.temp_allocator)
-
 	for !wl_state.quitting {
+		free_all(context.temp_allocator)
 		handle_event(&wl_state)
 		if wl_state.configured && wl_state.img_free {
 			res = vk.ResetCommandBuffer(vk_state.cmd_buf, {})
@@ -411,11 +416,11 @@ main :: proc() {
 				buffer  = wl_state.dmabuf_buffer,
 				surface = wl_state.wl_surface,
 			}
-			client.queue_request(attach)
+			client.queue_request(&wl_state.client_state, attach)
 			commit := wl.Surface_Commit_Request {
 				surface = wl_state.wl_surface,
 			}
-			client.queue_request(commit)
+			client.queue_request(&wl_state.client_state, commit)
 			wl_state.img_free = false
 		}
 	}
@@ -425,30 +430,31 @@ init_wayland_state :: proc(state: ^Wayland_State, shm_width, shm_height: i32) {
 	get_registry := wl.Display_Get_Registry_Request {
 		display = wl.display,
 	}
-	state.wl_registry, _ = client.queue_request(get_registry)
+	state.wl_registry, _ = client.queue_request(&state.client_state, get_registry)
 
 	register_global_objects(state)
+	free_all(context.temp_allocator)
 
 	create_surface := wl.Compositor_Create_Surface_Request {
 		compositor = state.wl_compositor,
 	}
-	state.wl_surface, _ = client.queue_request(create_surface)
+	state.wl_surface, _ = client.queue_request(&state.client_state, create_surface)
 
 	get_xdg_surface := xdg.Wm_Base_Get_Xdg_Surface_Request {
 		wm_base = state.xdg_wm_base,
 		surface = state.wl_surface,
 	}
-	state.xdg_surface, _ = client.queue_request(get_xdg_surface)
+	state.xdg_surface, _ = client.queue_request(&state.client_state, get_xdg_surface)
 
 	get_toplevel := xdg.Surface_Get_Toplevel_Request {
 		surface = state.xdg_surface,
 	}
-	state.xdg_toplevel, _ = client.queue_request(get_toplevel)
+	state.xdg_toplevel, _ = client.queue_request(&state.client_state, get_toplevel)
 
 	surface_commit := wl.Surface_Commit_Request {
 		surface = state.wl_surface,
 	}
-	client.queue_request(surface_commit)
+	client.queue_request(&state.client_state, surface_commit)
 	// client.roundtrip()
 
 	state.w, state.h = shm_width, shm_height
@@ -457,8 +463,8 @@ init_wayland_state :: proc(state: ^Wayland_State, shm_width, shm_height: i32) {
 }
 
 register_global_objects :: proc(state: ^Wayland_State) -> client.Error {
-	client.roundtrip()
-	for ev in client.poll_event() {
+	evs := client.roundtrip(&state.client_state) or_return
+	for ev in evs {
 		#partial switch p in ev {
 		case wl.Event:
 			#partial switch e in p {
@@ -471,7 +477,7 @@ register_global_objects :: proc(state: ^Wayland_State) -> client.Error {
 					interface = e.interface,
 					version   = e.version,
 				}
-				id := client.queue_request(registry_bind) or_return
+				id := client.queue_request(&state.client_state, registry_bind) or_return
 				switch e.interface {
 				case wl.COMPOSITOR_INTERFACE:
 					state.wl_compositor = id
@@ -510,8 +516,12 @@ select_physical_device :: proc(p_devices: []vk.PhysicalDevice) -> (vk.PhysicalDe
 }
 
 handle_event :: proc(state: ^Wayland_State) {
-	client.roundtrip()
-	for ev in client.poll_event() {
+	evs, err := client.roundtrip(&state.client_state)
+	if err != nil {
+		log.error(err)
+		os.exit(1)
+	}
+	for ev in evs {
 		#partial switch p in ev {
 		case wl.Event:
 			#partial switch e in p {
@@ -527,13 +537,13 @@ handle_event :: proc(state: ^Wayland_State) {
 					wm_base = state.xdg_wm_base,
 					serial  = e.serial,
 				}
-				client.queue_request(pong)
+				client.queue_request(&state.client_state, pong)
 			case xdg.Surface_Configure_Event:
 				ack_configure := xdg.Surface_Ack_Configure_Request {
 					surface = state.xdg_surface,
 					serial  = e.serial,
 				}
-				client.queue_request(ack_configure)
+				client.queue_request(&state.client_state, ack_configure)
 				state.configured = true
 				state.img_free = true
 
