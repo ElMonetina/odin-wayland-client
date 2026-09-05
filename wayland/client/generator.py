@@ -331,15 +331,22 @@ def parse_files(paths):
 # Emission helpers
 # ---------------------------------------------------------------------------
 
-def struct_fields(iface, args, target_object: bool, indent="\t"):
+def struct_fields(iface, args, include_target: bool, skip_new_id: bool, indent="\t"):
+    """Emit the field lines for a request/event struct.
+
+    include_target: add the interface's own object id field (the object the
+    message concerns). Requests and events both carry it, mirroring each other:
+    e.g. wl_buffer.release -> `buffer: u32`, wl_surface.attach -> `surface: u32`.
+
+    skip_new_id: requests pass the new id as an encode-proc parameter instead of
+    a struct field; events arrive with a server-assigned id in the body, which
+    IS a field."""
     fields = []
-    if target_object:
-        fields.append((iface.base, "u32", ""))
+    if include_target:
+        fields.append((iface.base, "u32", "the object this event/request concerns"))
     for a in args:
         t = a.get("type")
-        if t == "new_id" and target_object:
-            # new_id in REQUESTS is the encode proc's param, not a field.
-            # In EVENTS it is a server-assigned object id and IS a field.
+        if skip_new_id and t == "new_id":
             continue
         fields.append((a.get("name"), arg_field_type(iface, a), a.get("summary", "")))
     if not fields:
@@ -410,7 +417,7 @@ def decode_proc(iface, evt_name, args):
     proc = f"{base}_{evt_name}_decode"
     sig = "data: []byte"
     if has_fd(args):
-        sig += ", fds: ^[dynamic]linux.Fd"
+        sig += ", fds: ^[dynamic; 28]linux.Fd"
     if needs_allocator(args):
         sig += ", allocator: mem.Allocator"
     lines = []
@@ -458,10 +465,10 @@ def enum_decl(iface, enum_name, is_bitfield, entries, summary, description):
 # File emitters
 # ---------------------------------------------------------------------------
 
-def emit_struct(iface, name, args, target_object, kind):
+def emit_struct(iface, name, args, include_target, skip_new_id, kind):
     """Emit a request/event struct declaration (kind = 'Request' or 'Event')."""
     struct = f"{pascal(iface.base)}_{pascal(name)}_{kind}"
-    fields = struct_fields(iface, args, target_object)
+    fields = struct_fields(iface, args, include_target, skip_new_id)
     if fields:
         return [f"{struct} :: struct {{", *fields, "}"]
     return [f"{struct} :: struct {{}}"]
@@ -509,14 +516,14 @@ def emit_types(proto):
         for i, (name, args, summary, description, _) in enumerate(iface.requests):
             out.append(f"{upper(iface.base)}_{upper(name)}_OPCODE :: {i}")
             out.extend(doc_lines(summary, description))
-            out.extend(emit_struct(iface, name, args, True, "Request"))
+            out.extend(emit_struct(iface, name, args, True, True, "Request"))
             out.append(encode_proc(iface, name, args))
             out.append("")
 
         for i, (name, args, summary, description, _) in enumerate(iface.events):
             out.append(f"{upper(iface.base)}_{upper(name)}_OPCODE :: {i}")
             out.extend(doc_lines(summary, description))
-            out.extend(emit_struct(iface, name, args, False, "Event"))
+            out.extend(emit_struct(iface, name, args, True, False, "Event"))
             out.append(decode_proc(iface, name, args))
             out.append("")
 
@@ -547,6 +554,8 @@ def emit_dispatch(protocols):
     out = []
     out.append("package client")
     out.append("")
+    out.append('import "core:sys/linux"')
+    out.append("")
     for proto in protocols:
         out.append(f'import "{proto.pkg}"')
     out.append("")
@@ -560,7 +569,7 @@ def emit_dispatch(protocols):
     for proto in protocols:
         alias = proto.pkg
         out.append("")
-        out.append(f"queue_request_{alias} :: proc(req: {alias}.Request) -> (id: u32, err: Error) {{")
+        out.append(f"queue_request_{alias} :: proc(client: ^Client, req: {alias}.Request, allocator := context.temp_allocator) -> (id: u32, err: Error) {{")
         out.append("\tswitch r in req {")
         for iface in proto.interfaces:
             for name, args, summary, description, destructor in iface.requests:
@@ -569,19 +578,19 @@ def emit_dispatch(protocols):
                 out.append(f"\tcase {struct}:")
                 new_id_arg = next((a for a in args if a.get("type") == "new_id"), None)
                 if new_id_arg is not None:
-                    out.append("\t\tid = new_id()")
+                    out.append("\t\tid = next_id(&current_global_id)")
                 for a in args:
                     if a.get("type") == "fd":
-                        out.append(f"\t\tappend(&internal_state.outgoing_fds, r.{a.get('name')})")
+                        out.append(f"\t\tappend(&client.outgoing_fds, r.{a.get('name')})")
                 if new_id_arg is not None:
-                    out.append(f"\t\tdata := {proc}(r, id, internal_state.temp_allocator) or_return")
+                    out.append(f"\t\tdata := {proc}(r, id, allocator) or_return")
                 else:
-                    out.append(f"\t\tdata := {proc}(r, internal_state.temp_allocator) or_return")
+                    out.append(f"\t\tdata := {proc}(r, allocator) or_return")
                 if new_id_arg is not None:
                     nid_iface = new_id_arg.get("interface")
                     if nid_iface is not None:
                         pkg = iface_to_pkg[nid_iface]
-                        out.append(f"\t\tinternal_state.interface_map[id] = {pkg}.{upper(iface_to_base[nid_iface])}_INTERFACE")
+                        out.append(f"\t\tclient.id_to_interface[id] = {pkg}.{upper(iface_to_base[nid_iface])}_INTERFACE")
                     else:
                         # dynamic interface (bind): resolve the name to a static
                         # constant instead of cloning, so the map never holds
@@ -590,11 +599,11 @@ def emit_dispatch(protocols):
                         for pkg, base in global_consts:
                             const = f"{pkg}.{upper(base)}_INTERFACE"
                             out.append(f"\t\t\tcase {const}:")
-                            out.append(f"\t\t\t\tinternal_state.interface_map[id] = {const}")
+                            out.append(f"\t\t\t\tclient.id_to_interface[id] = {const}")
                         out.append("\t\t}")
-                out.append("\t\tappend(&internal_state.requests_byte_buffer, ..data[:])")
+                out.append("\t\tappend(&client.requests_byte_buffer, ..data[:])")
                 if destructor:
-                    out.append(f"\t\tdelete_key(&internal_state.interface_map, r.{iface.base})")
+                    out.append(f"\t\tdelete_key(&client.id_to_interface, r.{iface.base})")
         out.append("\t}")
         out.append("\treturn")
         out.append("}")
@@ -606,8 +615,7 @@ def emit_dispatch(protocols):
     out.append("}")
     out.append("")
 
-    out.append("parse_event :: proc(object_id: u32, opcode: u16, data: []byte) -> (ev: Event, ok: bool) {")
-    out.append("\tinterface := internal_state.interface_map[object_id]")
+    out.append("parse_event :: proc(interface: string, object_id: u32, opcode: u16, data: []byte, fds: ^[dynamic; 28]linux.Fd, allocator := context.temp_allocator) -> (ev: Event, delete_object: u32, ok: bool) {")
     out.append("\tswitch interface {")
     for proto in protocols:
         alias = proto.pkg
@@ -617,26 +625,29 @@ def emit_dispatch(protocols):
             for i, (name, args, summary, description, _) in enumerate(iface.events):
                 out.append(f"\t\tcase {alias}.{upper(iface.base)}_{upper(name)}_OPCODE:")
                 if iface.name == "wl_display" and name == "delete_id":
-                    # server freed a server-created object: drop it from the table
-                    out.append(f"\t\t\tdelete_key(&internal_state.interface_map, {alias}.{iface.base}_{name}_decode(data).id)")
-                    out.append("\t\t\treturn {}, false")
+                    # server freed a server-created object: return its id so the
+                    # caller drops it from the table
+                    out.append(f"\t\t\treturn {{}}, {alias}.{iface.base}_{name}_decode(data).id, false")
                 elif iface.name == "wl_callback" and name == "done":
-                    # callbacks self-destruct after firing: drop their id
-                    out.append("\t\t\tdelete_key(&internal_state.interface_map, object_id)")
-                    out.append("\t\t\treturn {}, false")
+                    # callbacks self-destruct after firing: return the id so the
+                    # caller drops it from the table
+                    out.append("\t\t\treturn {}, object_id, false")
                 else:
                     call = f"{alias}.{iface.base}_{name}_decode(data"
                     if has_fd(args):
-                        call += ", &internal_state.incoming_fds"
+                        call += ", fds"
                     if needs_allocator(args):
-                        call += ", internal_state.temp_allocator"
+                        call += ", allocator"
                     call += ")"
                     # wrap the decoded concrete event into the package union and
                     # then into the client union with explicit single-level casts
-                    out.append(f"\t\t\treturn Event({alias}.Event({call})), true")
+                    out.append(f"\t\t\tdecoded := {call}")
+                    # the event always carries its interface object id
+                    out.append(f"\t\t\tdecoded.{iface.base} = object_id")
+                    out.append(f"\t\t\treturn Event({alias}.Event(decoded)), 0, true")
             out.append("\t\t}")
     out.append("\t}")
-    out.append("\treturn {}, false")
+    out.append("\treturn {}, 0, false")
     out.append("}")
     out.append("")
 
