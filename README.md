@@ -14,21 +14,21 @@ There are no callbacks! The user simply queues requests to the server an polls o
 ```Odin
 package main
 
-import client "wayland-client" // Client glue code and helpers
-import wl "wayland-client/wayland" // The generated protocol code
-import xdg "wayland-client/xdg_shell"
+import client "wayland/client" // Client glue code and helpers
+import wl "wayland/client/wayland" // The generated protocol code
+import xdg "wayland/client/xdg_shell"
 
 main :: proc() {
-	client.connect()
-	defer client.disconnect()
+	client := client.create()
+	defer client.destroy(&client)
 
 	get_registry := wl.Display_Get_Registry_Request{
 		display = wl.display // This is a special case, since wl_display is a global object id.
 	}
-	wl_registry, _ := client.queue_request(get_registry) // Can return an error!!!
+	wl_registry := client.queue_request(get_registry)
 
-	client.roundtrip()
-	for ev in client.poll_event() {
+	evs := client.roundtrip()
+	for ev in evs {
 		#partial switch p in ev {
 		case wl.Event:
 			#partial e in p {
