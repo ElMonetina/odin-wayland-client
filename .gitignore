@@ -5,5 +5,10 @@
 !wayland/**/
 !wayland/**/*.odin
 !wayland/**/*.xml
+!src/
+!src/**/
+!src/**/*.odin
+!vulkan_integration/
+!vulkan_integration/**
 !README.md
 wayland/**/generated.odin
