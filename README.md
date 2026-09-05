@@ -62,7 +62,7 @@ actual event.
 `generator.py` is written by an LLM slave, because I couldn't be bothered. I will write a proper
 executable file in the future.
 
-For now its quiet dumb, it needs to be run where `client.odin` is, takes a directory as a single 
+For now its quite dumb, it needs to be run where `client.odin` is, takes a directory as a single 
 argument and generates the protocols in their own directory. It is important to run it with all needed xml files, If one or more is ever removed or added the generator must be re-run.
 
 ### The **interesting** problem
