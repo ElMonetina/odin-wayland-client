@@ -71,10 +71,6 @@ disconnect :: proc(socket: linux.Fd) -> Error {
 
 roundtrip :: proc(client: ^Client, allocator := context.temp_allocator) -> (evs: []Event, err: Error) {
 	events := make([dynamic]Event, allocator) or_return
-	if len(client.requests_byte_buffer) > 0 {
-		res: os.Error = os.write_entire_file_from_bytes("/tmp/opencode/req.bin", client.requests_byte_buffer[:])
-	_ = res
-	}
 	send_requests_data(client.wayland_socket, client.requests_byte_buffer[:], client.outgoing_fds[:]) or_return
 	clear(&client.requests_byte_buffer)
 	if len(client.outgoing_fds) > 0 {
