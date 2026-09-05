@@ -27,6 +27,7 @@ main :: proc() {
 	}
 	wl_registry := client.queue_request(get_registry)
 
+	free_all(context.temp_allocator) // Very important!!! Always call before roundtrip()
 	evs := client.roundtrip()
 	for ev in evs {
 		#partial switch p in ev {
