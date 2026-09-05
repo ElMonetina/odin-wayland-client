@@ -1,9 +1,6 @@
 package main
 
-import "core:dynlib"
 import "core:log"
-import "core:os"
-import "core:slice"
 import "core:sys/linux"
 import vk "vendor:vulkan"
 import "wayland:client"
@@ -33,8 +30,6 @@ Wayland_State :: struct {
 	dt:               f64,
 	quitting:         bool,
 }
-
-Pixel :: [4]u8
 
 Vulkan_State :: struct {
 	instance:       vk.Instance,
@@ -94,13 +89,13 @@ main :: proc() {
 
 	res: vk.Result
 	res = vk.CreateInstance(&instance_ci, nil, &vk_state.instance)
-	ensure_result(res)
+	ensure(res == .SUCCESS)
 	defer vk.DestroyInstance(vk_state.instance, nil)
 	vk.load_proc_addresses(vk_state.instance)
 
 	p_devices: []vk.PhysicalDevice
 	p_devices, res = make_physical_devices(vk_state.instance)
-	ensure_result(res)
+	ensure(res == .SUCCESS)
 
 	p_device, found := select_physical_device(p_devices)
 	if found {
@@ -134,7 +129,7 @@ main :: proc() {
 		pQueueCreateInfos       = &queue_ci,
 	}
 	res = vk.CreateDevice(vk_state.p_device, &device_ci, nil, &vk_state.device)
-	ensure_result(res)
+	ensure(res == .SUCCESS)
 	defer vk.DestroyDevice(vk_state.device, nil)
 
 	image_ci := vk.ImageCreateInfo {
@@ -245,7 +240,7 @@ main :: proc() {
 	defer vk.FreeMemory(vk_state.device, vk_state.image_mem, nil)
 
 	res = vk.BindImageMemory(vk_state.device, vk_state.img, vk_state.image_mem, 0)
-	ensure_result(res)
+	ensure(res == .SUCCESS)
 
 	fd_info := vk.MemoryGetFdInfoKHR {
 		sType      = .MEMORY_GET_FD_INFO_KHR,
@@ -254,7 +249,7 @@ main :: proc() {
 	}
 	fd: i32
 	res = vk.GetMemoryFdKHR(vk_state.device, &fd_info, &fd)
-	ensure_result(res)
+	ensure(res == .SUCCESS)
 	wl_state.dmabuf_fd = linux.Fd(fd)
 
 	create_params := dmabuf.Dmabuf_Create_Params_Request {
@@ -315,7 +310,7 @@ main :: proc() {
 		flags = {.ONE_TIME_SUBMIT},
 	}
 	res = vk.BeginCommandBuffer(vk_state.cmd_buf, &cmd_buf_bi)
-	ensure_result(res)
+	ensure(res == .SUCCESS)
 
 	subresource := vk.ImageSubresourceRange {
 		aspectMask     = {.COLOR},
@@ -372,7 +367,7 @@ main :: proc() {
 				flags = {.ONE_TIME_SUBMIT},
 			}
 			res = vk.BeginCommandBuffer(vk_state.cmd_buf, &cmd_buf_bi)
-			ensure_result(res)
+			ensure(res == .SUCCESS)
 
 			subresource := vk.ImageSubresourceRange {
 				aspectMask     = {.COLOR},
@@ -546,12 +541,5 @@ handle_event :: proc(state: ^Wayland_State) {
 				state.quitting = true
 			}
 		}
-	}
-}
-
-ensure_result :: proc(res: vk.Result) {
-	if res != .SUCCESS {
-		log.error(res)
-		os.exit(1)
 	}
 }
