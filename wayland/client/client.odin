@@ -6,8 +6,9 @@ import "core:strings"
 import "core:sys/linux"
 import wl "wayland"
 import "util"
+import dl "core:dynlib"
 
-@(private)
+// TODO: make a type, return it on connect()
 internal_state: struct {
 	global_current_id:    u32,
 	wayland_socket:       linux.Fd,
@@ -20,6 +21,7 @@ internal_state: struct {
 	interface_map:        map[u32]string,
 	allocator:            mem.Allocator,
 	temp_allocator:       mem.Allocator,
+	vulkan_lib:           dl.Library,
 }
 
 WAYLAND_HEADER_SIZE :: 8
@@ -68,6 +70,7 @@ disconnect :: proc() {
 	delete(internal_state.outgoing_fds)
 	delete(internal_state.incoming_fds)
 	delete(internal_state.interface_map)
+	dl.unload_library(internal_state.vulkan_lib)
 	linux.close(internal_state.wayland_socket)
 }
 
