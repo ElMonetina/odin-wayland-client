@@ -19,6 +19,14 @@ load_instance_proc_addr :: proc(allocator := context.temp_allocator) -> (vk_lib:
 	return
 }
 
+EXT_EXTERNAL_MEMORY_FD :: "VK_KHR_external_memory_fd"
+REQUIRED_DEVICE_EXTENSIONS :: []cstring {
+	vk.EXT_EXTERNAL_MEMORY_DMA_BUF_EXTENSION_NAME,
+	vk.EXT_IMAGE_DRM_FORMAT_MODIFIER_EXTENSION_NAME,
+	vk.KHR_IMAGE_FORMAT_LIST_EXTENSION_NAME,
+	EXT_EXTERNAL_MEMORY_FD,
+}
+
 // Merged struct for image creation, it includes:
 // - ImageCreateInfo
 // - ImageDrmFormatModifierExplicitCreateInfoEXT

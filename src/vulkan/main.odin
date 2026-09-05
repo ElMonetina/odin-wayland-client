@@ -129,8 +129,8 @@ main :: proc() {
 	}
 	device_ci := vk.DeviceCreateInfo {
 		sType                   = .DEVICE_CREATE_INFO,
-		enabledExtensionCount   = u32(len(ENABLED_DEVICE_EXTENSIONS)),
-		ppEnabledExtensionNames = raw_data(ENABLED_DEVICE_EXTENSIONS),
+		enabledExtensionCount   = u32(len(vki.REQUIRED_DEVICE_EXTENSIONS)),
+		ppEnabledExtensionNames = raw_data(vki.REQUIRED_DEVICE_EXTENSIONS),
 		queueCreateInfoCount    = 1,
 		pQueueCreateInfos       = &queue_ci,
 	}
