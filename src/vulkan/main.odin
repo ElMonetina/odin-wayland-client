@@ -138,31 +138,20 @@ main :: proc() {
 	ensure(res == .SUCCESS)
 	defer vk.DestroyDevice(vk_state.device, nil)
 
-	image_ci := vk.ImageCreateInfo {
-		sType         = .IMAGE_CREATE_INFO,
-		initialLayout = .UNDEFINED,
-		imageType     = .D2,
-		mipLevels     = 1,
-		arrayLayers   = 1,
-		samples       = {._1},
-		tiling        = .DRM_FORMAT_MODIFIER_EXT,
-		usage         = {.TRANSFER_DST},
-		extent        = {u32(wl_state.w), u32(wl_state.h), 1},
-		format        = .B8G8R8A8_UNORM,
-	}
-	img_drm_format_modifier_ci := vk.ImageDrmFormatModifierExplicitCreateInfoEXT {
-		sType                       = .IMAGE_DRM_FORMAT_MODIFIER_EXPLICIT_CREATE_INFO_EXT,
-		drmFormatModifier           = DRM_FORMAT_MOD_LINEAR,
-		pPlaneLayouts               = &vk.SubresourceLayout{offset = 0, rowPitch = vk.DeviceSize(wl_state.w * 4)},
-		drmFormatModifierPlaneCount = 1,
-	}
-	ext_mem_img_ci := vk.ExternalMemoryImageCreateInfo {
-		sType       = .EXTERNAL_MEMORY_IMAGE_CREATE_INFO,
+	img_ci := vki.Image_Create_Info {
+		initial_layout = .UNDEFINED,
+		image_type = .D2,
+		mip_levels = 1,
+		array_layers = 1,
+		samples = {._1},
+		usage = {.TRANSFER_DST},
+		extent = {u32(wl_state.w), u32(wl_state.h), 1},
+		format = .B8G8R8A8_UNORM,
+		drm_format_modifier = DRM_FORMAT_MOD_LINEAR,
+		plane_layouts = {{offset = 0, rowPitch = vk.DeviceSize(wl_state.w * 4)}},
 		handleTypes = {.DMA_BUF_EXT},
 	}
-	image_ci.pNext = &img_drm_format_modifier_ci
-	img_drm_format_modifier_ci.pNext = &ext_mem_img_ci
-	res = vk.CreateImage(vk_state.device, &image_ci, nil, &vk_state.img)
+	vk_state.img, res = vki.create_image(vk_state.device, img_ci, nil)
 	ensure(res == .SUCCESS)
 	defer vk.DestroyImage(vk_state.device, vk_state.img, nil)
 
@@ -188,10 +177,10 @@ main :: proc() {
 		if .DEVICE_LOCAL not_in mt.propertyFlags {continue}
 		info2 := vk.PhysicalDeviceImageFormatInfo2 {
 			sType  = .PHYSICAL_DEVICE_IMAGE_FORMAT_INFO_2,
-			format = image_ci.format,
-			type   = image_ci.imageType,
-			tiling = image_ci.tiling,
-			usage  = image_ci.usage,
+			format = img_ci.format,
+			type   = img_ci.image_type,
+			tiling = .DRM_FORMAT_MODIFIER_EXT,
+			usage  = img_ci.usage,
 		}
 		modifier_info := vk.PhysicalDeviceImageDrmFormatModifierInfoEXT {
 			sType             = .PHYSICAL_DEVICE_IMAGE_DRM_FORMAT_MODIFIER_INFO_EXT,
