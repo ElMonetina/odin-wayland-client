@@ -53,13 +53,6 @@ Vulkan_State :: struct {
 
 ENABLED_LAYERS :: []cstring{"VK_LAYER_KHRONOS_validation"}
 
-EXT_EXTERNAL_MEMORY_FD :: "VK_KHR_external_memory_fd"
-ENABLED_DEVICE_EXTENSIONS :: []cstring {
-	vk.EXT_EXTERNAL_MEMORY_DMA_BUF_EXTENSION_NAME,
-	vk.EXT_IMAGE_DRM_FORMAT_MODIFIER_EXTENSION_NAME,
-	vk.KHR_IMAGE_FORMAT_LIST_EXTENSION_NAME,
-	EXT_EXTERNAL_MEMORY_FD,
-}
 
 DRM_FORMAT_MOD_LINEAR :: 0 // DRM_FORMAT_MOD_LINEAR
 DRM_FORMAT_ARGB8888 :: 0x34325241 // little-endian B,G,R,A -> VK_FORMAT_B8G8R8A8_UNORM
@@ -452,29 +445,47 @@ init_wayland_state :: proc(state: ^Wayland_State, shm_width, shm_height: i32) {
 }
 
 register_global_objects :: proc(state: ^Wayland_State) -> client.Error {
-	evs := client.roundtrip(&state.client_state) or_return
-	for ev in evs {
+	client.roundtrip(&state.client_state) or_return
+	for ev in client.poll_event(&state.client_state) {
 		#partial switch p in ev {
 		case wl.Event:
 			#partial switch e in p {
 			case wl.Display_Error_Event:
 				log.error(e.message)
 			case wl.Registry_Global_Event:
-				registry_bind := wl.Registry_Bind_Request {
-					registry  = state.wl_registry,
-					name      = e.name,
-					interface = e.interface,
-					version   = e.version,
-				}
-				id := client.queue_request(&state.client_state, registry_bind) or_return
+				id: u32
 				switch e.interface {
 				case wl.COMPOSITOR_INTERFACE:
+					id = client.queue_request(&state.client_state, wl.Registry_Bind_Request {
+						registry  = state.wl_registry,
+						name      = e.name,
+						interface = e.interface,
+						version   = e.version,
+					}) or_return
 					state.wl_compositor = id
 				case wl.SHM_INTERFACE:
+					id = client.queue_request(&state.client_state, wl.Registry_Bind_Request {
+						registry  = state.wl_registry,
+						name      = e.name,
+						interface = e.interface,
+						version   = e.version,
+					}) or_return
 					state.wl_shm = id
 				case xdg.WM_BASE_INTERFACE:
+					id = client.queue_request(&state.client_state, wl.Registry_Bind_Request {
+						registry  = state.wl_registry,
+						name      = e.name,
+						interface = e.interface,
+						version   = e.version,
+					}) or_return
 					state.xdg_wm_base = id
 				case dmabuf.DMABUF_INTERFACE:
+					id = client.queue_request(&state.client_state, wl.Registry_Bind_Request {
+						registry  = state.wl_registry,
+						name      = e.name,
+						interface = e.interface,
+						version   = e.version,
+					}) or_return
 					state.linux_dmabuf = id
 				}
 			}
@@ -505,12 +516,12 @@ select_physical_device :: proc(p_devices: []vk.PhysicalDevice) -> (vk.PhysicalDe
 }
 
 handle_event :: proc(state: ^Wayland_State) {
-	evs, err := client.roundtrip(&state.client_state)
+	err := client.roundtrip(&state.client_state)
 	if err != nil {
 		log.error(err)
 		os.exit(1)
 	}
-	for ev in evs {
+	for ev in client.poll_event(&state.client_state) {
 		#partial switch p in ev {
 		case wl.Event:
 			#partial switch e in p {
