@@ -20,6 +20,7 @@ Client :: struct {
 	requests_byte_buffer:  [dynamic]byte,
 	outgoing_fds:          [dynamic; 28]linux.Fd,
 	events_byte_buffer:    [dynamic]byte,
+	events_read_pos:       int,
 	incoming_fds:          [dynamic; 28]linux.Fd,
 	id_to_interface:       map[u32]string,
 }
@@ -69,65 +70,52 @@ disconnect :: proc(socket: linux.Fd) -> Error {
 	return nil
 }
 
-roundtrip :: proc(client: ^Client, allocator := context.temp_allocator) -> (evs: []Event, err: Error) {
-	events := make([dynamic]Event, allocator) or_return
-	send_requests_data(client.wayland_socket, client.requests_byte_buffer[:], client.outgoing_fds[:]) or_return
-	clear(&client.requests_byte_buffer)
-	if len(client.outgoing_fds) > 0 {
-		clear(&client.outgoing_fds)
-	}
-	recv_events_data(client.wayland_socket, &client.events_byte_buffer, &client.incoming_fds) or_return
-	parse_events_data(client, client.events_byte_buffer[:], &events)
-	return events[:], nil
+roundtrip :: proc(client: ^Client) -> Error {
+	send(client) or_return
+	wait(client) or_return
+	return nil
 }
 
-send_requests_data :: proc(socket: linux.Fd, reqs_buf: []byte, outgoing_fds: []linux.Fd) -> (n: int, err: Error) {
-	if len(outgoing_fds) > 0 {
-		control: [128]byte
-		payload := uint(len(outgoing_fds) * size_of(linux.Fd))
+send :: proc(client: ^Client) -> Error {
+	hdr: linux.Msg_Hdr
+	control: [128]byte
+	hdr.iov = {{base = raw_data(client.requests_byte_buffer), len = len(client.requests_byte_buffer)}}
+	if len(client.outgoing_fds) > 0 {
+		hdr.control = control[:util.CMSG_SPACE(uint(len(client.outgoing_fds) * size_of(linux.Fd)))]
 		cmsg := (^util.Cmsghdr)(&control[0])
-		cmsg.len = util.CMSG_LEN(payload)
+		cmsg.len = util.CMSG_LEN(uint(len(client.outgoing_fds) * size_of(linux.Fd)))
 		cmsg.level = i32(linux.SOL_SOCKET)
 		cmsg.type = util.SCM_RIGHTS
-		copy(([^]linux.Fd)(&control[size_of(util.Cmsghdr)])[:len(outgoing_fds)], outgoing_fds)
-
-		hdr := linux.Msg_Hdr {
-			iov     = {{base = raw_data(reqs_buf), len = len(reqs_buf)}},
-			control = control[:util.CMSG_SPACE(payload)],
-		}
-		n = linux.sendmsg(socket, &hdr, {.NOSIGNAL}) or_return
-	} else {
-		n = linux.send(socket, reqs_buf, {.NOSIGNAL}) or_return
+		copy(([^]linux.Fd)(&control[size_of(util.Cmsghdr)])[:len(client.outgoing_fds)], client.outgoing_fds[:])
+		clear(&client.outgoing_fds)
 	}
-
-	for n < len(reqs_buf) {
-		n += linux.send(socket, reqs_buf[n:], {.NOSIGNAL}) or_return
-	}
-	return
+	linux.sendmsg(client.wayland_socket, &hdr, {.NOSIGNAL}) or_return
+	clear(&client.requests_byte_buffer)
+	return nil
 }
 
-recv_events_data :: proc(socket: linux.Fd, evs_buf: ^[dynamic]byte, incoming_fds: ^[dynamic; 28]linux.Fd) -> Error {
+wait :: proc(client: ^Client) -> Error {
 	control: [128]byte
 	staging: [WAYLAND_BUFFER_LEN]byte
 	hdr := linux.Msg_Hdr {
 		iov     = {{base = &staging[0], len = len(staging)}},
 		control = control[:],
 	}
-	n := linux.recvmsg(socket, &hdr, {.CMSG_CLOEXEC}) or_return
+	n := linux.recvmsg(client.wayland_socket, &hdr, {.CMSG_CLOEXEC}) or_return
 	if n == 0 {
 		return .EPIPE
 	}
 	if .CTRUNC in hdr.flags {
 		return .ENOBUFS
 	}
-	append(evs_buf, ..staging[:n]) or_return
-	start := uintptr(raw_data(hdr.control))
-	end := start + uintptr(len(hdr.control))
-	recv_control_fds(start, end, incoming_fds) or_return
+	append(&client.events_byte_buffer, ..staging[:n]) or_return
+	control_start := uintptr(raw_data(hdr.control))
+	control_end := control_start + uintptr(len(hdr.control))
+	recv_control_fds(control_start, control_end, &client.incoming_fds)
 	return nil
 }
 
-recv_control_fds :: proc(control_start, control_end: uintptr, fds: ^[dynamic; 28]linux.Fd) -> Error {
+recv_control_fds :: proc(control_start, control_end: uintptr, fds: ^[dynamic; 28]linux.Fd) {
 	ptr := control_start
 	for ptr + size_of(util.Cmsghdr) <= control_end {
 		cmsg := (^util.Cmsghdr)(ptr)
@@ -138,25 +126,42 @@ recv_control_fds :: proc(control_start, control_end: uintptr, fds: ^[dynamic; 28
 		}
 		ptr += uintptr(util.CMSG_ALIGN(cmsg.len))
 	}
-	return nil
 }
 
-parse_events_data :: proc(client: ^Client, data: []byte, events: ^[dynamic]Event, allocator := context.temp_allocator) {
-	pos: int
-	for pos + WAYLAND_HEADER_SIZE <= len(data) {
-		object_id, opcode, size, n := util.read_header(data[pos:])
-		if pos + int(size) > len(data) {
-			break
+poll_event :: proc(client: ^Client, allocator := context.temp_allocator) -> (ev: Event, ok: bool) {
+	for {
+		buf := client.events_byte_buffer
+		// no room for an 8-byte header: buffer is exhausted or wait() has more data
+		if client.events_read_pos + WAYLAND_HEADER_SIZE > len(buf) {
+			return {}, false
 		}
-		interface := client.id_to_interface[object_id]
-		if ev, delete_object, ok := parse_event(interface, object_id, opcode, data[pos + WAYLAND_HEADER_SIZE:pos + int(size)], &client.incoming_fds, allocator); ok {
-			append(events, ev)
-		} else if delete_object != 0 {
-			delete_key(&client.id_to_interface, delete_object)
+		object_id, opcode, size, _ := util.read_header(buf[client.events_read_pos:])
+		// header present but the event body is not fully buffered yet: return false,
+		// the caller's wait() appends the rest and the next call retries this event
+		if client.events_read_pos + int(size) > len(buf) {
+			return {}, false
 		}
-		pos += int(size)
+		interface, has := client.id_to_interface[object_id]
+		// event on an object we never registered (destroyed or unbound): consume
+		// the frame to stay aligned and try the next event in the buffer
+		if !has {
+			client.events_read_pos += int(size)
+			continue
+		}
+		ev, ok = parse_event(client, interface, object_id, opcode, buf[client.events_read_pos + WAYLAND_HEADER_SIZE:client.events_read_pos + int(size)], &client.incoming_fds, allocator)
+		client.events_read_pos += int(size)
+		// compact the consumed prefix once it grows past the read-ahead window
+		if client.events_read_pos > WAYLAND_BUFFER_LEN {
+			remove_range(&client.events_byte_buffer, 0, client.events_read_pos)
+			client.events_read_pos = 0
+		}
+		if ok {
+			return ev, true
+		}
+		// parse_event returned false for a known interface (opcode not generated):
+		// frame consumed, loop back and try the next event
 	}
-	remove_range(&client.events_byte_buffer, 0, pos)
+	return {}, false
 }
 
 create_shm_file :: proc(size: i32) -> (shm: linux.Fd, data: []byte, err: Error) {
