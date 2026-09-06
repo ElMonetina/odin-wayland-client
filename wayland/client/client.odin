@@ -16,13 +16,13 @@ next_id :: proc(current: ^u32) -> u32 {
 }
 
 Client :: struct {
-	wayland_socket:        linux.Fd,
-	requests_byte_buffer:  [dynamic]byte,
-	outgoing_fds:          [dynamic; 28]linux.Fd,
-	events_byte_buffer:    [dynamic]byte,
-	events_read_pos:       int,
-	incoming_fds:          [dynamic; 28]linux.Fd,
-	id_to_interface:       map[u32]string,
+	wayland_socket:       linux.Fd,
+	requests_byte_buffer: [dynamic]byte,
+	outgoing_fds:         [dynamic; 28]linux.Fd,
+	events_byte_buffer:   [dynamic]byte,
+	events_read_pos:      int,
+	incoming_fds:         [dynamic; 28]linux.Fd,
+	id_to_interface:      map[u32]string,
 }
 
 WAYLAND_HEADER_SIZE :: 8
@@ -130,36 +130,30 @@ recv_control_fds :: proc(control_start, control_end: uintptr, fds: ^[dynamic; 28
 
 poll_event :: proc(client: ^Client, allocator := context.temp_allocator) -> (ev: Event, ok: bool) {
 	for {
+		read_pos := client.events_read_pos
 		buf := client.events_byte_buffer
-		// no room for an 8-byte header: buffer is exhausted or wait() has more data
-		if client.events_read_pos + WAYLAND_HEADER_SIZE > len(buf) {
+		if read_pos + WAYLAND_HEADER_SIZE > len(buf) {
 			return {}, false
 		}
-		object_id, opcode, size, _ := util.read_header(buf[client.events_read_pos:])
-		// header present but the event body is not fully buffered yet: return false,
-		// the caller's wait() appends the rest and the next call retries this event
-		if client.events_read_pos + int(size) > len(buf) {
+		object_id, opcode, size, _ := util.read_header(buf[read_pos:])
+		if read_pos + int(size) > len(buf) {
 			return {}, false
 		}
 		interface, has := client.id_to_interface[object_id]
-		// event on an object we never registered (destroyed or unbound): consume
-		// the frame to stay aligned and try the next event in the buffer
 		if !has {
-			client.events_read_pos += int(size)
+			read_pos += int(size)
 			continue
 		}
-		ev, ok = parse_event(client, interface, object_id, opcode, buf[client.events_read_pos + WAYLAND_HEADER_SIZE:client.events_read_pos + int(size)], &client.incoming_fds, allocator)
-		client.events_read_pos += int(size)
-		// compact the consumed prefix once it grows past the read-ahead window
-		if client.events_read_pos > WAYLAND_BUFFER_LEN {
-			remove_range(&client.events_byte_buffer, 0, client.events_read_pos)
-			client.events_read_pos = 0
+		ev, ok = parse_event(client, interface, object_id, opcode, buf[read_pos + WAYLAND_HEADER_SIZE:read_pos + int(size)], &client.incoming_fds, allocator)
+		read_pos += int(size)
+		if read_pos > WAYLAND_BUFFER_LEN {
+			remove_range(&client.events_byte_buffer, 0, read_pos)
+			read_pos = 0
 		}
+		client.events_read_pos = read_pos
 		if ok {
 			return ev, true
 		}
-		// parse_event returned false for a known interface (opcode not generated):
-		// frame consumed, loop back and try the next event
 	}
 	return {}, false
 }
