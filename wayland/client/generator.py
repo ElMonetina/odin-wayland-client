@@ -570,7 +570,7 @@ def emit_dispatch(protocols):
         alias = proto.pkg
         out.append("")
         out.append(f"queue_request_{alias} :: proc(client: ^Client, req: {alias}.Request, allocator := context.temp_allocator) -> (id: u32, err: Error) {{")
-        out.append("\tswitch r in req {")
+        out.append("\tswitch &r in req {")
         for iface in proto.interfaces:
             for name, args, summary, description, destructor in iface.requests:
                 struct = f"{alias}.{pascal(iface.base)}_{pascal(name)}_Request"
@@ -583,24 +583,26 @@ def emit_dispatch(protocols):
                     if a.get("type") == "fd":
                         out.append(f"\t\tappend(&client.outgoing_fds, r.{a.get('name')})")
                 if new_id_arg is not None:
-                    out.append(f"\t\tdata := {proc}(r, id, allocator) or_return")
-                else:
-                    out.append(f"\t\tdata := {proc}(r, allocator) or_return")
-                if new_id_arg is not None:
                     nid_iface = new_id_arg.get("interface")
                     if nid_iface is not None:
+                        out.append(f"\t\tdata := {proc}(r, id, allocator) or_return")
                         pkg = iface_to_pkg[nid_iface]
                         out.append(f"\t\tclient.id_to_interface[id] = {pkg}.{upper(iface_to_base[nid_iface])}_INTERFACE")
                     else:
-                        # dynamic interface (bind): resolve the name to a static
-                        # constant instead of cloning, so the map never holds
-                        # heap-allocated strings
+                        # dynamic interface (bind): clamp the requested version to
+                        # what the generated dispatcher supports, and resolve the
+                        # name to a static constant instead of cloning, so the map
+                        # never holds heap-allocated strings
                         out.append("\t\tswitch r.interface {")
                         for pkg, base in global_consts:
                             const = f"{pkg}.{upper(base)}_INTERFACE"
                             out.append(f"\t\t\tcase {const}:")
+                            out.append(f"\t\t\t\tr.version = min(r.version, {pkg}.{upper(base)}_VERSION)")
                             out.append(f"\t\t\t\tclient.id_to_interface[id] = {const}")
                         out.append("\t\t}")
+                        out.append(f"\t\tdata := {proc}(r, id, allocator) or_return")
+                else:
+                    out.append(f"\t\tdata := {proc}(r, allocator) or_return")
                 out.append("\t\tappend(&client.requests_byte_buffer, ..data[:])")
                 if destructor:
                     out.append(f"\t\tdelete_key(&client.id_to_interface, r.{iface.base})")
@@ -615,7 +617,7 @@ def emit_dispatch(protocols):
     out.append("}")
     out.append("")
 
-    out.append("parse_event :: proc(interface: string, object_id: u32, opcode: u16, data: []byte, fds: ^[dynamic; 28]linux.Fd, allocator := context.temp_allocator) -> (ev: Event, delete_object: u32, ok: bool) {")
+    out.append("parse_event :: proc(client: ^Client, interface: string, object_id: u32, opcode: u16, data: []byte, fds: ^[dynamic; 28]linux.Fd, allocator := context.temp_allocator) -> (ev: Event, ok: bool) {")
     out.append("\tswitch interface {")
     for proto in protocols:
         alias = proto.pkg
@@ -625,29 +627,34 @@ def emit_dispatch(protocols):
             for i, (name, args, summary, description, _) in enumerate(iface.events):
                 out.append(f"\t\tcase {alias}.{upper(iface.base)}_{upper(name)}_OPCODE:")
                 if iface.name == "wl_display" and name == "delete_id":
-                    # server freed a server-created object: return its id so the
-                    # caller drops it from the table
-                    out.append(f"\t\t\treturn {{}}, {alias}.{iface.base}_{name}_decode(data).id, false")
+                    out.append(f"\t\t\tdelete_key(&client.id_to_interface, {alias}.{iface.base}_{name}_decode(data).id)")
+                    out.append("\t\t\treturn")
                 elif iface.name == "wl_callback" and name == "done":
-                    # callbacks self-destruct after firing: return the id so the
-                    # caller drops it from the table
-                    out.append("\t\t\treturn {}, object_id, false")
+                    out.append("\t\t\tdelete_key(&client.id_to_interface, object_id)")
+                    out.append("\t\t\treturn")
                 else:
+                    # An event that carries a new_id hands us a server-created
+                    # object; register it so its own events can be dispatched.
+                    new_id_arg = next((a for a in args if a.get("type") == "new_id"), None)
+                    if new_id_arg is not None and new_id_arg.get("interface") in iface_to_pkg:
+                        nid_iface = new_id_arg["interface"]
+                        nid_pkg = iface_to_pkg[nid_iface]
+                        nid_const = f"{nid_pkg}.{upper(iface_to_base[nid_iface])}_INTERFACE"
+                        nid_field = new_id_arg.get("name")
                     call = f"{alias}.{iface.base}_{name}_decode(data"
                     if has_fd(args):
                         call += ", fds"
                     if needs_allocator(args):
                         call += ", allocator"
                     call += ")"
-                    # wrap the decoded concrete event into the package union and
-                    # then into the client union with explicit single-level casts
                     out.append(f"\t\t\tdecoded := {call}")
-                    # the event always carries its interface object id
                     out.append(f"\t\t\tdecoded.{iface.base} = object_id")
-                    out.append(f"\t\t\treturn Event({alias}.Event(decoded)), 0, true")
+                    if new_id_arg is not None and new_id_arg.get("interface") in iface_to_pkg:
+                        out.append(f"\t\t\tclient.id_to_interface[decoded.{nid_field}] = {nid_const}")
+                    out.append(f"\t\t\treturn Event({alias}.Event(decoded)), true")
             out.append("\t\t}")
     out.append("\t}")
-    out.append("\treturn {}, 0, false")
+    out.append("\treturn")
     out.append("}")
     out.append("")
 
