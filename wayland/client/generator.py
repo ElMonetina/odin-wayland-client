@@ -570,7 +570,7 @@ def emit_dispatch(protocols):
         alias = proto.pkg
         out.append("")
         out.append(f"queue_request_{alias} :: proc(client: ^Client, req: {alias}.Request, allocator := context.temp_allocator) -> (id: u32, err: Error) {{")
-        out.append("\tswitch &r in req {")
+        out.append("\tswitch r in req {")
         for iface in proto.interfaces:
             for name, args, summary, description, destructor in iface.requests:
                 struct = f"{alias}.{pascal(iface.base)}_{pascal(name)}_Request"
@@ -593,14 +593,15 @@ def emit_dispatch(protocols):
                         # what the generated dispatcher supports, and resolve the
                         # name to a static constant instead of cloning, so the map
                         # never holds heap-allocated strings
-                        out.append("\t\tswitch r.interface {")
+                        out.append("\t\trb := r")
+                        out.append("\t\tswitch rb.interface {")
                         for pkg, base in global_consts:
                             const = f"{pkg}.{upper(base)}_INTERFACE"
                             out.append(f"\t\t\tcase {const}:")
-                            out.append(f"\t\t\t\tr.version = min(r.version, {pkg}.{upper(base)}_VERSION)")
+                            out.append(f"\t\t\t\trb.version = min(rb.version, {pkg}.{upper(base)}_VERSION)")
                             out.append(f"\t\t\t\tclient.id_to_interface[id] = {const}")
                         out.append("\t\t}")
-                        out.append(f"\t\tdata := {proc}(r, id, allocator) or_return")
+                        out.append(f"\t\tdata := {proc}(rb, id, allocator) or_return")
                 else:
                     out.append(f"\t\tdata := {proc}(r, allocator) or_return")
                 out.append("\t\tappend(&client.requests_byte_buffer, ..data[:])")
