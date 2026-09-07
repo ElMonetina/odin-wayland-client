@@ -30,18 +30,15 @@ main :: proc() {
 	free_all(context.temp_allocator) // Very important!!! Always call before roundtrip()
 	client.roundtrip(&client)
 	for ev in client.poll_event(&client) {
-		#partial switch p in ev {
-		case wl.Event:
-			#partial e in p {
-			case wl.Registry_Global_Event:
-				registry_bind := wl.Registry_Bind_Request {
-					registry  = state.wl_registry,
-					name      = e.name,
-					interface = e.interface,
-					version   = e.version,
-				}
-				id := client.queue_request(registry_bind)
-				// wl_compositor = id
+		#partial switch ev {
+		case wl.Registry_Global:
+			switch ev.interface {
+			case wl.COMPOSITOR_INTERFACE:
+				wl_compositor := client.bind_compositor(&client, wl_registry, ev) or_return
+			case wl.SHM_INTERFACE:
+				wl_shm := client.bind_shm(&client, wl_registry, ev) or_return
+			case xdg.WM_BASE_INTERFACE:
+				xdg_wm_base := client.bind_wm_base(&client, wl_registry, ev) or_return
 			}
 		}
 	}
