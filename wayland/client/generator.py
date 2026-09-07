@@ -109,7 +109,8 @@ def ident(name: str) -> str:
 # Used to resolve bitfield <arg enum="..."> references, including fully-qualified
 # cross-interface refs like "wl_data_device_manager.dnd_action".
 BITFIELD_ENUMS = {}     # (iface_name, enum_name) -> owning iface's base
-IFACE_BASE = {}         # iface_name -> base (current protocol)
+IFACE_BASE = {}         # iface_name -> base
+IFACE_PKG = {}          # iface_name -> package (cross-package resolution)
 
 FIELD_TYPE = {
     "int":    "i32",
@@ -170,7 +171,24 @@ def arg_field_type(iface, arg):
     """Odin field type for an arg, honoring bitfield enums."""
     if is_bitfield_arg(iface, arg):
         return bitfield_type(iface, arg)
-    return FIELD_TYPE[arg.get("type")]
+    t = arg.get("type")
+    if t in ("object", "new_id"):
+        return obj_field_type(iface, arg)
+    return FIELD_TYPE[t]
+
+def obj_field_type(iface, arg):
+    """Typed id for an object/new_id arg, resolving cross-package references.
+
+    An object/new_id with an `interface` attribute becomes that interface's
+    distinct type (qualified with the owning package when it lives in a
+    different protocol). Without an interface attribute (e.g. wl_display.error's
+    object_id, or wl_registry.bind's dynamic new_id) it stays a plain u32."""
+    iname = arg.get("interface")
+    if not iname or iname not in IFACE_PKG:
+        return "u32"
+    base = pascal(IFACE_BASE[iname])
+    pkg = IFACE_PKG[iname]
+    return base if pkg == iface.pkg else f"{pkg}.{base}"
 
 def size_term(arg, accessor: str):
     t = arg.get("type")
@@ -189,6 +207,9 @@ def write_stmt(arg, accessor: str, iface=None):
     if iface is not None and is_bitfield_arg(iface, arg):
         # bit_set has no util.write overload; emit the raw u32
         return f"util.write_u32(&msg, transmute(u32){accessor})"
+    if iface is not None and t == "object" and obj_field_type(iface, arg) != "u32":
+        # object args are typed distinct u32; cast back to the wire u32
+        return f"util.write(&msg, u32({accessor}))"
     return f"util.write(&msg, {accessor})"
 
 def decode_stmt(iface, arg):
@@ -198,6 +219,10 @@ def decode_stmt(iface, arg):
         # read the raw u32, then cast to the bit_set (underlying u32)
         return (f"\tval_{name}, _ := util.read_u32(data[n:]); n += 4\n"
                 f"\te.{name} = transmute({bitfield_type(iface, arg)})val_{name}")
+    if t in ("object", "new_id") and obj_field_type(iface, arg) != "u32":
+        # typed distinct u32: read the wire u32 and cast to the interface type
+        return (f"\tval_{name}, _ := util.read_u32(data[n:]); n += 4\n"
+                f"\te.{name} = {obj_field_type(iface, arg)}(val_{name})")
     fn = READ_FN[t]
     if fn is None:  # fd: travels via SCM_RIGHTS; pop it from the incoming queue
         return f"\te.{name} = pop_front(fds)"
@@ -324,6 +349,7 @@ def parse_files(paths):
         for iface in proto.interfaces:
             iface.base = base_from(iface.name, lcp)
             IFACE_BASE[iface.name] = iface.base
+            IFACE_PKG[iface.name] = iface.pkg
         protocols.append(proto)
     return protocols
 
@@ -343,7 +369,7 @@ def struct_fields(iface, args, include_target: bool, skip_new_id: bool, indent="
     IS a field."""
     fields = []
     if include_target:
-        fields.append((iface.base, "u32", "the object this event/request concerns"))
+        fields.append((iface.base, pascal(iface.base), "the object this event/request concerns"))
     for a in args:
         t = a.get("type")
         if skip_new_id and t == "new_id":
@@ -395,7 +421,7 @@ def encode_proc(iface, req_name, args):
 
     lines = []
     lines.append(f"{proc} :: proc({sig}) -> (encoded: []byte, err: mem.Allocator_Error) {{")
-    lines.append(f"\tobject := req.{base}")
+    lines.append(f"\tobject := u32(req.{base})")
     lines.append(f"\topcode := u16({opcode_const})")
     lines.append(f"\tsize := u16({size})")
     lines.append("\tmsg := make([dynamic]byte, 0, size, allocator) or_return")
@@ -473,6 +499,19 @@ def emit_struct(iface, name, args, include_target, skip_new_id, kind):
         return [f"{struct} :: struct {{", *fields, "}"]
     return [f"{struct} :: struct {{}}"]
 
+def foreign_pkg_imports(proto):
+    """Packages referenced by object/new_id args that live in another protocol."""
+    refs = set()
+    for iface in proto.interfaces:
+        for name, args, _, _, _ in iface.requests + iface.events:
+            for a in args:
+                iname = a.get("interface")
+                if a.get("type") in ("object", "new_id") and iname and iname in IFACE_PKG:
+                    pkg = IFACE_PKG[iname]
+                    if pkg != proto.pkg:
+                        refs.add(pkg)
+    return sorted(refs)
+
 def emit_types(proto):
     out = []
     out.append(f"package {proto.pkg}")
@@ -485,26 +524,19 @@ def emit_types(proto):
     out.append('import "core:mem"')
     out.append('import "core:strings"')
     out.append('import "core:sys/linux"')
+    for pkg in foreign_pkg_imports(proto):
+        out.append(f'import {pkg} "../{pkg}"')
     out.append("")
 
     if proto.pkg == "wayland":
         out.append("// The core global object, it is always defined to be equal to 1")
         out.append("@(rodata)")
-        out.append("display := u32(1)")
+        out.append("display := Display(1)")
         out.append("")
 
-    req_names = [f"{pascal(i.base)}_{pascal(r)}_Request" for i in proto.interfaces for r, _, _, _, _ in i.requests]
-    evt_names = [f"{pascal(i.base)}_{pascal(e)}_Event" for i in proto.interfaces for e, _, _, _, _ in i.events]
-
-    out.append("Request :: union #no_nil {")
-    for n in req_names:
-        out.append(f"\t{n},")
-    out.append("}")
-    out.append("")
-    out.append("Event :: union #no_nil {")
-    for n in evt_names:
-        out.append(f"\t{n},")
-    out.append("}")
+    # One distinct type per interface, so object ids are type-safe.
+    for iface in proto.interfaces:
+        out.append(f"{pascal(iface.base)} :: distinct u32")
     out.append("")
 
     for iface in proto.interfaces:
@@ -560,61 +592,124 @@ def emit_dispatch(protocols):
         out.append(f'import "{proto.pkg}"')
     out.append("")
 
-    # queue_request is a procedure group: one overload per protocol, each taking
-    # that protocol's single-level Request union. The concrete request struct is
-    # implicitly converted to the package union, which selects the right overload;
-    # this avoids the nested-union implicit conversion that newer compilers reject.
-    out.append("// Returns the ID of a new object, 0 if none was created.")
-    out.append("queue_request :: proc { " + ", ".join(f"queue_request_{p.pkg}" for p in protocols) + " }")
+    # encode_request is a flat procedure group: one overload per request struct.
+    # It is pure marshalling — no Client state, no id allocation, no registration
+    # — so it can be called from any thread. It returns the wire bytes and any fds
+    # that must ride the same sendmsg.
+    out.append("encode_request :: proc {")
+    for proto in protocols:
+        for iface in proto.interfaces:
+            for name, args, _, _, _ in iface.requests:
+                out.append(f"\tencode_request_{proto.pkg}_{iface.base}_{name},")
+    out.append("}")
+    out.append("")
+
     for proto in protocols:
         alias = proto.pkg
-        out.append("")
-        out.append(f"queue_request_{alias} :: proc(client: ^Client, req: {alias}.Request, allocator := context.temp_allocator) -> (id: u32, err: Error) {{")
-        out.append("\tswitch r in req {")
         for iface in proto.interfaces:
             for name, args, summary, description, destructor in iface.requests:
                 struct = f"{alias}.{pascal(iface.base)}_{pascal(name)}_Request"
-                proc = f"{alias}.{iface.base}_{name}_encode"
-                out.append(f"\tcase {struct}:")
+                proc = f"encode_request_{alias}_{iface.base}_{name}"
+                encode = f"{alias}.{iface.base}_{name}_encode"
                 new_id_arg = next((a for a in args if a.get("type") == "new_id"), None)
+                fd_args = [a for a in args if a.get("type") == "fd"]
+
+                sig = f"req: {struct}, "
                 if new_id_arg is not None:
-                    out.append("\t\tid = next_id(&current_global_id)")
-                for a in args:
-                    if a.get("type") == "fd":
-                        out.append(f"\t\tappend(&client.outgoing_fds, r.{a.get('name')})")
+                    sig += "id: u32, "
+                sig += "allocator := context.temp_allocator"
+
+                out.append("")
+                out.append(f"{proc} :: proc({sig}) -> (data: []byte, fds: []linux.Fd, err: Error) {{")
                 if new_id_arg is not None:
-                    nid_iface = new_id_arg.get("interface")
-                    if nid_iface is not None:
-                        out.append(f"\t\tdata := {proc}(r, id, allocator) or_return")
-                        pkg = iface_to_pkg[nid_iface]
-                        out.append(f"\t\tclient.id_to_interface[id] = {pkg}.{upper(iface_to_base[nid_iface])}_INTERFACE")
-                    else:
-                        # dynamic interface (bind): clamp the requested version to
-                        # what the generated dispatcher supports, and resolve the
-                        # name to a static constant instead of cloning, so the map
-                        # never holds heap-allocated strings
-                        out.append("\t\trb := r")
-                        out.append("\t\tswitch rb.interface {")
-                        for pkg, base in global_consts:
-                            const = f"{pkg}.{upper(base)}_INTERFACE"
-                            out.append(f"\t\t\tcase {const}:")
-                            out.append(f"\t\t\t\trb.version = min(rb.version, {pkg}.{upper(base)}_VERSION)")
-                            out.append(f"\t\t\t\tclient.id_to_interface[id] = {const}")
-                        out.append("\t\t}")
-                        out.append(f"\t\tdata := {proc}(rb, id, allocator) or_return")
+                    out.append(f"\tdata = {encode}(req, id, allocator) or_return")
                 else:
-                    out.append(f"\t\tdata := {proc}(r, allocator) or_return")
-                out.append("\t\tappend(&client.requests_byte_buffer, ..data[:])")
-                if destructor:
-                    out.append(f"\t\tdelete_key(&client.id_to_interface, r.{iface.base})")
-        out.append("\t}")
-        out.append("\treturn")
-        out.append("}")
+                    out.append(f"\tdata = {encode}(req, allocator) or_return")
+                if fd_args:
+                    out.append(f"\tfds = make([]linux.Fd, {len(fd_args)}, allocator) or_return")
+                    for i, a in enumerate(fd_args):
+                        out.append(f"\tfds[{i}] = req.{a.get('name')}")
+                out.append("\treturn")
+                out.append("}")
     out.append("")
 
+    # queue_request is the convenience wrapper: allocate the id, encode, register
+    # the new object, and submit. It must stay a per-request overload because it
+    # allocates the id that encode_request needs as a parameter and returns the
+    # typed id.
+    out.append("queue_request :: proc {")
+    for proto in protocols:
+        for iface in proto.interfaces:
+            for name, args, _, _, _ in iface.requests:
+                out.append(f"\tqueue_request_{proto.pkg}_{iface.base}_{name},")
+    out.append("}")
+    out.append("")
+
+    for proto in protocols:
+        alias = proto.pkg
+        for iface in proto.interfaces:
+            for name, args, summary, description, destructor in iface.requests:
+                struct = f"{alias}.{pascal(iface.base)}_{pascal(name)}_Request"
+                proc = f"queue_request_{alias}_{iface.base}_{name}"
+                enc = f"encode_request_{alias}_{iface.base}_{name}"
+                new_id_arg = next((a for a in args if a.get("type") == "new_id"), None)
+
+                if new_id_arg is None:
+                    ret = "Error"
+                else:
+                    nid_iface = new_id_arg.get("interface")
+                    if nid_iface is not None:
+                        ret = f"(ret: {iface_to_pkg[nid_iface]}.{pascal(iface_to_base[nid_iface])}, err: Error)"
+                    else:
+                        ret = "(ret: u32, err: Error)"  # dynamic (registry.bind)
+
+                out.append("")
+                out.append(f"{proc} :: proc(client: ^Client, req: {struct}, allocator := context.temp_allocator) -> {ret} {{")
+                if new_id_arg is not None:
+                    out.append("\tclient.next_id += 1")
+                    out.append("\tid := client.next_id")
+                if new_id_arg is not None and new_id_arg.get("interface") is None:
+                    # dynamic interface (bind): clamp the requested version to what
+                    # the generated dispatcher supports, resolve the name to a static
+                    # constant, and register it.
+                    out.append("\trb := req")
+                    out.append("\tswitch rb.interface {")
+                    for pkg, base in global_consts:
+                        const = f"{pkg}.{upper(base)}_INTERFACE"
+                        out.append(f"\tcase {const}:")
+                        out.append(f"\t\trb.version = min(rb.version, {pkg}.{upper(base)}_VERSION)")
+                        out.append(f"\t\tregister_object(client, id, {const})")
+                    out.append("\t}")
+                    out.append(f"\tdata, fds := {enc}(rb, id, allocator) or_return")
+                elif new_id_arg is not None:
+                    out.append(f"\tdata, fds := {enc}(req, id, allocator) or_return")
+                    nid_iface = new_id_arg["interface"]
+                    pkg = iface_to_pkg[nid_iface]
+                    out.append(f"\tregister_object(client, id, {pkg}.{upper(iface_to_base[nid_iface])}_INTERFACE)")
+                else:
+                    out.append(f"\tdata, fds := {enc}(req, allocator) or_return")
+                out.append("\tsubmit(client, data, fds)")
+                if destructor:
+                    out.append(f"\tdelete_key(&client.id_to_interface, u32(req.{iface.base}))")
+                if new_id_arg is None:
+                    out.append("\treturn nil")
+                else:
+                    nid_iface = new_id_arg.get("interface")
+                    if nid_iface is not None:
+                        out.append(f"\treturn {iface_to_pkg[nid_iface]}.{pascal(iface_to_base[nid_iface])}(id), nil")
+                    else:
+                        out.append("\treturn id, nil")
+                out.append("}")
+    out.append("")
+
+    # A flat union of every event struct across all protocols, so users switch
+    # directly on the event type without a nested per-protocol union.
     out.append("Event :: union {")
     for proto in protocols:
-        out.append(f"\t{proto.pkg}.Event,")
+        for iface in proto.interfaces:
+            for name, args, _, _, _ in iface.events:
+                struct = f"{proto.pkg}.{pascal(iface.base)}_{pascal(name)}_Event"
+                out.append(f"\t{struct},")
     out.append("}")
     out.append("")
 
@@ -649,15 +744,30 @@ def emit_dispatch(protocols):
                         call += ", allocator"
                     call += ")"
                     out.append(f"\t\t\tdecoded := {call}")
-                    out.append(f"\t\t\tdecoded.{iface.base} = object_id")
+                    out.append(f"\t\t\tdecoded.{iface.base} = {alias}.{pascal(iface.base)}(object_id)")
                     if new_id_arg is not None and new_id_arg.get("interface") in iface_to_pkg:
-                        out.append(f"\t\t\tclient.id_to_interface[decoded.{nid_field}] = {nid_const}")
-                    out.append(f"\t\t\treturn Event({alias}.Event(decoded)), true")
+                        out.append(f"\t\t\tclient.id_to_interface[u32(decoded.{nid_field})] = {nid_const}")
+                    out.append(f"\t\t\treturn Event(decoded), true")
             out.append("\t\t}")
     out.append("\t}")
     out.append("\treturn")
     out.append("}")
     out.append("")
+
+    # One bind helper per global: takes the registry + the global event and
+    # returns the typed interface id, so users don't hand-write Registry_Bind_Request.
+    for pkg, base in global_consts:
+        iface_const = f"{pkg}.{upper(base)}_INTERFACE"
+        out.append(f"bind_{base} :: proc(client: ^Client, registry: wayland.Registry, e: wayland.Registry_Global_Event) -> ({pkg}.{pascal(base)}, Error) {{")
+        out.append(f"\tid, err := queue_request(client, wayland.Registry_Bind_Request {{")
+        out.append("\t\tregistry  = registry,")
+        out.append("\t\tname      = e.name,")
+        out.append(f"\t\tinterface = {iface_const},")
+        out.append("\t\tversion   = e.version,")
+        out.append("\t})")
+        out.append(f"\treturn {pkg}.{pascal(base)}(id), err")
+        out.append("}")
+        out.append("")
 
     return "\n".join(out)
 
