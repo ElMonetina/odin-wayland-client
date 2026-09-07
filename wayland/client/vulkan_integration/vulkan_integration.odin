@@ -258,6 +258,7 @@ create_swapchain :: proc(p_device: vk.PhysicalDevice, device: vk.Device, queue: 
 			width         = create_info.surface.w,
 			height        = create_info.surface.h,
 			format        = fourcc,
+			flags         = create_info.buffer_params_flags,
 		}
 		sc.wl_buffers[i], _ = client.queue_request(create_info.surface.client, create_immed)
 
