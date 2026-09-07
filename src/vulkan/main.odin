@@ -1,74 +1,56 @@
 package main
 
-import "core:os"
 import "core:log"
-import "core:sys/linux"
+import "core:os"
 import vk "vendor:vulkan"
 import "wayland:client"
 import dmabuf "wayland:client/linux_dmabuf_v1"
+import vki "wayland:client/vulkan_integration"
 import wl "wayland:client/wayland"
 import xdg "wayland:client/xdg_shell"
-import vki "wayland:client/vulkan_integration"
 
-Wayland_State :: struct {
+App :: struct {
 	client_state:     client.Client,
 	wl_registry:      wl.Registry,
 	wl_compositor:    wl.Compositor,
-	wl_shm:           wl.Shm,
 	xdg_wm_base:      xdg.Wm_Base,
 	wl_surface:       wl.Surface,
 	xdg_surface:      xdg.Surface,
 	configured:       bool,
 	img_free:         bool,
 	xdg_toplevel:     xdg.Toplevel,
-	shm_file:         linux.Fd,
-	shm_pool_data:    []byte,
-	shm_pool:         wl.Shm_Pool,
-	wl_buffer:        wl.Buffer,
 	linux_dmabuf:     dmabuf.Dmabuf,
-	dmabuf_fd:        linux.Fd,
-	dmabuf_params_id: dmabuf.Buffer_Params,
-	dmabuf_buffer:    wl.Buffer,
 	w, h:             i32,
-	dt:               f64,
 	quitting:         bool,
-}
 
-Vulkan_State :: struct {
-	instance:       vk.Instance,
-	p_device:       vk.PhysicalDevice,
-	device:         vk.Device,
-	gfx_family_idx: u32,
-	gfx_queue:      vk.Queue,
-	cmd_pool:       vk.CommandPool,
-	cmd_buf:        vk.CommandBuffer,
-	img:            vk.Image,
-	image_mem:      vk.DeviceMemory,
-	mem_type_bit:   u32,
-	img_view:       vk.ImageView,
-	present_fence:  vk.Fence,
-
-	lib:            vki.Library,
+	// Vulkan section
+	surface:          vki.Surface,
+	swapchain:        vki.Swapchain,
+	instance:         vk.Instance,
+	p_device:         vk.PhysicalDevice,
+	device:           vk.Device,
+	gfx_family_idx:   u32,
+	gfx_queue:        vk.Queue,
+	cmd_pool:         vk.CommandPool,
+	cmd_bufs:         [vki.FRAMES_IN_FLIGHT]vk.CommandBuffer,
+	frame_rendered:   [vki.FRAMES_IN_FLIGHT]bool,
+	lib:              vki.Library,
 }
 
 ENABLED_LAYERS :: []cstring{"VK_LAYER_KHRONOS_validation"}
 
 
-DRM_FORMAT_MOD_LINEAR :: 0 // DRM_FORMAT_MOD_LINEAR
-DRM_FORMAT_ARGB8888 :: 0x34325241 // little-endian B,G,R,A -> VK_FORMAT_B8G8R8A8_UNORM
-
 main :: proc() {
 	context.logger = log.create_console_logger()
 
-	vk_state: Vulkan_State
+	app := new(App)
 
-	wl_state: Wayland_State
 	client_err: client.Error
-	wl_state.client_state, client_err = client.create()
+	app.client_state, client_err = client.create()
 	ensure(client_err == nil)
-	defer client.destroy(&wl_state.client_state)
+	defer client.destroy(&app.client_state)
 
-	init_wayland_state(&wl_state, 1280, 720)
+	init_app(app, 1280, 720)
 	free_all(context.temp_allocator)
 	// Vulkan initialization
 
@@ -83,33 +65,33 @@ main :: proc() {
 		pApplicationInfo    = &app_info,
 	}
 	loaded: bool
-	vk_state.lib, loaded = vki.load_instance_proc_addr()
+	app.lib, loaded = vki.load_instance_proc_addr()
 	ensure(loaded == true)
 
 	res: vk.Result
-	res = vk.CreateInstance(&instance_ci, nil, &vk_state.instance)
+	res = vk.CreateInstance(&instance_ci, nil, &app.instance)
 	ensure(res == .SUCCESS)
-	defer vk.DestroyInstance(vk_state.instance, nil)
-	vk.load_proc_addresses(vk_state.instance)
+	defer vk.DestroyInstance(app.instance, nil)
+	vk.load_proc_addresses(app.instance)
 
 	p_devices: []vk.PhysicalDevice
-	p_devices, res = make_physical_devices(vk_state.instance)
+	p_devices, res = make_physical_devices(app.instance)
 	ensure(res == .SUCCESS)
 
 	p_device, found := select_physical_device(p_devices)
 	if found {
-		vk_state.p_device = p_device
+		app.p_device = p_device
 	} else {
 		return
 	}
 
 	qfp_count: u32
-	vk.GetPhysicalDeviceQueueFamilyProperties(vk_state.p_device, &qfp_count, nil)
+	vk.GetPhysicalDeviceQueueFamilyProperties(app.p_device, &qfp_count, nil)
 	qfps := make([]vk.QueueFamilyProperties, qfp_count, context.temp_allocator)
-	vk.GetPhysicalDeviceQueueFamilyProperties(vk_state.p_device, &qfp_count, raw_data(qfps))
+	vk.GetPhysicalDeviceQueueFamilyProperties(app.p_device, &qfp_count, raw_data(qfps))
 	for qfp, i in qfps {
 		if .GRAPHICS in qfp.queueFlags {
-			vk_state.gfx_family_idx = u32(i)
+			app.gfx_family_idx = u32(i)
 			break
 		}
 	}
@@ -117,7 +99,7 @@ main :: proc() {
 	queue_ci := vk.DeviceQueueCreateInfo {
 		sType            = .DEVICE_QUEUE_CREATE_INFO,
 		queueCount       = 1,
-		queueFamilyIndex = vk_state.gfx_family_idx,
+		queueFamilyIndex = app.gfx_family_idx,
 		pQueuePriorities = &q_priority,
 	}
 	device_ci := vk.DeviceCreateInfo {
@@ -127,177 +109,75 @@ main :: proc() {
 		queueCreateInfoCount    = 1,
 		pQueueCreateInfos       = &queue_ci,
 	}
-	res = vk.CreateDevice(vk_state.p_device, &device_ci, nil, &vk_state.device)
+	res = vk.CreateDevice(app.p_device, &device_ci, nil, &app.device)
 	ensure(res == .SUCCESS)
-	defer vk.DestroyDevice(vk_state.device, nil)
+	defer vk.DestroyDevice(app.device, nil)
+
+	vk.GetDeviceQueue(app.device, app.gfx_family_idx, 0, &app.gfx_queue)
 
 	img_ci := vki.Image_Create_Info {
-		initial_layout = .UNDEFINED,
-		image_type = .D2,
-		mip_levels = 1,
-		array_layers = 1,
-		samples = {._1},
-		usage = {.TRANSFER_DST},
-		extent = {u32(wl_state.w), u32(wl_state.h), 1},
-		format = .B8G8R8A8_UNORM,
-		drm_format_modifier = DRM_FORMAT_MOD_LINEAR,
-		plane_layouts = {{offset = 0, rowPitch = vk.DeviceSize(wl_state.w * 4)}},
-		handleTypes = {.DMA_BUF_EXT},
+		initial_layout      = .UNDEFINED,
+		type                = .D2,
+		mip_levels          = 1,
+		array_layers        = 1,
+		samples             = {._1},
+		usage               = {.TRANSFER_DST},
+		extent              = {u32(app.w), u32(app.h), 1},
+		format              = .B8G8R8A8_UNORM,
+		drm_format_modifier = vki.DRM_FORMAT_MOD_LINEAR,
+		plane_layouts       = {{offset = 0, rowPitch = vk.DeviceSize(app.w * 4)}},
+		handleTypes         = {.DMA_BUF_EXT},
 	}
-	vk_state.img, res = vki.create_image(vk_state.device, img_ci, nil)
+	swapchain_ci := vki.Swapchain_Create_Info {
+		surface = app.surface,
+		img_ci  = img_ci,
+	}
+	app.swapchain, res = vki.create_swapchain(app.p_device, app.device, app.gfx_queue, swapchain_ci)
 	ensure(res == .SUCCESS)
-	defer vk.DestroyImage(vk_state.device, vk_state.img, nil)
-
-	img_mem_reqs := vk.ImageMemoryRequirementsInfo2 {
-		sType = .IMAGE_MEMORY_REQUIREMENTS_INFO_2,
-		image = vk_state.img,
-	}
-	dedicated_reqs := vk.MemoryDedicatedRequirements {
-		sType = .MEMORY_DEDICATED_REQUIREMENTS,
-	}
-	mem_reqs2 := vk.MemoryRequirements2 {
-		sType = .MEMORY_REQUIREMENTS_2,
-	}
-	mem_reqs2.pNext = &dedicated_reqs
-	vk.GetImageMemoryRequirements2(vk_state.device, &img_mem_reqs, &mem_reqs2)
-	mem_reqs := mem_reqs2.memoryRequirements
-	mem_props: vk.PhysicalDeviceMemoryProperties
-	vk.GetPhysicalDeviceMemoryProperties(vk_state.p_device, &mem_props)
-	bit_found: bool
-	for i in 0 ..< 32 {
-		if (mem_reqs.memoryTypeBits >> u32(i)) & 1 == 0 {continue}
-		mt := mem_props.memoryTypes[i]
-		if .DEVICE_LOCAL not_in mt.propertyFlags {continue}
-		info2 := vk.PhysicalDeviceImageFormatInfo2 {
-			sType  = .PHYSICAL_DEVICE_IMAGE_FORMAT_INFO_2,
-			format = img_ci.format,
-			type   = img_ci.image_type,
-			tiling = .DRM_FORMAT_MODIFIER_EXT,
-			usage  = img_ci.usage,
-		}
-		modifier_info := vk.PhysicalDeviceImageDrmFormatModifierInfoEXT {
-			sType             = .PHYSICAL_DEVICE_IMAGE_DRM_FORMAT_MODIFIER_INFO_EXT,
-			drmFormatModifier = DRM_FORMAT_MOD_LINEAR,
-		}
-		external_info := vk.PhysicalDeviceExternalImageFormatInfo {
-			sType      = .PHYSICAL_DEVICE_EXTERNAL_IMAGE_FORMAT_INFO,
-			handleType = {.DMA_BUF_EXT},
-		}
-		info2.pNext = &modifier_info
-		modifier_info.pNext = &external_info
-		props := vk.ImageFormatProperties2 {
-			sType = .IMAGE_FORMAT_PROPERTIES_2,
-		}
-		external := vk.ExternalImageFormatProperties {
-			sType = .EXTERNAL_IMAGE_FORMAT_PROPERTIES,
-		}
-		props.pNext = &external
-		res = vk.GetPhysicalDeviceImageFormatProperties2(vk_state.p_device, &info2, &props)
-		if res != .SUCCESS {
-			continue
-		}
-		if .EXPORTABLE in external.externalMemoryProperties.externalMemoryFeatures {
-			// Exportable to dmabud
-			vk_state.mem_type_bit = u32(i)
-			bit_found = true
-			break
-		}
-	}
-	if !bit_found {
-		log.error("Compatible memory type not found!")
-		return
-	}
-
-	alloc := vk.MemoryAllocateInfo {
-		sType           = .MEMORY_ALLOCATE_INFO,
-		allocationSize  = mem_reqs.size,
-		memoryTypeIndex = vk_state.mem_type_bit,
-	}
-	dedicated_alloc := vk.MemoryDedicatedAllocateInfo {
-		sType = .MEMORY_DEDICATED_ALLOCATE_INFO,
-		image = vk_state.img,
-	}
-	export_alloc := vk.ExportMemoryAllocateInfo {
-		sType       = .EXPORT_MEMORY_ALLOCATE_INFO,
-		handleTypes = {.DMA_BUF_EXT},
-	}
-	alloc.pNext = &dedicated_alloc
-	dedicated_alloc.pNext = &export_alloc
-	res = vk.AllocateMemory(vk_state.device, &alloc, nil, &vk_state.image_mem)
-	ensure(res == .SUCCESS)
-	defer vk.FreeMemory(vk_state.device, vk_state.image_mem, nil)
-
-	res = vk.BindImageMemory(vk_state.device, vk_state.img, vk_state.image_mem, 0)
-	ensure(res == .SUCCESS)
-
-	fd_info := vk.MemoryGetFdInfoKHR {
-		sType      = .MEMORY_GET_FD_INFO_KHR,
-		memory     = vk_state.image_mem,
-		handleType = {.DMA_BUF_EXT},
-	}
-	fd: i32
-	res = vk.GetMemoryFdKHR(vk_state.device, &fd_info, &fd)
-	ensure(res == .SUCCESS)
-	wl_state.dmabuf_fd = linux.Fd(fd)
-
-	create_params := dmabuf.Dmabuf_Create_Params_Request {
-		dmabuf = wl_state.linux_dmabuf,
-	}
-	wl_state.dmabuf_params_id, _ = client.queue_request(&wl_state.client_state, create_params)
-
-	params_add := dmabuf.Buffer_Params_Add_Request {
-		buffer_params = wl_state.dmabuf_params_id,
-		fd            = wl_state.dmabuf_fd,
-		offset        = 0,
-		stride        = u32(wl_state.w * 4),
-		modifier_lo   = u32(DRM_FORMAT_MOD_LINEAR),
-		modifier_hi   = u32(DRM_FORMAT_MOD_LINEAR >> 32),
-	}
-	client.queue_request(&wl_state.client_state, params_add)
-
-	create_immed := dmabuf.Buffer_Params_Create_Immed_Request {
-		buffer_params = wl_state.dmabuf_params_id,
-		width         = wl_state.w,
-		height        = wl_state.h,
-		format        = DRM_FORMAT_ARGB8888, // same as the vulkan side
-	}
-	wl_state.dmabuf_buffer, _ = client.queue_request(&wl_state.client_state, create_immed)
-
-	fence_ci := vk.FenceCreateInfo {
-		sType = .FENCE_CREATE_INFO,
-		flags = {.SIGNALED},
-	}
-	res = vk.CreateFence(vk_state.device, &fence_ci, nil, &vk_state.present_fence)
-	ensure(res == .SUCCESS)
-	defer vk.DestroyFence(vk_state.device, vk_state.present_fence, nil)
-
-	vk.GetDeviceQueue(vk_state.device, vk_state.gfx_family_idx, 0, &vk_state.gfx_queue)
+	defer vki.destroy_swapchain(&app.swapchain)
 
 	cmd_pool_ci := vk.CommandPoolCreateInfo {
 		sType            = .COMMAND_POOL_CREATE_INFO,
 		flags            = {.RESET_COMMAND_BUFFER},
-		queueFamilyIndex = vk_state.gfx_family_idx,
+		queueFamilyIndex = app.gfx_family_idx,
 	}
-	res = vk.CreateCommandPool(vk_state.device, &cmd_pool_ci, nil, &vk_state.cmd_pool)
+	res = vk.CreateCommandPool(app.device, &cmd_pool_ci, nil, &app.cmd_pool)
 	if res != .SUCCESS {
 		log.error(res)
 		return
 	}
-	defer vk.DestroyCommandPool(vk_state.device, vk_state.cmd_pool, nil)
+	defer vk.DestroyCommandPool(app.device, app.cmd_pool, nil)
+	defer vk.DeviceWaitIdle(app.device)
 
 	cmd_buf_ai := vk.CommandBufferAllocateInfo {
 		sType              = .COMMAND_BUFFER_ALLOCATE_INFO,
-		commandPool        = vk_state.cmd_pool,
+		commandPool        = app.cmd_pool,
 		level              = .PRIMARY,
-		commandBufferCount = 1,
+		commandBufferCount = vki.FRAMES_IN_FLIGHT,
 	}
-	vk.AllocateCommandBuffers(vk_state.device, &cmd_buf_ai, &vk_state.cmd_buf)
+	vk.AllocateCommandBuffers(app.device, &cmd_buf_ai, &app.cmd_bufs[0])
 
+	for !app.quitting {
+		free_all(context.temp_allocator)
+		handle_event(app)
+		if app.configured && app.img_free {
+			render(app)
+		}
+	}
+}
+
+render :: proc(app: ^App) {
+	res: vk.Result
+	image, idx, _ := vki.swapchain_acquire_next_image(&app.swapchain)
+	cmd_buf := app.cmd_bufs[idx]
+
+	res = vk.ResetCommandBuffer(cmd_buf, {})
+	ensure(res == .SUCCESS)
 	cmd_buf_bi := vk.CommandBufferBeginInfo {
 		sType = .COMMAND_BUFFER_BEGIN_INFO,
 		flags = {.ONE_TIME_SUBMIT},
 	}
-	res = vk.BeginCommandBuffer(vk_state.cmd_buf, &cmd_buf_bi)
+	res = vk.BeginCommandBuffer(cmd_buf, &cmd_buf_bi)
 	ensure(res == .SUCCESS)
 
 	subresource := vk.ImageSubresourceRange {
@@ -307,160 +187,98 @@ main :: proc() {
 		baseArrayLayer = 0,
 		layerCount     = 1,
 	}
+	old_layout := vk.ImageLayout.GENERAL if app.frame_rendered[idx] else .UNDEFINED
 	barrier := vk.ImageMemoryBarrier {
 		sType               = .IMAGE_MEMORY_BARRIER,
 		dstAccessMask       = {.TRANSFER_WRITE},
-		oldLayout           = .UNDEFINED,
+		oldLayout           = old_layout,
 		newLayout           = .TRANSFER_DST_OPTIMAL,
 		srcQueueFamilyIndex = max(u32),
 		dstQueueFamilyIndex = max(u32),
-		image               = vk_state.img,
+		image               = image,
 		subresourceRange    = subresource,
 	}
-	vk.CmdPipelineBarrier(vk_state.cmd_buf, {.TOP_OF_PIPE}, {.TRANSFER}, {}, 0, nil, 0, nil, 1, &barrier)
+	vk.CmdPipelineBarrier(cmd_buf, {.TOP_OF_PIPE}, {.TRANSFER}, {}, 0, nil, 0, nil, 1, &barrier)
 	color := vk.ClearColorValue {
 		float32 = {0, 0.5, 1.0, 1.0},
 	}
 
-	vk.CmdClearColorImage(vk_state.cmd_buf, vk_state.img, .TRANSFER_DST_OPTIMAL, &color, 1, &subresource)
+	vk.CmdClearColorImage(cmd_buf, image, .TRANSFER_DST_OPTIMAL, &color, 1, &subresource)
 
 	barrier.srcAccessMask = {.TRANSFER_WRITE}
 	barrier.oldLayout = .TRANSFER_DST_OPTIMAL
 	barrier.newLayout = .GENERAL
-	vk.CmdPipelineBarrier(vk_state.cmd_buf, {.TRANSFER}, {.ALL_COMMANDS}, {}, 0, nil, 0, nil, 1, &barrier)
+	vk.CmdPipelineBarrier(cmd_buf, {.TRANSFER}, {.ALL_COMMANDS}, {}, 0, nil, 0, nil, 1, &barrier)
 
-	vk.EndCommandBuffer(vk_state.cmd_buf)
+	vk.EndCommandBuffer(cmd_buf)
 
 	submit := vk.SubmitInfo {
 		sType              = .SUBMIT_INFO,
 		commandBufferCount = 1,
-		pCommandBuffers    = &vk_state.cmd_buf,
+		pCommandBuffers    = &cmd_buf,
 	}
-	res = vk.ResetFences(vk_state.device, 1, &vk_state.present_fence)
-	ensure(res == .SUCCESS)
-	res = vk.QueueSubmit(vk_state.gfx_queue, 1, &submit, vk_state.present_fence)
-	ensure(res == .SUCCESS)
-	res = vk.WaitForFences(vk_state.device, 1, &vk_state.present_fence, true, max(u64))
+	res = vki.swapchain_present(&app.swapchain, idx, []vk.SubmitInfo{submit})
 	ensure(res == .SUCCESS)
 
-	for !wl_state.quitting {
-		free_all(context.temp_allocator)
-		handle_event(&wl_state)
-		if wl_state.configured && wl_state.img_free {
-			res = vk.ResetCommandBuffer(vk_state.cmd_buf, {})
-			ensure(res == .SUCCESS)
-			cmd_buf_bi := vk.CommandBufferBeginInfo {
-				sType = .COMMAND_BUFFER_BEGIN_INFO,
-				flags = {.ONE_TIME_SUBMIT},
-			}
-			res = vk.BeginCommandBuffer(vk_state.cmd_buf, &cmd_buf_bi)
-			ensure(res == .SUCCESS)
-
-			subresource := vk.ImageSubresourceRange {
-				aspectMask     = {.COLOR},
-				baseMipLevel   = 0,
-				levelCount     = 1,
-				baseArrayLayer = 0,
-				layerCount     = 1,
-			}
-			barrier := vk.ImageMemoryBarrier {
-				sType               = .IMAGE_MEMORY_BARRIER,
-				dstAccessMask       = {.TRANSFER_WRITE},
-				oldLayout           = .UNDEFINED,
-				newLayout           = .TRANSFER_DST_OPTIMAL,
-				srcQueueFamilyIndex = max(u32),
-				dstQueueFamilyIndex = max(u32),
-				image               = vk_state.img,
-				subresourceRange    = subresource,
-			}
-			vk.CmdPipelineBarrier(vk_state.cmd_buf, {.TOP_OF_PIPE}, {.TRANSFER}, {}, 0, nil, 0, nil, 1, &barrier)
-			color := vk.ClearColorValue {
-				float32 = {0, 0.5, 1.0, 1.0},
-			}
-
-			vk.CmdClearColorImage(vk_state.cmd_buf, vk_state.img, .TRANSFER_DST_OPTIMAL, &color, 1, &subresource)
-
-			barrier.srcAccessMask = {.TRANSFER_WRITE}
-			barrier.oldLayout = .TRANSFER_DST_OPTIMAL
-			barrier.newLayout = .GENERAL
-			vk.CmdPipelineBarrier(vk_state.cmd_buf, {.TRANSFER}, {.ALL_COMMANDS}, {}, 0, nil, 0, nil, 1, &barrier)
-
-			vk.EndCommandBuffer(vk_state.cmd_buf)
-
-			res = vk.ResetFences(vk_state.device, 1, &vk_state.present_fence)
-			ensure(res == .SUCCESS)
-			res = vk.QueueSubmit(vk_state.gfx_queue, 1, &submit, vk_state.present_fence)
-			ensure(res == .SUCCESS)
-			res = vk.WaitForFences(vk_state.device, 1, &vk_state.present_fence, true, max(u64))
-			ensure(res == .SUCCESS)
-
-			attach := wl.Surface_Attach_Request {
-				buffer  = wl_state.dmabuf_buffer,
-				surface = wl_state.wl_surface,
-			}
-			client.queue_request(&wl_state.client_state, attach)
-			commit := wl.Surface_Commit_Request {
-				surface = wl_state.wl_surface,
-			}
-			client.queue_request(&wl_state.client_state, commit)
-			wl_state.img_free = false
-		}
-	}
+	app.frame_rendered[idx] = true
+	app.img_free = false
 }
 
-init_wayland_state :: proc(state: ^Wayland_State, shm_width, shm_height: i32) {
+init_app :: proc(app: ^App, width, height: i32) {
 	get_registry := wl.Display_Get_Registry_Request {
 		display = wl.display,
 	}
-	state.wl_registry, _ = client.queue_request(&state.client_state, get_registry)
+	app.wl_registry, _ = client.queue_request(&app.client_state, get_registry)
 
-	err := register_global_objects(state)
+	err := register_global_objects(app)
 	ensure(err == nil)
 	free_all(context.temp_allocator)
 
 	create_surface := wl.Compositor_Create_Surface_Request {
-		compositor = state.wl_compositor,
+		compositor = app.wl_compositor,
 	}
-	state.wl_surface, _ = client.queue_request(&state.client_state, create_surface)
+	app.wl_surface, _ = client.queue_request(&app.client_state, create_surface)
+	app.surface = {
+		client       = &app.client_state,
+		wl_surface   = app.wl_surface,
+		linux_dmabuf = app.linux_dmabuf,
+		w            = width,
+		h            = height,
+	}
 
 	get_xdg_surface := xdg.Wm_Base_Get_Xdg_Surface_Request {
-		wm_base = state.xdg_wm_base,
-		surface = state.wl_surface,
+		wm_base = app.xdg_wm_base,
+		surface = app.wl_surface,
 	}
-	state.xdg_surface, _ = client.queue_request(&state.client_state, get_xdg_surface)
+	app.xdg_surface, _ = client.queue_request(&app.client_state, get_xdg_surface)
 
 	get_toplevel := xdg.Surface_Get_Toplevel_Request {
-		surface = state.xdg_surface,
+		surface = app.xdg_surface,
 	}
-	state.xdg_toplevel, _ = client.queue_request(&state.client_state, get_toplevel)
+	app.xdg_toplevel, _ = client.queue_request(&app.client_state, get_toplevel)
 
 	surface_commit := wl.Surface_Commit_Request {
-		surface = state.wl_surface,
+		surface = app.wl_surface,
 	}
-	client.queue_request(&state.client_state, surface_commit)
-	// client.roundtrip()
+	client.queue_request(&app.client_state, surface_commit)
 
-	state.w, state.h = shm_width, shm_height
-	shm_file_size := state.w * state.h * 4 * 2
-	state.shm_file, state.shm_pool_data, _ = client.create_shm_file(shm_file_size)
+	app.w, app.h = width, height
 }
 
-register_global_objects :: proc(state: ^Wayland_State) -> client.Error {
-	client.roundtrip(&state.client_state) or_return
-	for ev in client.poll_event(&state.client_state) {
+register_global_objects :: proc(app: ^App) -> client.Error {
+	client.roundtrip(&app.client_state) or_return
+	for ev in client.poll_event(&app.client_state) {
 		#partial switch e in ev {
 		case wl.Display_Error_Event:
 			log.error(e.message)
 		case wl.Registry_Global_Event:
 			switch e.interface {
 			case wl.COMPOSITOR_INTERFACE:
-				state.wl_compositor = client.bind_compositor(&state.client_state, state.wl_registry, e) or_return
-			case wl.SHM_INTERFACE:
-				state.wl_shm = client.bind_shm(&state.client_state, state.wl_registry, e) or_return
+				app.wl_compositor = client.bind_compositor(&app.client_state, app.wl_registry, e) or_return
 			case xdg.WM_BASE_INTERFACE:
-				state.xdg_wm_base = client.bind_wm_base(&state.client_state, state.wl_registry, e) or_return
+				app.xdg_wm_base = client.bind_wm_base(&app.client_state, app.wl_registry, e) or_return
 			case dmabuf.DMABUF_INTERFACE:
-				state.linux_dmabuf = client.bind_dmabuf(&state.client_state, state.wl_registry, e) or_return
+				app.linux_dmabuf = client.bind_dmabuf(&app.client_state, app.wl_registry, e) or_return
 			}
 		}
 	}
@@ -488,35 +306,35 @@ select_physical_device :: proc(p_devices: []vk.PhysicalDevice) -> (vk.PhysicalDe
 	return {}, false
 }
 
-handle_event :: proc(state: ^Wayland_State) {
-	err := client.roundtrip(&state.client_state)
+handle_event :: proc(app: ^App) {
+	err := client.roundtrip(&app.client_state)
 	if err != nil {
 		log.error(err)
 		os.exit(1)
 	}
-	for ev in client.poll_event(&state.client_state) {
+	for ev in client.poll_event(&app.client_state) {
 		#partial switch e in ev {
 		case wl.Display_Error_Event:
 			log.error(e.object_id, wl.Display_Error(e.code), e.message)
 		case wl.Buffer_Release_Event:
-			state.img_free = true
+			app.img_free = true
 		case xdg.Wm_Base_Ping_Event:
 			pong := xdg.Wm_Base_Pong_Request {
-				wm_base = state.xdg_wm_base,
+				wm_base = app.xdg_wm_base,
 				serial  = e.serial,
 			}
-			client.queue_request(&state.client_state, pong)
+			client.queue_request(&app.client_state, pong)
 		case xdg.Surface_Configure_Event:
 			ack_configure := xdg.Surface_Ack_Configure_Request {
-				surface = state.xdg_surface,
+				surface = app.xdg_surface,
 				serial  = e.serial,
 			}
-			client.queue_request(&state.client_state, ack_configure)
-			state.configured = true
-			state.img_free = true
+			client.queue_request(&app.client_state, ack_configure)
+			app.configured = true
+			app.img_free = true
 
 		case xdg.Toplevel_Close_Event:
-			state.quitting = true
+			app.quitting = true
 		}
 	}
 }
