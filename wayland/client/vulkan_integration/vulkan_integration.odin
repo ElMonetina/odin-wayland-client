@@ -98,7 +98,17 @@ create_image :: proc(device: vk.Device, create_info: Image_Create_Info, allocato
 	return
 }
 
-allocate_image_memory :: proc(p_device: vk.PhysicalDevice, device: vk.Device, image: vk.Image, image_format: vk.Format, image_type: vk.ImageType, usage: vk.ImageUsageFlags) -> (mem: vk.DeviceMemory, res: vk.Result) {
+allocate_image_memory :: proc(
+	p_device: vk.PhysicalDevice,
+	device: vk.Device,
+	image: vk.Image,
+	image_format: vk.Format,
+	image_type: vk.ImageType,
+	usage: vk.ImageUsageFlags,
+) -> (
+	mem: vk.DeviceMemory,
+	res: vk.Result,
+) {
 	img_mem_reqs := vk.ImageMemoryRequirementsInfo2 {
 		sType = .IMAGE_MEMORY_REQUIREMENTS_INFO_2,
 		image = image,
@@ -309,12 +319,12 @@ swapchain_acquire_next_image :: proc(sc: ^Swapchain) -> (image: vk.Image, idx: i
 
 swapchain_present :: proc(sc: ^Swapchain, idx: int, submit_info: []vk.SubmitInfo) -> vk.Result {
 	vk.QueueSubmit(sc.queue, u32(len(submit_info)), raw_data(submit_info), sc.fences[idx]) or_return
-	attach := wl.Surface_Attach_Request{
+	attach := wl.Surface_Attach_Request {
 		surface = sc.surface.wl_surface,
 		buffer  = sc.wl_buffers[idx],
 	}
 	client.queue_request(sc.surface.client, attach)
-	commit := wl.Surface_Commit_Request{
+	commit := wl.Surface_Commit_Request {
 		surface = sc.surface.wl_surface,
 	}
 	client.queue_request(sc.surface.client, commit)
