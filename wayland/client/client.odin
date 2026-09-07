@@ -167,7 +167,8 @@ register_object :: proc(client: ^Client, id: u32, interface: string) {
 	client.id_to_interface[id] = interface
 }
 
-submit :: proc(client: ^Client, data: []byte, fds: []linux.Fd) {
+submit :: proc(client: ^Client, data: []byte, fds: []linux.Fd) -> Error {
 	append(&client.outgoing_fds, ..fds)
-	append(&client.requests_byte_buffer, ..data)
+	append(&client.requests_byte_buffer, ..data) or_return
+	return nil
 }
