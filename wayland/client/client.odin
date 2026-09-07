@@ -126,8 +126,8 @@ recv_control_fds :: proc(control_start, control_end: uintptr, fds: ^[dynamic; 28
 }
 
 poll_event :: proc(client: ^Client, allocator := context.temp_allocator) -> (ev: Event, ok: bool) {
+	read_pos := client.events_read_pos
 	for {
-		read_pos := client.events_read_pos
 		buf := client.events_byte_buffer
 		if read_pos + WAYLAND_HEADER_SIZE > len(buf) {
 			return {}, false
