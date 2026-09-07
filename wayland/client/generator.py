@@ -688,7 +688,7 @@ def emit_dispatch(protocols):
                     out.append(f"\tregister_object(client, id, {pkg}.{upper(iface_to_base[nid_iface])}_INTERFACE)")
                 else:
                     out.append(f"\tdata, fds := {enc}(req, allocator) or_return")
-                out.append("\tsubmit(client, data, fds)")
+                out.append("\tsubmit(client, data, fds) or_return")
                 if destructor:
                     out.append(f"\tdelete_key(&client.id_to_interface, u32(req.{iface.base}))")
                 if new_id_arg is None:
