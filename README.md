@@ -28,17 +28,20 @@ main :: proc() {
 	wl_registry := client.queue_request(get_registry)
 
 	free_all(context.temp_allocator) // Very important!!! Always call before roundtrip()
-	client.roundtrip(&app.wayland) or_return
-	for ev in client.poll_event(&app.wayland) {
-		#partial switch e in ev {
-		case wl.Registry_Global_Event:
-			switch e.interface {
-			case wl.COMPOSITOR_INTERFACE:
-				app.wl_compositor = client.bind_compositor(&app.wayland, app.wl_registry, e) or_return
-			case wl.SHM_INTERFACE:
-				app.wl_shm = client.bind_shm(&app.wayland, app.wl_registry, e) or_return
-			case xdg.WM_BASE_INTERFACE:
-				app.xdg_wm_base = client.bind_wm_base(&app.wayland, app.wl_registry, e) or_return
+	client.roundtrip(&client)
+	for ev in client.poll_event(&client) {
+		#partial switch p in ev {
+		case wl.Event:
+			#partial e in p {
+			case wl.Registry_Global_Event:
+				registry_bind := wl.Registry_Bind_Request {
+					registry  = state.wl_registry,
+					name      = e.name,
+					interface = e.interface,
+					version   = e.version,
+				}
+				id := client.queue_request(registry_bind)
+				// wl_compositor = id
 			}
 		}
 	}
@@ -50,9 +53,8 @@ main :: proc() {
 - `queue_request(req)`: Queues the request data into an internal buffer, the procedure is 
 essentially a big type switcher on `req`. This allows for a very straight forward surface API, 
 initialize a `*_Request` struct and pass it to the proc.
-- `roundtrip()`: Sends all buffered request data and reads all incoming event data, encoding it in a 
-dynamic `events` array, which is returned as a slice. This array can be looped over to get the
-actual event.
+- `roundtrip()`: Sends all buffered request data and reads all incoming event data.
+- `poll_event()`: returns a single event if present, exits when no more events can be parsed.
 
 ### The generator
 
