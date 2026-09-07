@@ -7,14 +7,6 @@ import "core:sys/linux"
 import "util"
 import wl "wayland"
 
-@(private)
-current_global_id := u32(1)
-@(private)
-next_id :: proc(current: ^u32) -> u32 {
-	current^ += 1
-	return current^
-}
-
 Client :: struct {
 	wayland_socket:       linux.Fd,
 	requests_byte_buffer: [dynamic]byte,
@@ -23,6 +15,7 @@ Client :: struct {
 	events_read_pos:      int,
 	incoming_fds:         [dynamic; 28]linux.Fd,
 	id_to_interface:      map[u32]string,
+	next_id:              u32,
 }
 
 WAYLAND_HEADER_SIZE :: 8
@@ -38,7 +31,8 @@ create :: proc(allocator := context.allocator, temp_allocator := context.temp_al
 	client.events_byte_buffer = make([dynamic]byte, 0, WAYLAND_BUFFER_LEN, allocator) or_return
 	client.id_to_interface = make(map[u32]string, allocator)
 	client.wayland_socket = connect(temp_allocator) or_return
-	client.id_to_interface[wl.display] = wl.DISPLAY_INTERFACE
+	client.id_to_interface[u32(wl.display)] = wl.DISPLAY_INTERFACE
+	client.next_id = 1
 	return
 }
 
@@ -164,4 +158,13 @@ create_shm_file :: proc(size: i32) -> (shm: linux.Fd, data: []byte, err: Error) 
 	ptr := linux.mmap(0, uint(size), {.READ, .WRITE}, {.SHARED}, shm) or_return
 	data = ([^]byte)(ptr)[:size]
 	return
+}
+
+register_object :: proc(client: ^Client, id: u32, interface: string) {
+	client.id_to_interface[id] = interface
+}
+
+submit :: proc(client: ^Client, data: []byte, fds: []linux.Fd) {
+	append(&client.outgoing_fds, ..fds)
+	append(&client.requests_byte_buffer, ..data)
 }
