@@ -202,21 +202,24 @@ destroy_surface :: proc() {}
 FRAMES_IN_FLIGHT :: 2
 
 Swapchain :: struct {
-	surface:        Surface,
-	device:         vk.Device,
-	queue:          vk.Queue,
-	images:         [FRAMES_IN_FLIGHT]vk.Image,
-	images_mem:     [FRAMES_IN_FLIGHT]vk.DeviceMemory,
-	dmabuf_fd:      [FRAMES_IN_FLIGHT]linux.Fd,
-	wl_buffers:     [FRAMES_IN_FLIGHT]wl.Buffer,
-	buffer_params:  [FRAMES_IN_FLIGHT]dmabuf.Buffer_Params,
-	fences:         [FRAMES_IN_FLIGHT]vk.Fence,
-	image_index:    int,
+	surface:       Surface,
+	device:        vk.Device,
+	queue:         vk.Queue,
+	images:        [FRAMES_IN_FLIGHT]vk.Image,
+	images_mem:    [FRAMES_IN_FLIGHT]vk.DeviceMemory,
+	dmabuf_fd:     [FRAMES_IN_FLIGHT]linux.Fd,
+	wl_buffers:    [FRAMES_IN_FLIGHT]wl.Buffer,
+	buffer_params: [FRAMES_IN_FLIGHT]dmabuf.Buffer_Params,
+	fences:        [FRAMES_IN_FLIGHT]vk.Fence,
+	image_index:   int,
 }
 
+// TODO: have an image count, allocate slices to that length.<
+// also have a buffer_params config.
 Swapchain_Create_Info :: struct {
-	surface: Surface,
-	img_ci:  Image_Create_Info,
+	surface:             Surface,
+	buffer_params_flags: dmabuf.Buffer_Params_Flags_Set,
+	img_ci:              Image_Create_Info,
 }
 
 create_swapchain :: proc(p_device: vk.PhysicalDevice, device: vk.Device, queue: vk.Queue, create_info: Swapchain_Create_Info) -> (sc: Swapchain, res: vk.Result) {
