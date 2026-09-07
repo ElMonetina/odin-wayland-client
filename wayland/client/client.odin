@@ -52,6 +52,9 @@ connect :: proc(allocator := context.temp_allocator) -> (wayland_socket: linux.F
 }
 
 destroy :: proc(client: ^Client) -> Error {
+	for fd in client.incoming_fds {
+		linux.close(fd) or_return
+	}
 	delete(client.requests_byte_buffer) or_return
 	delete(client.events_byte_buffer) or_return
 	delete(client.id_to_interface) or_return
