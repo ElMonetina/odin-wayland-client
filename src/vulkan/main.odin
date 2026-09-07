@@ -12,23 +12,23 @@ import vki "wayland:client/vulkan_integration"
 
 Wayland_State :: struct {
 	client_state:     client.Client,
-	wl_registry:      u32,
-	wl_compositor:    u32,
-	wl_shm:           u32,
-	xdg_wm_base:      u32,
-	wl_surface:       u32,
-	xdg_surface:      u32,
+	wl_registry:      wl.Registry,
+	wl_compositor:    wl.Compositor,
+	wl_shm:           wl.Shm,
+	xdg_wm_base:      xdg.Wm_Base,
+	wl_surface:       wl.Surface,
+	xdg_surface:      xdg.Surface,
 	configured:       bool,
 	img_free:         bool,
-	xdg_toplevel:     u32,
+	xdg_toplevel:     xdg.Toplevel,
 	shm_file:         linux.Fd,
 	shm_pool_data:    []byte,
-	shm_pool:         u32,
-	wl_buffer:        u32,
-	linux_dmabuf:     u32,
+	shm_pool:         wl.Shm_Pool,
+	wl_buffer:        wl.Buffer,
+	linux_dmabuf:     dmabuf.Dmabuf,
 	dmabuf_fd:        linux.Fd,
-	dmabuf_params_id: u32,
-	dmabuf_buffer:    u32,
+	dmabuf_params_id: dmabuf.Buffer_Params,
+	dmabuf_buffer:    wl.Buffer,
 	w, h:             i32,
 	dt:               f64,
 	quitting:         bool,
@@ -414,7 +414,8 @@ init_wayland_state :: proc(state: ^Wayland_State, shm_width, shm_height: i32) {
 	}
 	state.wl_registry, _ = client.queue_request(&state.client_state, get_registry)
 
-	register_global_objects(state)
+	err := register_global_objects(state)
+	ensure(err == nil)
 	free_all(context.temp_allocator)
 
 	create_surface := wl.Compositor_Create_Surface_Request {
@@ -447,47 +448,19 @@ init_wayland_state :: proc(state: ^Wayland_State, shm_width, shm_height: i32) {
 register_global_objects :: proc(state: ^Wayland_State) -> client.Error {
 	client.roundtrip(&state.client_state) or_return
 	for ev in client.poll_event(&state.client_state) {
-		#partial switch p in ev {
-		case wl.Event:
-			#partial switch e in p {
-			case wl.Display_Error_Event:
-				log.error(e.message)
-			case wl.Registry_Global_Event:
-				id: u32
-				switch e.interface {
-				case wl.COMPOSITOR_INTERFACE:
-					id = client.queue_request(&state.client_state, wl.Registry_Bind_Request {
-						registry  = state.wl_registry,
-						name      = e.name,
-						interface = e.interface,
-						version   = e.version,
-					}) or_return
-					state.wl_compositor = id
-				case wl.SHM_INTERFACE:
-					id = client.queue_request(&state.client_state, wl.Registry_Bind_Request {
-						registry  = state.wl_registry,
-						name      = e.name,
-						interface = e.interface,
-						version   = e.version,
-					}) or_return
-					state.wl_shm = id
-				case xdg.WM_BASE_INTERFACE:
-					id = client.queue_request(&state.client_state, wl.Registry_Bind_Request {
-						registry  = state.wl_registry,
-						name      = e.name,
-						interface = e.interface,
-						version   = e.version,
-					}) or_return
-					state.xdg_wm_base = id
-				case dmabuf.DMABUF_INTERFACE:
-					id = client.queue_request(&state.client_state, wl.Registry_Bind_Request {
-						registry  = state.wl_registry,
-						name      = e.name,
-						interface = e.interface,
-						version   = e.version,
-					}) or_return
-					state.linux_dmabuf = id
-				}
+		#partial switch e in ev {
+		case wl.Display_Error_Event:
+			log.error(e.message)
+		case wl.Registry_Global_Event:
+			switch e.interface {
+			case wl.COMPOSITOR_INTERFACE:
+				state.wl_compositor = client.bind_compositor(&state.client_state, state.wl_registry, e) or_return
+			case wl.SHM_INTERFACE:
+				state.wl_shm = client.bind_shm(&state.client_state, state.wl_registry, e) or_return
+			case xdg.WM_BASE_INTERFACE:
+				state.xdg_wm_base = client.bind_wm_base(&state.client_state, state.wl_registry, e) or_return
+			case dmabuf.DMABUF_INTERFACE:
+				state.linux_dmabuf = client.bind_dmabuf(&state.client_state, state.wl_registry, e) or_return
 			}
 		}
 	}
@@ -522,34 +495,28 @@ handle_event :: proc(state: ^Wayland_State) {
 		os.exit(1)
 	}
 	for ev in client.poll_event(&state.client_state) {
-		#partial switch p in ev {
-		case wl.Event:
-			#partial switch e in p {
-			case wl.Display_Error_Event:
-				log.error(e.object_id, wl.Display_Error(e.code), e.message)
-			case wl.Buffer_Release_Event:
-				state.img_free = true
+		#partial switch e in ev {
+		case wl.Display_Error_Event:
+			log.error(e.object_id, wl.Display_Error(e.code), e.message)
+		case wl.Buffer_Release_Event:
+			state.img_free = true
+		case xdg.Wm_Base_Ping_Event:
+			pong := xdg.Wm_Base_Pong_Request {
+				wm_base = state.xdg_wm_base,
+				serial  = e.serial,
 			}
-		case xdg.Event:
-			#partial switch e in p {
-			case xdg.Wm_Base_Ping_Event:
-				pong := xdg.Wm_Base_Pong_Request {
-					wm_base = state.xdg_wm_base,
-					serial  = e.serial,
-				}
-				client.queue_request(&state.client_state, pong)
-			case xdg.Surface_Configure_Event:
-				ack_configure := xdg.Surface_Ack_Configure_Request {
-					surface = state.xdg_surface,
-					serial  = e.serial,
-				}
-				client.queue_request(&state.client_state, ack_configure)
-				state.configured = true
-				state.img_free = true
+			client.queue_request(&state.client_state, pong)
+		case xdg.Surface_Configure_Event:
+			ack_configure := xdg.Surface_Ack_Configure_Request {
+				surface = state.xdg_surface,
+				serial  = e.serial,
+			}
+			client.queue_request(&state.client_state, ack_configure)
+			state.configured = true
+			state.img_free = true
 
-			case xdg.Toplevel_Close_Event:
-				state.quitting = true
-			}
+		case xdg.Toplevel_Close_Event:
+			state.quitting = true
 		}
 	}
 }
