@@ -209,18 +209,16 @@ Surface :: struct {
 
 destroy_surface :: proc() {}
 
-FRAMES_IN_FLIGHT :: 2
-
 Swapchain :: struct {
 	surface:       Surface,
 	device:        vk.Device,
 	queue:         vk.Queue,
-	images:        [FRAMES_IN_FLIGHT]vk.Image,
-	images_mem:    [FRAMES_IN_FLIGHT]vk.DeviceMemory,
-	dmabuf_fd:     [FRAMES_IN_FLIGHT]linux.Fd,
-	wl_buffers:    [FRAMES_IN_FLIGHT]wl.Buffer,
-	buffer_params: [FRAMES_IN_FLIGHT]dmabuf.Buffer_Params,
-	fences:        [FRAMES_IN_FLIGHT]vk.Fence,
+	images:        []vk.Image,
+	images_mem:    []vk.DeviceMemory,
+	dmabuf_fd:     []linux.Fd,
+	wl_buffers:    []wl.Buffer,
+	buffer_params: []dmabuf.Buffer_Params,
+	fences:        []vk.Fence,
 	image_index:   int,
 }
 
@@ -230,18 +228,31 @@ Swapchain_Create_Info :: struct {
 	surface:             Surface,
 	buffer_params_flags: dmabuf.Buffer_Params_Flags_Set,
 	img_ci:              Image_Create_Info,
+	image_count:         uint,
 }
 
-create_swapchain :: proc(p_device: vk.PhysicalDevice, device: vk.Device, queue: vk.Queue, create_info: Swapchain_Create_Info) -> (sc: Swapchain, res: vk.Result) {
+create_swapchain :: proc(p_device: vk.PhysicalDevice, device: vk.Device, queue: vk.Queue, create_info: Swapchain_Create_Info, allocator : ^vk.AllocationCallbacks = nil) -> (sc: Swapchain, res: vk.Result) {
 	sc.surface = create_info.surface
 	sc.device = device
 	sc.queue = queue
 
 	fourcc := fourcc_from_vulkan(create_info.img_ci.format)
 	stride := u32(create_info.img_ci.plane_layouts[0].rowPitch)
+	image_count := create_info.image_count
+	if image_count == 0 {
+		image_count = 2
+	}
 
-	for i in 0 ..< FRAMES_IN_FLIGHT {
-		sc.images[i] = create_image(device, create_info.img_ci, nil) or_return
+	sc.images = make([]vk.Image, image_count)
+	sc.images_mem = make([]vk.DeviceMemory, image_count)
+	sc.dmabuf_fd = make([]linux.Fd, image_count)
+	sc.wl_buffers = make([]wl.Buffer, image_count)
+	sc.buffer_params = make([]dmabuf.Buffer_Params, image_count)
+	sc.fences = make([]vk.Fence, image_count)
+
+
+	for i in 0 ..< image_count {
+		sc.images[i] = create_image(device, create_info.img_ci, allocator) or_return
 		sc.images_mem[i] = allocate_image_memory(p_device, device, sc.images[i], create_info.img_ci.format, create_info.img_ci.type, create_info.img_ci.usage) or_return
 		vk.BindImageMemory(device, sc.images[i], sc.images_mem[i], 0) or_return
 		sc.dmabuf_fd[i] = query_memory_fd(device, sc.images_mem[i]) or_return
@@ -276,19 +287,19 @@ create_swapchain :: proc(p_device: vk.PhysicalDevice, device: vk.Device, queue: 
 			sType = .FENCE_CREATE_INFO,
 			flags = {.SIGNALED},
 		}
-		vk.CreateFence(device, &fence_ci, nil, &sc.fences[i]) or_return
+		vk.CreateFence(device, &fence_ci, allocator, &sc.fences[i]) or_return
 	}
 
 	sc.image_index = 0
 	return
 }
 
-destroy_swapchain :: proc(sc: ^Swapchain) -> vk.Result {
+destroy_swapchain :: proc(sc: ^Swapchain, allocator : ^vk.AllocationCallbacks = nil) -> vk.Result {
 	// Wait for all in-flight submissions to finish, so no fence is in use and
 	// no command buffer is pending before we tear anything down.
 	vk.DeviceWaitIdle(sc.device) or_return
 
-	for i in 0 ..< FRAMES_IN_FLIGHT {
+	for i in 0 ..< len(sc.images) {
 		// Tell the compositor to release the buffer + params, then drop our fd.
 		destroy := wl.Buffer_Destroy_Request {
 			buffer = sc.wl_buffers[i],
@@ -313,7 +324,7 @@ swapchain_acquire_next_image :: proc(sc: ^Swapchain) -> (image: vk.Image, idx: i
 	vk.ResetFences(sc.device, 1, &sc.fences[idx]) or_return
 
 	image = sc.images[idx]
-	sc.image_index = (idx + 1) % FRAMES_IN_FLIGHT
+	sc.image_index = (idx + 1) % len(sc.images)
 	return
 }
 

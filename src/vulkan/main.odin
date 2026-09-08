@@ -32,13 +32,14 @@ App :: struct {
 	gfx_family_idx:   u32,
 	gfx_queue:        vk.Queue,
 	cmd_pool:         vk.CommandPool,
-	cmd_bufs:         [vki.FRAMES_IN_FLIGHT]vk.CommandBuffer,
-	frame_rendered:   [vki.FRAMES_IN_FLIGHT]bool,
+	cmd_bufs:         [FRAMES_IN_FLIGHT]vk.CommandBuffer,
+	frame_rendered:   [FRAMES_IN_FLIGHT]bool,
 	lib:              vki.Library,
 }
 
 ENABLED_LAYERS :: []cstring{"VK_LAYER_KHRONOS_validation"}
 
+FRAMES_IN_FLIGHT :: 2
 
 main :: proc() {
 	context.logger = log.create_console_logger()
