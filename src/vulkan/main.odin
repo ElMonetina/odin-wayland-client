@@ -69,10 +69,13 @@ main :: proc() {
 	app.lib, loaded = vki.load_instance_proc_addr()
 	ensure(loaded == true)
 
+	vk_allocator := vki.make_allocator()
+	defer vki.destroy_allocator(vk_allocator)
+
 	res: vk.Result
-	res = vk.CreateInstance(&instance_ci, nil, &app.instance)
+	res = vk.CreateInstance(&instance_ci, &vk_allocator, &app.instance)
 	ensure(res == .SUCCESS)
-	defer vk.DestroyInstance(app.instance, nil)
+	defer vk.DestroyInstance(app.instance, &vk_allocator)
 	vk.load_proc_addresses(app.instance)
 
 	p_devices: []vk.PhysicalDevice
@@ -110,9 +113,9 @@ main :: proc() {
 		queueCreateInfoCount    = 1,
 		pQueueCreateInfos       = &queue_ci,
 	}
-	res = vk.CreateDevice(app.p_device, &device_ci, nil, &app.device)
+	res = vk.CreateDevice(app.p_device, &device_ci, &vk_allocator, &app.device)
 	ensure(res == .SUCCESS)
-	defer vk.DestroyDevice(app.device, nil)
+	defer vk.DestroyDevice(app.device, &vk_allocator)
 
 	vk.GetDeviceQueue(app.device, app.gfx_family_idx, 0, &app.gfx_queue)
 
@@ -132,29 +135,30 @@ main :: proc() {
 	swapchain_ci := vki.Swapchain_Create_Info {
 		surface = app.surface,
 		img_ci  = img_ci,
+		image_count = FRAMES_IN_FLIGHT,
 	}
-	app.swapchain, res = vki.create_swapchain(app.p_device, app.device, app.gfx_queue, swapchain_ci)
+	app.swapchain, res = vki.create_swapchain(app.p_device, app.device, app.gfx_queue, swapchain_ci, &vk_allocator)
 	ensure(res == .SUCCESS)
-	defer vki.destroy_swapchain(&app.swapchain)
+	defer vki.destroy_swapchain(&app.swapchain, &vk_allocator)
 
 	cmd_pool_ci := vk.CommandPoolCreateInfo {
 		sType            = .COMMAND_POOL_CREATE_INFO,
 		flags            = {.RESET_COMMAND_BUFFER},
 		queueFamilyIndex = app.gfx_family_idx,
 	}
-	res = vk.CreateCommandPool(app.device, &cmd_pool_ci, nil, &app.cmd_pool)
+	res = vk.CreateCommandPool(app.device, &cmd_pool_ci, &vk_allocator, &app.cmd_pool)
 	if res != .SUCCESS {
 		log.error(res)
 		return
 	}
-	defer vk.DestroyCommandPool(app.device, app.cmd_pool, nil)
+	defer vk.DestroyCommandPool(app.device, app.cmd_pool, &vk_allocator)
 	defer vk.DeviceWaitIdle(app.device)
 
 	cmd_buf_ai := vk.CommandBufferAllocateInfo {
 		sType              = .COMMAND_BUFFER_ALLOCATE_INFO,
 		commandPool        = app.cmd_pool,
 		level              = .PRIMARY,
-		commandBufferCount = vki.FRAMES_IN_FLIGHT,
+		commandBufferCount = len(app.cmd_bufs),
 	}
 	vk.AllocateCommandBuffers(app.device, &cmd_buf_ai, &app.cmd_bufs[0])
 

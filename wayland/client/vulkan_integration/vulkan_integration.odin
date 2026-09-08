@@ -8,7 +8,9 @@ package vulkan_integration
 import client "../"
 import dmabuf "../linux_dmabuf_v1"
 import wl "../wayland"
+import "base:runtime"
 import dl "core:dynlib"
+import "core:mem"
 import "core:sys/linux"
 import vk "vendor:vulkan"
 
@@ -62,7 +64,7 @@ Image_Create_Info :: struct {
 	next:                 rawptr,
 }
 
-create_image :: proc(device: vk.Device, create_info: Image_Create_Info, allocator: ^vk.AllocationCallbacks) -> (image: vk.Image, res: vk.Result) {
+create_image :: proc(device: vk.Device, create_info: Image_Create_Info, allocator : ^vk.AllocationCallbacks = nil) -> (image: vk.Image, res: vk.Result) {
 	img_ci := vk.ImageCreateInfo {
 		sType                 = .IMAGE_CREATE_INFO,
 		flags                 = create_info.flags,
@@ -105,6 +107,7 @@ allocate_image_memory :: proc(
 	image_format: vk.Format,
 	image_type: vk.ImageType,
 	usage: vk.ImageUsageFlags,
+ allocator : ^vk.AllocationCallbacks = nil,
 ) -> (
 	mem: vk.DeviceMemory,
 	res: vk.Result,
@@ -184,7 +187,7 @@ allocate_image_memory :: proc(
 	}
 	alloc.pNext = &dedicated_alloc
 	dedicated_alloc.pNext = &export_alloc
-	res = vk.AllocateMemory(device, &alloc, nil, &mem)
+	res = vk.AllocateMemory(device, &alloc, allocator, &mem)
 	return
 }
 
@@ -311,10 +314,16 @@ destroy_swapchain :: proc(sc: ^Swapchain, allocator : ^vk.AllocationCallbacks = 
 		client.queue_request(sc.surface.client, params_destroy)
 		linux.close(sc.dmabuf_fd[i])
 
-		vk.DestroyFence(sc.device, sc.fences[i], nil)
-		vk.FreeMemory(sc.device, sc.images_mem[i], nil)
-		vk.DestroyImage(sc.device, sc.images[i], nil)
+		vk.DestroyFence(sc.device, sc.fences[i], allocator)
+		vk.FreeMemory(sc.device, sc.images_mem[i], allocator)
+		vk.DestroyImage(sc.device, sc.images[i], allocator)
 	}
+	delete(sc.images)
+	delete(sc.images_mem)
+	delete(sc.dmabuf_fd)
+	delete(sc.wl_buffers)
+	delete(sc.buffer_params)
+	delete(sc.fences)
 	return .SUCCESS
 }
 
@@ -340,4 +349,45 @@ swapchain_present :: proc(sc: ^Swapchain, idx: int, submit_info: []vk.SubmitInfo
 	}
 	client.queue_request(sc.surface.client, commit)
 	return .SUCCESS
+}
+
+make_allocator :: proc(allocator := context.allocator) -> vk.AllocationCallbacks {
+	// The Compat_Allocator must outlive the callbacks, so it lives on the heap
+	// and is reached via pUserData. The callbacks never free it themselves.
+	compat := new(mem.Compat_Allocator, allocator)
+	mem.compat_allocator_init(compat, allocator)
+
+	cb: vk.AllocationCallbacks
+	cb.pUserData         = compat
+	cb.pfnAllocation     = mem_allocate
+	cb.pfnReallocation   = mem_realloc
+	cb.pfnFree           = mem_free
+	return cb
+}
+
+destroy_allocator :: proc(vulkan_allocator: vk.AllocationCallbacks, init_allocator := context.allocator) {
+	free(vulkan_allocator.pUserData, init_allocator)
+}
+
+mem_allocate :: proc "system" (user_data: rawptr, size: int, alignment: int, allocation_scope: vk.SystemAllocationScope) -> rawptr {
+	context = runtime.default_context()
+	memory, err := mem.compat_allocator_proc(user_data, .Alloc, size, alignment, nil, 0)
+	if err != .None {
+		return nil
+	}
+	return raw_data(memory)
+}
+
+mem_realloc :: proc "system" (user_data: rawptr, original: rawptr, size: int, alignment: int, allocation_scope: vk.SystemAllocationScope) -> rawptr {
+	context = runtime.default_context()
+	memory, err := mem.compat_allocator_proc(user_data, .Resize, size, alignment, original, 0)
+	if err != .None {
+		return nil
+	}
+	return raw_data(memory)
+}
+
+mem_free :: proc "system" (user_data: rawptr, memory: rawptr) {
+	context = runtime.default_context()
+	mem.compat_allocator_proc(user_data, .Free, 0, 0, memory, 0)
 }
