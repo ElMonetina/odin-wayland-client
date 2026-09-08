@@ -131,7 +131,6 @@ main :: proc() {
 	swapchain_ci := vki.Swapchain_Create_Info {
 		surface = app.surface,
 		img_ci  = img_ci,
-		buffer_params_flags = {.Y_Invert},
 	}
 	app.swapchain, res = vki.create_swapchain(app.p_device, app.device, app.gfx_queue, swapchain_ci)
 	ensure(res == .SUCCESS)
