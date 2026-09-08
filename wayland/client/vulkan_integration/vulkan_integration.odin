@@ -25,12 +25,7 @@ load_instance_proc_addr :: proc(allocator := context.temp_allocator) -> (vk_lib:
 }
 
 EXT_EXTERNAL_MEMORY_FD :: "VK_KHR_external_memory_fd"
-REQUIRED_DEVICE_EXTENSIONS :: []cstring {
-	vk.EXT_EXTERNAL_MEMORY_DMA_BUF_EXTENSION_NAME,
-	vk.EXT_IMAGE_DRM_FORMAT_MODIFIER_EXTENSION_NAME,
-	vk.KHR_IMAGE_FORMAT_LIST_EXTENSION_NAME,
-	EXT_EXTERNAL_MEMORY_FD,
-}
+REQUIRED_DEVICE_EXTENSIONS :: []cstring{vk.EXT_EXTERNAL_MEMORY_DMA_BUF_EXTENSION_NAME, vk.EXT_IMAGE_DRM_FORMAT_MODIFIER_EXTENSION_NAME, vk.KHR_IMAGE_FORMAT_LIST_EXTENSION_NAME, EXT_EXTERNAL_MEMORY_FD}
 
 // Merged struct for image creation, it includes:
 // - ImageCreateInfo
@@ -64,7 +59,7 @@ Image_Create_Info :: struct {
 	next:                 rawptr,
 }
 
-create_image :: proc(device: vk.Device, create_info: Image_Create_Info, allocator : ^vk.AllocationCallbacks = nil) -> (image: vk.Image, res: vk.Result) {
+create_image :: proc(device: vk.Device, create_info: Image_Create_Info, allocator: ^vk.AllocationCallbacks = nil) -> (image: vk.Image, res: vk.Result) {
 	img_ci := vk.ImageCreateInfo {
 		sType                 = .IMAGE_CREATE_INFO,
 		flags                 = create_info.flags,
@@ -100,18 +95,7 @@ create_image :: proc(device: vk.Device, create_info: Image_Create_Info, allocato
 	return
 }
 
-allocate_image_memory :: proc(
-	p_device: vk.PhysicalDevice,
-	device: vk.Device,
-	image: vk.Image,
-	image_format: vk.Format,
-	image_type: vk.ImageType,
-	usage: vk.ImageUsageFlags,
- allocator : ^vk.AllocationCallbacks = nil,
-) -> (
-	mem: vk.DeviceMemory,
-	res: vk.Result,
-) {
+allocate_image_memory :: proc(p_device: vk.PhysicalDevice, device: vk.Device, image: vk.Image, image_format: vk.Format, image_type: vk.ImageType, usage: vk.ImageUsageFlags, allocator: ^vk.AllocationCallbacks = nil) -> (mem: vk.DeviceMemory, res: vk.Result) {
 	img_mem_reqs := vk.ImageMemoryRequirementsInfo2 {
 		sType = .IMAGE_MEMORY_REQUIREMENTS_INFO_2,
 		image = image,
@@ -234,7 +218,7 @@ Swapchain_Create_Info :: struct {
 	image_count:         uint,
 }
 
-create_swapchain :: proc(p_device: vk.PhysicalDevice, device: vk.Device, queue: vk.Queue, create_info: Swapchain_Create_Info, allocator : ^vk.AllocationCallbacks = nil) -> (sc: Swapchain, res: vk.Result) {
+create_swapchain :: proc(p_device: vk.PhysicalDevice, device: vk.Device, queue: vk.Queue, create_info: Swapchain_Create_Info, allocator: ^vk.AllocationCallbacks = nil) -> (sc: Swapchain, res: vk.Result) {
 	sc.surface = create_info.surface
 	sc.device = device
 	sc.queue = queue
@@ -297,7 +281,7 @@ create_swapchain :: proc(p_device: vk.PhysicalDevice, device: vk.Device, queue: 
 	return
 }
 
-destroy_swapchain :: proc(sc: ^Swapchain, allocator : ^vk.AllocationCallbacks = nil) -> vk.Result {
+destroy_swapchain :: proc(sc: ^Swapchain, allocator: ^vk.AllocationCallbacks = nil) -> vk.Result {
 	// Wait for all in-flight submissions to finish, so no fence is in use and
 	// no command buffer is pending before we tear anything down.
 	vk.DeviceWaitIdle(sc.device) or_return
@@ -358,10 +342,10 @@ make_allocator :: proc(allocator := context.allocator) -> vk.AllocationCallbacks
 	mem.compat_allocator_init(compat, allocator)
 
 	cb: vk.AllocationCallbacks
-	cb.pUserData         = compat
-	cb.pfnAllocation     = mem_allocate
-	cb.pfnReallocation   = mem_realloc
-	cb.pfnFree           = mem_free
+	cb.pUserData = compat
+	cb.pfnAllocation = mem_allocate
+	cb.pfnReallocation = mem_realloc
+	cb.pfnFree = mem_free
 	return cb
 }
 
