@@ -106,9 +106,10 @@ def ident(name: str) -> str:
 # ---------------------------------------------------------------------------
 
 # Populated during parse: (interface_name, enum_name) -> base of owning interface.
-# Used to resolve bitfield <arg enum="..."> references, including fully-qualified
+# Used to resolve <arg enum="..."> references, including fully-qualified
 # cross-interface refs like "wl_data_device_manager.dnd_action".
-BITFIELD_ENUMS = {}     # (iface_name, enum_name) -> owning iface's base
+ENUMS = {}              # (iface_name, enum_name) -> owning iface's base (all enums)
+BITFIELD_ENUMS = {}     # (iface_name, enum_name) -> owning iface's base (those with bitfield="true")
 IFACE_BASE = {}         # iface_name -> base
 IFACE_PKG = {}          # iface_name -> package (cross-package resolution)
 
@@ -158,6 +159,22 @@ def is_bitfield_arg(iface, arg):
     ref = resolve_enum_ref(iface, arg)
     return ref is not None and ref in BITFIELD_ENUMS
 
+def enum_field_type(iface, arg):
+    """Odin enum type for a non-bitfield enum arg (None if not enum-typed).
+
+    Like object ids, the typed field carries the enum's defining package when it
+    lives in a different protocol."""
+    if arg.get("type") not in ("int", "uint"):
+        return None
+    ref = resolve_enum_ref(iface, arg)
+    if ref is None or ref not in ENUMS or ref in BITFIELD_ENUMS:
+        return None
+    iname, ename = ref
+    owner_base = IFACE_BASE[iname]
+    owner_pkg = IFACE_PKG[iname]
+    typ = f"{pascal(owner_base)}_{pascal(ename)}"
+    return typ if owner_pkg == iface.pkg else f"{owner_pkg}.{typ}"
+
 def bitfield_type(iface, arg):
     """The named Odin bit_set type for a bitfield enum arg (e.g. Seat_Capability_Set).
 
@@ -168,12 +185,15 @@ def bitfield_type(iface, arg):
     return f"{pascal(owner_base)}_{pascal(ename)}_Set"
 
 def arg_field_type(iface, arg):
-    """Odin field type for an arg, honoring bitfield enums."""
+    """Odin field type for an arg, honoring bitfield and plain enum args."""
     if is_bitfield_arg(iface, arg):
         return bitfield_type(iface, arg)
     t = arg.get("type")
     if t in ("object", "new_id"):
         return obj_field_type(iface, arg)
+    enum_t = enum_field_type(iface, arg)
+    if enum_t is not None:
+        return enum_t
     return FIELD_TYPE[t]
 
 def obj_field_type(iface, arg):
@@ -207,6 +227,9 @@ def write_stmt(arg, accessor: str, iface=None):
     if iface is not None and is_bitfield_arg(iface, arg):
         # bit_set has no util.write overload; emit the raw u32
         return f"util.write_u32(&msg, transmute(u32){accessor})"
+    if iface is not None and enum_field_type(iface, arg) is not None:
+        # enum arg: cast back to the wire numeric type (int -> i32, uint -> u32)
+        return f"util.write(&msg, {FIELD_TYPE[t]}({accessor}))"
     if iface is not None and t == "object" and obj_field_type(iface, arg) != "u32":
         # object args are typed distinct u32; cast back to the wire u32
         return f"util.write(&msg, u32({accessor}))"
@@ -219,6 +242,11 @@ def decode_stmt(iface, arg):
         # read the raw u32, then cast to the bit_set (underlying u32)
         return (f"\tval_{name}, _ := util.read_u32(data[n:]); n += 4\n"
                 f"\te.{name} = transmute({bitfield_type(iface, arg)})val_{name}")
+    if enum_field_type(iface, arg) is not None:
+        # read the wire numeric type (int/i32, uint/u32), transmute to the enum
+        # (the enum declares a u32 underlying, so 4 bytes either way)
+        return (f"\tval_{name}, _ := util.{READ_FN[t]}(data[n:]); n += 4\n"
+                f"\te.{name} = transmute({enum_field_type(iface, arg)})val_{name}")
     if t in ("object", "new_id") and obj_field_type(iface, arg) != "u32":
         # typed distinct u32: read the wire u32 and cast to the interface type
         return (f"\tval_{name}, _ := util.read_u32(data[n:]); n += 4\n"
@@ -340,6 +368,7 @@ def parse_files(paths):
                 s, d = _desc(en)
                 is_bitfield = en.attrib.get("bitfield") == "true"
                 iface.enums.append((en.attrib["name"], is_bitfield, entries, s, d))
+                ENUMS[(el.attrib["name"], en.attrib["name"])] = True
                 if is_bitfield:
                     BITFIELD_ENUMS[(el.attrib["name"], en.attrib["name"])] = True
             proto.interfaces.append(iface)
@@ -510,6 +539,13 @@ def foreign_pkg_imports(proto):
                     pkg = IFACE_PKG[iname]
                     if pkg != proto.pkg:
                         refs.add(pkg)
+                eref = resolve_enum_ref(iface, a)
+                if eref and eref in ENUMS and eref not in BITFIELD_ENUMS:
+                    iname, _ = eref
+                    if iname in IFACE_PKG:
+                        pkg = IFACE_PKG[iname]
+                        if pkg != proto.pkg:
+                            refs.add(pkg)
     return sorted(refs)
 
 def emit_types(proto):
