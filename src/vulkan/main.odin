@@ -45,6 +45,7 @@ main :: proc() {
 	context.logger = log.create_console_logger()
 
 	app := new(App)
+	defer free(app)
 
 	client_err: client.Error
 	app.client_state, client_err = client.create()
