@@ -154,7 +154,7 @@ create_shm_buffer :: proc(app: ^App) {
 		width    = WIDTH,
 		height   = HEIGHT,
 		stride   = STRIDE,
-		format   = u32(wl.Shm_Format.Xrgb8888),
+		format   = wl.Shm_Format.Xrgb8888,
 	}
 	app.wl_buffer, _ = client.queue_request(&app.wayland, create_buffer)
 }
