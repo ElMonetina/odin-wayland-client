@@ -5,9 +5,9 @@
 !wayland/**/
 !wayland/**/*.odin
 !wayland/**/*.xml
-!src/
-!src/**/
-!src/**/*.odin
+!example/
+!example/**/
+!example/**/*.odin
 !vulkan_integration/
 !vulkan_integration/**
 !README.md
