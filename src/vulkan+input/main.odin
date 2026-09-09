@@ -438,9 +438,7 @@ handle_key :: proc(app: ^App, key: u32, state: wl.Keyboard_Key_State) {
 	if app.xkb_state == nil {
 		return
 	}
-	// Wayland sends raw evdev scancodes; xkbcommon's keycode space is offset
-	// by +8 (see the xkb_v1 summary in the protocol), so adjust before feeding
-	// the keymap/state machine.
+
 	kc := xkb.keycode_t(key) + 8
 	direction := xkb.key_direction.DOWN if state == .Pressed || state == .Repeated else .UP
 	xkb.state_update_key(app.xkb_state, kc, direction)
