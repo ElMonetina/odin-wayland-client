@@ -5,6 +5,7 @@
 !wayland/**/
 !wayland/**/*.odin
 !wayland/**/*.xml
+!wayland/client/generator.py
 !example/
 !example/**/
 !example/**/*.odin
