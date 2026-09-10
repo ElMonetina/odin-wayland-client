@@ -214,7 +214,7 @@ Swapchain :: struct {
 Swapchain_Create_Info :: struct {
 	surface:             Surface,
 	buffer_params_flags: dmabuf.Buffer_Params_Flags_Set,
-	img_ci:              Image_Create_Info,
+	image_create_info:   Image_Create_Info,
 	image_count:         uint,
 }
 
@@ -223,8 +223,8 @@ create_swapchain :: proc(p_device: vk.PhysicalDevice, device: vk.Device, queue: 
 	sc.device = device
 	sc.queue = queue
 
-	fourcc := fourcc_from_vulkan(create_info.img_ci.format)
-	stride := u32(create_info.img_ci.plane_layouts[0].rowPitch)
+	fourcc := fourcc_from_vulkan(create_info.image_create_info.format)
+	stride := u32(create_info.image_create_info.plane_layouts[0].rowPitch)
 	image_count := create_info.image_count
 	if image_count == 0 {
 		image_count = 2
@@ -239,8 +239,8 @@ create_swapchain :: proc(p_device: vk.PhysicalDevice, device: vk.Device, queue: 
 
 
 	for i in 0 ..< image_count {
-		sc.images[i] = create_image(device, create_info.img_ci, allocator) or_return
-		sc.images_mem[i] = allocate_image_memory(p_device, device, sc.images[i], create_info.img_ci.format, create_info.img_ci.type, create_info.img_ci.usage) or_return
+		sc.images[i] = create_image(device, create_info.image_create_info, allocator) or_return
+		sc.images_mem[i] = allocate_image_memory(p_device, device, sc.images[i], create_info.image_create_info.format, create_info.image_create_info.type, create_info.image_create_info.usage) or_return
 		vk.BindImageMemory(device, sc.images[i], sc.images_mem[i], 0) or_return
 		sc.dmabuf_fd[i] = query_memory_fd(device, sc.images_mem[i]) or_return
 
@@ -255,8 +255,8 @@ create_swapchain :: proc(p_device: vk.PhysicalDevice, device: vk.Device, queue: 
 			fd            = sc.dmabuf_fd[i],
 			offset        = 0,
 			stride        = stride,
-			modifier_lo   = u32(create_info.img_ci.drm_format_modifier),
-			modifier_hi   = u32(create_info.img_ci.drm_format_modifier >> 32),
+			modifier_lo   = u32(create_info.image_create_info.drm_format_modifier),
+			modifier_hi   = u32(create_info.image_create_info.drm_format_modifier >> 32),
 		}
 		client.queue_request(create_info.surface.client, params_add)
 
