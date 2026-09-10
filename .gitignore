@@ -11,4 +11,3 @@
 !vulkan_integration/
 !vulkan_integration/**
 !README.md
-wayland/**/generated.odin
