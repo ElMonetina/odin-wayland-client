@@ -116,25 +116,23 @@ IFACE_PKG = {}          # iface_name -> package (cross-package resolution)
 FIELD_TYPE = {
     "int":    "i32",
     "uint":   "u32",
-    "fixed":  "i32",
+    "fixed":  "util.Fixed",
     "object": "u32",
     "new_id": "u32",
     "string": "string",
     "array":  "[]u8",
     "fd":     "linux.Fd",
-    "fixed":  "util.Fixed",
 }
 
 READ_FN = {
     "int":    "read_i32",
     "uint":   "read_u32",
-    "fixed":  "read_i32",
+    "fixed":  "read_fixed",
     "object": "read_u32",
     "new_id": "read_u32",
     "string": "read_string",
     "array":  "read_array",
     "fd":     None,       # fds arrive via SCM_RIGHTS, not the message body
-    "fixed":  "read_fixed"
 }
 
 def resolve_enum_ref(iface, arg):
