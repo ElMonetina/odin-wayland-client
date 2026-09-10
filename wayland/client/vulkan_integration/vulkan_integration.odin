@@ -1,7 +1,7 @@
 /*
 This package is a replacement for the default mesa WSI.
 Since we do not use libwayland, we can't have the niceties mesa gives us,
-like image memory allocation and swapchain management. 
+like image memory allocation and swapchain management.
 */
 package vulkan_integration
 
@@ -244,7 +244,6 @@ create_swapchain :: proc(p_device: vk.PhysicalDevice, device: vk.Device, queue: 
 		vk.BindImageMemory(device, sc.images[i], sc.images_mem[i], 0) or_return
 		sc.dmabuf_fd[i] = query_memory_fd(device, sc.images_mem[i]) or_return
 
-		// Register the fd as a dmabuf buffer with the compositor.
 		create_params := dmabuf.Dmabuf_Create_Params_Request {
 			dmabuf = create_info.surface.linux_dmabuf,
 		}
@@ -282,12 +281,9 @@ create_swapchain :: proc(p_device: vk.PhysicalDevice, device: vk.Device, queue: 
 }
 
 destroy_swapchain :: proc(sc: ^Swapchain, allocator: ^vk.AllocationCallbacks = nil) -> vk.Result {
-	// Wait for all in-flight submissions to finish, so no fence is in use and
-	// no command buffer is pending before we tear anything down.
 	vk.DeviceWaitIdle(sc.device) or_return
 
 	for i in 0 ..< len(sc.images) {
-		// Tell the compositor to release the buffer + params, then drop our fd.
 		destroy := wl.Buffer_Destroy_Request {
 			buffer = sc.wl_buffers[i],
 		}
@@ -336,8 +332,6 @@ swapchain_present :: proc(sc: ^Swapchain, idx: int, submit_info: []vk.SubmitInfo
 }
 
 make_allocator :: proc(allocator := context.allocator) -> vk.AllocationCallbacks {
-	// The Compat_Allocator must outlive the callbacks, so it lives on the heap
-	// and is reached via pUserData. The callbacks never free it themselves.
 	compat := new(mem.Compat_Allocator, allocator)
 	mem.compat_allocator_init(compat, allocator)
 
