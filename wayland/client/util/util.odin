@@ -2,6 +2,7 @@ package util
 
 import "core:mem"
 import "core:math/fixed"
+import "base:runtime"
 
 Fixed :: distinct fixed.Fixed(i32, 8)
 
@@ -15,52 +16,56 @@ write :: proc {
 	write_fixed,
 }
 
-write_header :: proc(msg: ^[dynamic]byte, object: u32, opcode, size: u16) {
-	write_u32(msg, object)
-	write_u16(msg, opcode)
-	write_u16(msg, size)
+write_header :: proc(msg: ^[dynamic]byte, object: u32, opcode, size: u16) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
+	num_appended  = write_u32(msg, object) or_return
+	num_appended += write_u16(msg, opcode) or_return
+	num_appended += write_u16(msg, size) or_return
+	return
 }
 
-write_u16 :: proc(msg: ^[dynamic]byte, n: u16) {
+write_u16 :: proc(msg: ^[dynamic]byte, n: u16) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
 	n := n
-	append(msg, ..mem.ptr_to_bytes(&n))
+	return append(msg, ..mem.ptr_to_bytes(&n))
 }
 
-write_u32 :: proc(msg: ^[dynamic]byte, n: u32) {
+write_u32 :: proc(msg: ^[dynamic]byte, n: u32) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
 	n := n
-	append(msg, ..mem.ptr_to_bytes(&n))
+	return append(msg, ..mem.ptr_to_bytes(&n))
 }
 
-write_i32 :: proc(msg: ^[dynamic]byte, n: i32) {
+write_i32 :: proc(msg: ^[dynamic]byte, n: i32) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
 	n := n
-	append(msg, ..mem.ptr_to_bytes(&n))
+	return append(msg, ..mem.ptr_to_bytes(&n))
 }
 
-write_array :: proc(msg: ^[dynamic]byte, arr: []byte) {
-	write_u32(msg, u32(len(arr)))
-	append(msg, ..arr[:])
-	write_padding(msg, round_up_word(len(arr)))
+write_array :: proc(msg: ^[dynamic]byte, arr: []byte) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
+	num_appended  = write_u32(msg, u32(len(arr)))
+	num_appended += append(msg, ..arr[:])
+	num_appended += write_padding(msg, round_up_word(len(arr)))
+	return
 }
 
-write_string :: proc(msg: ^[dynamic]byte, str: string) {
-	length := len(str) + 1
-	write_u32(msg, u32(length))
-	str := transmute([]byte)str
-	append(msg, ..str[:])
-	append(msg, 0)
-	n_pad := round_up_word((length))
-	write_padding(msg, n_pad)
+write_string :: proc(msg: ^[dynamic]byte, str: string) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
+	str := transmute(runtime.Raw_String)str
+	num_appended  = write_u32(msg, u32(str.len + 1))or_return
+	num_appended += append(msg, ..str.data[:str.len])or_return
+	num_appended += append(msg, 0)or_return
+	n_pad := round_up_word(str.len + 1)
+	num_appended += write_padding(msg, n_pad)or_return
+	return 
 }
 
-write_fixed :: proc(msg: ^[dynamic]byte, f: Fixed) {
-	write(msg, f.i)
+write_fixed :: proc(msg: ^[dynamic]byte, f: Fixed) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
+	return write(msg, f.i)
 }
 
-write_padding :: proc(msg: ^[dynamic]byte, n: int) {
+write_padding :: proc(msg: ^[dynamic]byte, n: int) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
 	for i in 0 ..< n {
 		padding: byte
-		append(msg, padding)
+		append(msg, padding) or_return
 	}
+	num_appended = n
+	return
 }
 
 read_header :: proc(msg: []byte) -> (u32, u16, u16, int) {
