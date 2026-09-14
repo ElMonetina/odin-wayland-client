@@ -74,8 +74,8 @@ read_header :: proc(msg: []byte) -> (u32, u16, u16, int) {
 	r: int
 	n := r
 	object_id, r = read_u32(msg[n:]); n += r
-	opcode, r = read_u16(msg[n:]); n += r
-	size, r = read_u16(msg[n:]); n += r
+	opcode, r    = read_u16(msg[n:]); n += r
+	size, r      = read_u16(msg[n:]); n += r
 	return object_id, opcode, size, n
 }
 
@@ -96,14 +96,14 @@ read_string :: proc(msg: []byte) -> (string, int) {
 	if strlen == 0 {
 		return "", read
 	}
-	n := int(strlen)
+	n   := int(strlen)
 	str := string(msg[read:read + n - 1])
 	return str, read + n + round_up_word(n)
 }
 
 read_array :: proc(msg: []byte) -> (arr: []byte, consumed: int) {
 	length, read := read_u32(msg)
-	n := int(length)
+	n  := int(length)
 	arr = msg[read:read + n]
 	return arr, read + n + round_up_word(n)
 }
@@ -128,7 +128,7 @@ Cmsghdr :: struct {
 SCM_RIGHTS :: 1
 
 CMSG_ALIGN :: #force_inline proc(n: uint) -> uint {return (n + 7) &~ 7}
-CMSG_LEN :: #force_inline proc(n: uint) -> uint {return CMSG_ALIGN(size_of(Cmsghdr) + n)}
+CMSG_LEN   :: #force_inline proc(n: uint) -> uint {return CMSG_ALIGN(size_of(Cmsghdr) + n)}
 CMSG_SPACE :: #force_inline proc(n: uint) -> uint {return CMSG_ALIGN(size_of(Cmsghdr) + CMSG_ALIGN(n))}
 
 compute_string_size :: proc(str: string) -> int {
