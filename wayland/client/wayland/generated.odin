@@ -26,154 +26,36 @@ package wayland
 // SOFTWARE.
 
 import util "../util"
-import "core:bytes"
-import "core:mem"
-import "core:strings"
+import "base:runtime"
 import "core:sys/linux"
 
 // The core global object, it is always defined to be equal to 1
 @(rodata)
-display := u32(1)
+display := Display(1)
 
-Request :: union #no_nil {
-	Display_Sync_Request,
-	Display_Get_Registry_Request,
-	Registry_Bind_Request,
-	Compositor_Create_Surface_Request,
-	Compositor_Create_Region_Request,
-	Compositor_Release_Request,
-	Shm_Pool_Create_Buffer_Request,
-	Shm_Pool_Destroy_Request,
-	Shm_Pool_Resize_Request,
-	Shm_Create_Pool_Request,
-	Shm_Release_Request,
-	Buffer_Destroy_Request,
-	Data_Offer_Accept_Request,
-	Data_Offer_Receive_Request,
-	Data_Offer_Destroy_Request,
-	Data_Offer_Finish_Request,
-	Data_Offer_Set_Actions_Request,
-	Data_Source_Offer_Request,
-	Data_Source_Destroy_Request,
-	Data_Source_Set_Actions_Request,
-	Data_Device_Start_Drag_Request,
-	Data_Device_Set_Selection_Request,
-	Data_Device_Release_Request,
-	Data_Device_Manager_Create_Data_Source_Request,
-	Data_Device_Manager_Get_Data_Device_Request,
-	Data_Device_Manager_Release_Request,
-	Shell_Get_Shell_Surface_Request,
-	Shell_Surface_Pong_Request,
-	Shell_Surface_Move_Request,
-	Shell_Surface_Resize_Request,
-	Shell_Surface_Set_Toplevel_Request,
-	Shell_Surface_Set_Transient_Request,
-	Shell_Surface_Set_Fullscreen_Request,
-	Shell_Surface_Set_Popup_Request,
-	Shell_Surface_Set_Maximized_Request,
-	Shell_Surface_Set_Title_Request,
-	Shell_Surface_Set_Class_Request,
-	Surface_Destroy_Request,
-	Surface_Attach_Request,
-	Surface_Damage_Request,
-	Surface_Frame_Request,
-	Surface_Set_Opaque_Region_Request,
-	Surface_Set_Input_Region_Request,
-	Surface_Commit_Request,
-	Surface_Set_Buffer_Transform_Request,
-	Surface_Set_Buffer_Scale_Request,
-	Surface_Damage_Buffer_Request,
-	Surface_Offset_Request,
-	Surface_Get_Release_Request,
-	Seat_Get_Pointer_Request,
-	Seat_Get_Keyboard_Request,
-	Seat_Get_Touch_Request,
-	Seat_Release_Request,
-	Pointer_Set_Cursor_Request,
-	Pointer_Release_Request,
-	Keyboard_Release_Request,
-	Touch_Release_Request,
-	Output_Release_Request,
-	Region_Destroy_Request,
-	Region_Add_Request,
-	Region_Subtract_Request,
-	Subcompositor_Destroy_Request,
-	Subcompositor_Get_Subsurface_Request,
-	Subsurface_Destroy_Request,
-	Subsurface_Set_Position_Request,
-	Subsurface_Place_Above_Request,
-	Subsurface_Place_Below_Request,
-	Subsurface_Set_Sync_Request,
-	Subsurface_Set_Desync_Request,
-	Fixes_Destroy_Request,
-	Fixes_Destroy_Registry_Request,
-	Fixes_Ack_Global_Remove_Request,
-}
-
-Event :: union #no_nil {
-	Display_Error_Event,
-	Display_Delete_Id_Event,
-	Registry_Global_Event,
-	Registry_Global_Remove_Event,
-	Callback_Done_Event,
-	Shm_Format_Event,
-	Buffer_Release_Event,
-	Data_Offer_Offer_Event,
-	Data_Offer_Source_Actions_Event,
-	Data_Offer_Action_Event,
-	Data_Source_Target_Event,
-	Data_Source_Send_Event,
-	Data_Source_Cancelled_Event,
-	Data_Source_Dnd_Drop_Performed_Event,
-	Data_Source_Dnd_Finished_Event,
-	Data_Source_Action_Event,
-	Data_Device_Data_Offer_Event,
-	Data_Device_Enter_Event,
-	Data_Device_Leave_Event,
-	Data_Device_Motion_Event,
-	Data_Device_Drop_Event,
-	Data_Device_Selection_Event,
-	Shell_Surface_Ping_Event,
-	Shell_Surface_Configure_Event,
-	Shell_Surface_Popup_Done_Event,
-	Surface_Enter_Event,
-	Surface_Leave_Event,
-	Surface_Preferred_Buffer_Scale_Event,
-	Surface_Preferred_Buffer_Transform_Event,
-	Seat_Capabilities_Event,
-	Seat_Name_Event,
-	Pointer_Enter_Event,
-	Pointer_Leave_Event,
-	Pointer_Motion_Event,
-	Pointer_Button_Event,
-	Pointer_Axis_Event,
-	Pointer_Frame_Event,
-	Pointer_Axis_Source_Event,
-	Pointer_Axis_Stop_Event,
-	Pointer_Axis_Discrete_Event,
-	Pointer_Axis_Value120_Event,
-	Pointer_Axis_Relative_Direction_Event,
-	Pointer_Warp_Event,
-	Keyboard_Keymap_Event,
-	Keyboard_Enter_Event,
-	Keyboard_Leave_Event,
-	Keyboard_Key_Event,
-	Keyboard_Modifiers_Event,
-	Keyboard_Repeat_Info_Event,
-	Touch_Down_Event,
-	Touch_Up_Event,
-	Touch_Motion_Event,
-	Touch_Frame_Event,
-	Touch_Cancel_Event,
-	Touch_Shape_Event,
-	Touch_Orientation_Event,
-	Output_Geometry_Event,
-	Output_Mode_Event,
-	Output_Done_Event,
-	Output_Scale_Event,
-	Output_Name_Event,
-	Output_Description_Event,
-}
+Display :: distinct u32
+Registry :: distinct u32
+Callback :: distinct u32
+Compositor :: distinct u32
+Shm_Pool :: distinct u32
+Shm :: distinct u32
+Buffer :: distinct u32
+Data_Offer :: distinct u32
+Data_Source :: distinct u32
+Data_Device :: distinct u32
+Data_Device_Manager :: distinct u32
+Shell :: distinct u32
+Shell_Surface :: distinct u32
+Surface :: distinct u32
+Seat :: distinct u32
+Pointer :: distinct u32
+Keyboard :: distinct u32
+Touch :: distinct u32
+Output :: distinct u32
+Region :: distinct u32
+Subcompositor :: distinct u32
+Subsurface :: distinct u32
+Fixes :: distinct u32
 
 // core global object
 // The core global object.  This is a special singleton object.  It
@@ -181,6 +63,7 @@ Event :: union #no_nil {
 DISPLAY_INTERFACE :: "wl_display"
 DISPLAY_VERSION :: 1
 
+DISPLAY_SYNC_OPCODE :: 0
 // asynchronous roundtrip
 // The sync request asks the server to emit the 'done' event
 // on the returned wl_callback object.  Since requests are
@@ -191,21 +74,19 @@ DISPLAY_VERSION :: 1
 // compositor after the callback is fired and as such the client must not
 // attempt to use it after that point.
 // The callback_data passed in the callback is undefined and should be ignored.
-DISPLAY_SYNC_OPCODE :: 0
 Display_Sync_Request :: struct {
-	display : u32,
+	display : Display,  // the object this event/request concerns
 }
-display_sync_encode :: proc(req: Display_Sync_Request, new_id: u32, allocator: mem.Allocator) -> (encoded: []byte, err: mem.Allocator_Error) {
-	object := req.display
+display_sync_write :: proc(buf: ^[dynamic]byte, req: Display_Sync_Request, new_id: u32) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
+	object := u32(req.display)
 	opcode := u16(DISPLAY_SYNC_OPCODE)
 	size := u16(8 + size_of(new_id))
-	msg := make([dynamic]byte, 0, size, allocator) or_return
-	util.write(&msg, object, opcode, size)
-	util.write(&msg, new_id)
-	encoded = msg[:]
+	num_appended = util.write(buf, object, opcode, size) or_return
+	num_appended += util.write(buf, new_id) or_return
 	return
 }
 
+DISPLAY_GET_REGISTRY_OPCODE :: 1
 // get global registry object
 // This request creates a registry object that allows the client
 // to list and bind the global objects available from the
@@ -215,21 +96,19 @@ display_sync_encode :: proc(req: Display_Sync_Request, new_id: u32, allocator: m
 // client disconnects, not when the client side proxy is destroyed.
 // Therefore, clients should invoke get_registry as infrequently as
 // possible to avoid wasting memory.
-DISPLAY_GET_REGISTRY_OPCODE :: 1
 Display_Get_Registry_Request :: struct {
-	display : u32,
+	display : Display,  // the object this event/request concerns
 }
-display_get_registry_encode :: proc(req: Display_Get_Registry_Request, new_id: u32, allocator: mem.Allocator) -> (encoded: []byte, err: mem.Allocator_Error) {
-	object := req.display
+display_get_registry_write :: proc(buf: ^[dynamic]byte, req: Display_Get_Registry_Request, new_id: u32) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
+	object := u32(req.display)
 	opcode := u16(DISPLAY_GET_REGISTRY_OPCODE)
 	size := u16(8 + size_of(new_id))
-	msg := make([dynamic]byte, 0, size, allocator) or_return
-	util.write(&msg, object, opcode, size)
-	util.write(&msg, new_id)
-	encoded = msg[:]
+	num_appended = util.write(buf, object, opcode, size) or_return
+	num_appended += util.write(buf, new_id) or_return
 	return
 }
 
+DISPLAY_ERROR_OPCODE :: 0
 // fatal error event
 // The error event is sent out when a fatal (non-recoverable)
 // error has occurred.  The object_id argument is the object
@@ -238,23 +117,23 @@ display_get_registry_encode :: proc(req: Display_Get_Registry_Request, new_id: u
 // by the object interface.  As such, each interface defines its
 // own set of error codes.  The message is a brief description
 // of the error, for (debugging) convenience.
-DISPLAY_ERROR_OPCODE :: 0
 Display_Error_Event :: struct {
+	display   : Display,  // the object this event/request concerns
 	object_id : u32,  // object where the error occurred
 	code      : u32,  // error code
 	message   : string,  // error description
 }
-display_error_decode :: proc(data: []byte, allocator: mem.Allocator) -> Display_Error_Event {
+display_error_read :: proc(data: []byte) -> (Display_Error_Event, int) {
 	e: Display_Error_Event
 	r: int
 	n := r
 	e.object_id, r = util.read_u32(data[n:]); n += r
 	e.code, r = util.read_u32(data[n:]); n += r
 	e.message, r = util.read_string(data[n:]); n += r
-	e.message = strings.clone(e.message, allocator)
-	return e
+	return e, n
 }
 
+DISPLAY_DELETE_ID_OPCODE :: 1
 // acknowledge object ID deletion
 // This event is used internally by the object ID management logic.
 // When the server stops using an object created by the client, the server
@@ -263,16 +142,16 @@ display_error_decode :: proc(data: []byte, allocator: mem.Allocator) -> Display_
 // or as an argument.
 // When the client receives this event, it knows that it can reuse the
 // object ID.
-DISPLAY_DELETE_ID_OPCODE :: 1
 Display_Delete_Id_Event :: struct {
-	id : u32,  // deleted object ID
+	display : Display,  // the object this event/request concerns
+	id      : u32,  // deleted object ID
 }
-display_delete_id_decode :: proc(data: []byte) -> Display_Delete_Id_Event {
+display_delete_id_read :: proc(data: []byte) -> (Display_Delete_Id_Event, int) {
 	e: Display_Delete_Id_Event
 	r: int
 	n := r
 	e.id, r = util.read_u32(data[n:]); n += r
-	return e
+	return e, n
 }
 
 // global error values
@@ -307,52 +186,51 @@ Display_Error :: enum u32 {
 REGISTRY_INTERFACE :: "wl_registry"
 REGISTRY_VERSION :: 1
 
+REGISTRY_BIND_OPCODE :: 0
 // bind an object to the display
 // Binds a new, client-created object to the server using the
 // specified name as the identifier.
-REGISTRY_BIND_OPCODE :: 0
 Registry_Bind_Request :: struct {
-	registry  : u32,
+	registry  : Registry,  // the object this event/request concerns
 	name      : u32,
 	interface : string,
 	version   : u32,
 }
-registry_bind_encode :: proc(req: Registry_Bind_Request, new_id: u32, allocator: mem.Allocator) -> (encoded: []byte, err: mem.Allocator_Error) {
-	object := req.registry
+registry_bind_write :: proc(buf: ^[dynamic]byte, req: Registry_Bind_Request, new_id: u32) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
+	object := u32(req.registry)
 	opcode := u16(REGISTRY_BIND_OPCODE)
 	size := u16(8 + size_of(req.name) + util.compute_string_size(req.interface) + size_of(req.version) + size_of(new_id))
-	msg := make([dynamic]byte, 0, size, allocator) or_return
-	util.write(&msg, object, opcode, size)
-	util.write(&msg, req.name)
-	util.write(&msg, req.interface)
-	util.write(&msg, req.version)
-	util.write(&msg, new_id)
-	encoded = msg[:]
+	num_appended = util.write(buf, object, opcode, size) or_return
+	num_appended += util.write(buf, req.name) or_return
+	num_appended += util.write(buf, req.interface) or_return
+	num_appended += util.write(buf, req.version) or_return
+	num_appended += util.write(buf, new_id) or_return
 	return
 }
 
+REGISTRY_GLOBAL_OPCODE :: 0
 // announce global object
 // Notify the client of global objects.
 // The event notifies the client that a global object with
 // the given name is now available, and it implements the
 // given version of the given interface.
-REGISTRY_GLOBAL_OPCODE :: 0
 Registry_Global_Event :: struct {
+	registry  : Registry,  // the object this event/request concerns
 	name      : u32,  // numeric name of the global object
 	interface : string,  // interface implemented by the object
 	version   : u32,  // interface version
 }
-registry_global_decode :: proc(data: []byte, allocator: mem.Allocator) -> Registry_Global_Event {
+registry_global_read :: proc(data: []byte) -> (Registry_Global_Event, int) {
 	e: Registry_Global_Event
 	r: int
 	n := r
 	e.name, r = util.read_u32(data[n:]); n += r
 	e.interface, r = util.read_string(data[n:]); n += r
-	e.interface = strings.clone(e.interface, allocator)
 	e.version, r = util.read_u32(data[n:]); n += r
-	return e
+	return e, n
 }
 
+REGISTRY_GLOBAL_REMOVE_OPCODE :: 1
 // announce removal of global object
 // Notify the client of removed global objects.
 // This event notifies the client that the global identified
@@ -362,16 +240,16 @@ registry_global_decode :: proc(data: []byte, allocator: mem.Allocator) -> Regist
 // The object remains valid and requests to the object will be
 // ignored until the client destroys it, to avoid races between
 // the global going away and a client sending a request to it.
-REGISTRY_GLOBAL_REMOVE_OPCODE :: 1
 Registry_Global_Remove_Event :: struct {
-	name : u32,  // numeric name of the global object
+	registry : Registry,  // the object this event/request concerns
+	name     : u32,  // numeric name of the global object
 }
-registry_global_remove_decode :: proc(data: []byte) -> Registry_Global_Remove_Event {
+registry_global_remove_read :: proc(data: []byte) -> (Registry_Global_Remove_Event, int) {
 	e: Registry_Global_Remove_Event
 	r: int
 	n := r
 	e.name, r = util.read_u32(data[n:]); n += r
-	return e
+	return e, n
 }
 
 // callback object
@@ -382,18 +260,19 @@ registry_global_remove_decode :: proc(data: []byte) -> Registry_Global_Remove_Ev
 CALLBACK_INTERFACE :: "wl_callback"
 CALLBACK_VERSION :: 1
 
+CALLBACK_DONE_OPCODE :: 0
 // done event
 // Notify the client when the related request is done.
-CALLBACK_DONE_OPCODE :: 0
 Callback_Done_Event :: struct {
+	callback      : Callback,  // the object this event/request concerns
 	callback_data : u32,  // request-specific data for the callback
 }
-callback_done_decode :: proc(data: []byte) -> Callback_Done_Event {
+callback_done_read :: proc(data: []byte) -> (Callback_Done_Event, int) {
 	e: Callback_Done_Event
 	r: int
 	n := r
 	e.callback_data, r = util.read_u32(data[n:]); n += r
-	return e
+	return e, n
 }
 
 // the compositor singleton
@@ -403,53 +282,47 @@ callback_done_decode :: proc(data: []byte) -> Callback_Done_Event {
 COMPOSITOR_INTERFACE :: "wl_compositor"
 COMPOSITOR_VERSION :: 7
 
+COMPOSITOR_CREATE_SURFACE_OPCODE :: 0
 // create new surface
 // Ask the compositor to create a new surface.
-COMPOSITOR_CREATE_SURFACE_OPCODE :: 0
 Compositor_Create_Surface_Request :: struct {
-	compositor : u32,
+	compositor : Compositor,  // the object this event/request concerns
 }
-compositor_create_surface_encode :: proc(req: Compositor_Create_Surface_Request, new_id: u32, allocator: mem.Allocator) -> (encoded: []byte, err: mem.Allocator_Error) {
-	object := req.compositor
+compositor_create_surface_write :: proc(buf: ^[dynamic]byte, req: Compositor_Create_Surface_Request, new_id: u32) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
+	object := u32(req.compositor)
 	opcode := u16(COMPOSITOR_CREATE_SURFACE_OPCODE)
 	size := u16(8 + size_of(new_id))
-	msg := make([dynamic]byte, 0, size, allocator) or_return
-	util.write(&msg, object, opcode, size)
-	util.write(&msg, new_id)
-	encoded = msg[:]
+	num_appended = util.write(buf, object, opcode, size) or_return
+	num_appended += util.write(buf, new_id) or_return
 	return
 }
 
+COMPOSITOR_CREATE_REGION_OPCODE :: 1
 // create new region
 // Ask the compositor to create a new region.
-COMPOSITOR_CREATE_REGION_OPCODE :: 1
 Compositor_Create_Region_Request :: struct {
-	compositor : u32,
+	compositor : Compositor,  // the object this event/request concerns
 }
-compositor_create_region_encode :: proc(req: Compositor_Create_Region_Request, new_id: u32, allocator: mem.Allocator) -> (encoded: []byte, err: mem.Allocator_Error) {
-	object := req.compositor
+compositor_create_region_write :: proc(buf: ^[dynamic]byte, req: Compositor_Create_Region_Request, new_id: u32) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
+	object := u32(req.compositor)
 	opcode := u16(COMPOSITOR_CREATE_REGION_OPCODE)
 	size := u16(8 + size_of(new_id))
-	msg := make([dynamic]byte, 0, size, allocator) or_return
-	util.write(&msg, object, opcode, size)
-	util.write(&msg, new_id)
-	encoded = msg[:]
+	num_appended = util.write(buf, object, opcode, size) or_return
+	num_appended += util.write(buf, new_id) or_return
 	return
 }
 
+COMPOSITOR_RELEASE_OPCODE :: 2
 // destroy wl_compositor
 // This request destroys the wl_compositor. This has no effect on any other objects.
-COMPOSITOR_RELEASE_OPCODE :: 2
 Compositor_Release_Request :: struct {
-	compositor : u32,
+	compositor : Compositor,  // the object this event/request concerns
 }
-compositor_release_encode :: proc(req: Compositor_Release_Request, allocator: mem.Allocator) -> (encoded: []byte, err: mem.Allocator_Error) {
-	object := req.compositor
+compositor_release_write :: proc(buf: ^[dynamic]byte, req: Compositor_Release_Request) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
+	object := u32(req.compositor)
 	opcode := u16(COMPOSITOR_RELEASE_OPCODE)
 	size := u16(8)
-	msg := make([dynamic]byte, 0, size, allocator) or_return
-	util.write(&msg, object, opcode, size)
-	encoded = msg[:]
+	num_appended = util.write(buf, object, opcode, size) or_return
 	return
 }
 
@@ -464,6 +337,7 @@ compositor_release_encode :: proc(req: Compositor_Release_Request, allocator: me
 SHM_POOL_INTERFACE :: "wl_shm_pool"
 SHM_POOL_VERSION :: 3
 
+SHM_POOL_CREATE_BUFFER_OPCODE :: 0
 // create a buffer from the pool
 // Create a wl_buffer object from the pool.
 // The buffer is created offset bytes into the pool and has
@@ -474,50 +348,46 @@ SHM_POOL_VERSION :: 3
 // A buffer will keep a reference to the pool it was created from
 // so it is valid to destroy the pool immediately after creating
 // a buffer from it.
-SHM_POOL_CREATE_BUFFER_OPCODE :: 0
 Shm_Pool_Create_Buffer_Request :: struct {
-	shm_pool : u32,
+	shm_pool : Shm_Pool,  // the object this event/request concerns
 	offset   : i32,  // buffer byte offset within the pool
 	width    : i32,  // buffer width, in pixels
 	height   : i32,  // buffer height, in pixels
 	stride   : i32,  // number of bytes from the beginning of one row to the beginning of the next row
-	format   : u32,  // buffer pixel format
+	format   : Shm_Format,  // buffer pixel format
 }
-shm_pool_create_buffer_encode :: proc(req: Shm_Pool_Create_Buffer_Request, new_id: u32, allocator: mem.Allocator) -> (encoded: []byte, err: mem.Allocator_Error) {
-	object := req.shm_pool
+shm_pool_create_buffer_write :: proc(buf: ^[dynamic]byte, req: Shm_Pool_Create_Buffer_Request, new_id: u32) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
+	object := u32(req.shm_pool)
 	opcode := u16(SHM_POOL_CREATE_BUFFER_OPCODE)
 	size := u16(8 + size_of(new_id) + size_of(req.offset) + size_of(req.width) + size_of(req.height) + size_of(req.stride) + size_of(req.format))
-	msg := make([dynamic]byte, 0, size, allocator) or_return
-	util.write(&msg, object, opcode, size)
-	util.write(&msg, new_id)
-	util.write(&msg, req.offset)
-	util.write(&msg, req.width)
-	util.write(&msg, req.height)
-	util.write(&msg, req.stride)
-	util.write(&msg, req.format)
-	encoded = msg[:]
+	num_appended = util.write(buf, object, opcode, size) or_return
+	num_appended += util.write(buf, new_id) or_return
+	num_appended += util.write(buf, req.offset) or_return
+	num_appended += util.write(buf, req.width) or_return
+	num_appended += util.write(buf, req.height) or_return
+	num_appended += util.write(buf, req.stride) or_return
+	num_appended += util.write(buf, u32(req.format)) or_return
 	return
 }
 
+SHM_POOL_DESTROY_OPCODE :: 1
 // destroy the pool
 // Destroy the shared memory pool.
 // The mmapped memory will be released when all
 // buffers that have been created from this pool
 // are gone.
-SHM_POOL_DESTROY_OPCODE :: 1
 Shm_Pool_Destroy_Request :: struct {
-	shm_pool : u32,
+	shm_pool : Shm_Pool,  // the object this event/request concerns
 }
-shm_pool_destroy_encode :: proc(req: Shm_Pool_Destroy_Request, allocator: mem.Allocator) -> (encoded: []byte, err: mem.Allocator_Error) {
-	object := req.shm_pool
+shm_pool_destroy_write :: proc(buf: ^[dynamic]byte, req: Shm_Pool_Destroy_Request) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
+	object := u32(req.shm_pool)
 	opcode := u16(SHM_POOL_DESTROY_OPCODE)
 	size := u16(8)
-	msg := make([dynamic]byte, 0, size, allocator) or_return
-	util.write(&msg, object, opcode, size)
-	encoded = msg[:]
+	num_appended = util.write(buf, object, opcode, size) or_return
 	return
 }
 
+SHM_POOL_RESIZE_OPCODE :: 2
 // change the size of the pool mapping
 // This request will cause the server to remap the backing memory
 // for the pool from the file descriptor passed when the pool was
@@ -528,19 +398,16 @@ shm_pool_destroy_encode :: proc(req: Shm_Pool_Destroy_Request, allocator: mem.Al
 // file descriptor passed at creation time. It is the client's
 // responsibility to ensure that the file is at least as big as
 // the new pool size.
-SHM_POOL_RESIZE_OPCODE :: 2
 Shm_Pool_Resize_Request :: struct {
-	shm_pool : u32,
+	shm_pool : Shm_Pool,  // the object this event/request concerns
 	size     : i32,  // new size of the pool, in bytes
 }
-shm_pool_resize_encode :: proc(req: Shm_Pool_Resize_Request, allocator: mem.Allocator) -> (encoded: []byte, err: mem.Allocator_Error) {
-	object := req.shm_pool
+shm_pool_resize_write :: proc(buf: ^[dynamic]byte, req: Shm_Pool_Resize_Request) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
+	object := u32(req.shm_pool)
 	opcode := u16(SHM_POOL_RESIZE_OPCODE)
 	size := u16(8 + size_of(req.size))
-	msg := make([dynamic]byte, 0, size, allocator) or_return
-	util.write(&msg, object, opcode, size)
-	util.write(&msg, req.size)
-	encoded = msg[:]
+	num_appended = util.write(buf, object, opcode, size) or_return
+	num_appended += util.write(buf, req.size) or_return
 	return
 }
 
@@ -562,48 +429,45 @@ Shm_Pool_Error :: enum u32 {
 SHM_INTERFACE :: "wl_shm"
 SHM_VERSION :: 3
 
+SHM_CREATE_POOL_OPCODE :: 0
 // create a shm pool
 // Create a new wl_shm_pool object.
 // The pool can be used to create shared memory based buffer
 // objects.  The server will mmap size bytes of the passed file
 // descriptor, to use as backing memory for the pool.
-SHM_CREATE_POOL_OPCODE :: 0
 Shm_Create_Pool_Request :: struct {
-	shm  : u32,
+	shm  : Shm,  // the object this event/request concerns
 	fd   : linux.Fd,  // file descriptor for the pool
 	size : i32,  // pool size, in bytes
 }
-shm_create_pool_encode :: proc(req: Shm_Create_Pool_Request, new_id: u32, allocator: mem.Allocator) -> (encoded: []byte, err: mem.Allocator_Error) {
-	object := req.shm
+shm_create_pool_write :: proc(buf: ^[dynamic]byte, req: Shm_Create_Pool_Request, new_id: u32) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
+	object := u32(req.shm)
 	opcode := u16(SHM_CREATE_POOL_OPCODE)
 	size := u16(8 + size_of(new_id) + size_of(req.size))
-	msg := make([dynamic]byte, 0, size, allocator) or_return
-	util.write(&msg, object, opcode, size)
-	util.write(&msg, new_id)
+	num_appended = util.write(buf, object, opcode, size) or_return
+	num_appended += util.write(buf, new_id) or_return
 	// fd: fd — sent via SCM_RIGHTS, not in the body
-	util.write(&msg, req.size)
-	encoded = msg[:]
+	num_appended += util.write(buf, req.size) or_return
 	return
 }
 
+SHM_RELEASE_OPCODE :: 1
 // release the shm object
 // Using this request a client can tell the server that it is not going to
 // use the shm object anymore.
 // Objects created via this interface remain unaffected.
-SHM_RELEASE_OPCODE :: 1
 Shm_Release_Request :: struct {
-	shm : u32,
+	shm : Shm,  // the object this event/request concerns
 }
-shm_release_encode :: proc(req: Shm_Release_Request, allocator: mem.Allocator) -> (encoded: []byte, err: mem.Allocator_Error) {
-	object := req.shm
+shm_release_write :: proc(buf: ^[dynamic]byte, req: Shm_Release_Request) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
+	object := u32(req.shm)
 	opcode := u16(SHM_RELEASE_OPCODE)
 	size := u16(8)
-	msg := make([dynamic]byte, 0, size, allocator) or_return
-	util.write(&msg, object, opcode, size)
-	encoded = msg[:]
+	num_appended = util.write(buf, object, opcode, size) or_return
 	return
 }
 
+SHM_FORMAT_OPCODE :: 0
 // pixel format description
 // Informs the client about a valid pixel format that
 // can be used for buffers. Known formats include
@@ -611,16 +475,17 @@ shm_release_encode :: proc(req: Shm_Release_Request, allocator: mem.Allocator) -
 // Extensions to drm_fourcc.h (or the format enum) do not require
 // increasing the wl_shm version; as a result, clients may receive format
 // codes which were not in the list at the time the client was made.
-SHM_FORMAT_OPCODE :: 0
 Shm_Format_Event :: struct {
-	format : u32,  // buffer pixel format
+	shm    : Shm,  // the object this event/request concerns
+	format : Shm_Format,  // buffer pixel format
 }
-shm_format_decode :: proc(data: []byte) -> Shm_Format_Event {
+shm_format_read :: proc(data: []byte) -> (Shm_Format_Event, int) {
 	e: Shm_Format_Event
 	r: int
 	n := r
-	e.format, r = util.read_u32(data[n:]); n += r
-	return e
+	val_format, _ := util.read_u32(data[n:]); n += 4
+	e.format = transmute(Shm_Format)val_format
+	return e, n
 }
 
 // wl_shm error values
@@ -810,24 +675,23 @@ Shm_Format :: enum u32 {
 BUFFER_INTERFACE :: "wl_buffer"
 BUFFER_VERSION :: 1
 
+BUFFER_DESTROY_OPCODE :: 0
 // destroy a buffer
 // Destroy a buffer. If and how you need to release the backing
 // storage is defined by the buffer factory interface.
 // For possible side-effects to a surface, see wl_surface.attach.
-BUFFER_DESTROY_OPCODE :: 0
 Buffer_Destroy_Request :: struct {
-	buffer : u32,
+	buffer : Buffer,  // the object this event/request concerns
 }
-buffer_destroy_encode :: proc(req: Buffer_Destroy_Request, allocator: mem.Allocator) -> (encoded: []byte, err: mem.Allocator_Error) {
-	object := req.buffer
+buffer_destroy_write :: proc(buf: ^[dynamic]byte, req: Buffer_Destroy_Request) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
+	object := u32(req.buffer)
 	opcode := u16(BUFFER_DESTROY_OPCODE)
 	size := u16(8)
-	msg := make([dynamic]byte, 0, size, allocator) or_return
-	util.write(&msg, object, opcode, size)
-	encoded = msg[:]
+	num_appended = util.write(buf, object, opcode, size) or_return
 	return
 }
 
+BUFFER_RELEASE_OPCODE :: 0
 // compositor releases buffer
 // Sent when this wl_buffer is no longer used by the compositor.
 // For more information on when release events may or may not be sent,
@@ -841,13 +705,14 @@ buffer_destroy_encode :: proc(req: Buffer_Destroy_Request, allocator: mem.Alloca
 // this is possible, when the compositor maintains a copy of the
 // wl_surface contents, e.g. as a GL texture. This is an important
 // optimization for GL(ES) compositors with wl_shm clients.
-BUFFER_RELEASE_OPCODE :: 0
-Buffer_Release_Event :: struct {}
-buffer_release_decode :: proc(data: []byte) -> Buffer_Release_Event {
+Buffer_Release_Event :: struct {
+	buffer : Buffer,  // the object this event/request concerns
+}
+buffer_release_read :: proc(data: []byte) -> (Buffer_Release_Event, int) {
 	e: Buffer_Release_Event
 	r: int
 	n := r
-	return e
+	return e, n
 }
 
 // offer to transfer data
@@ -860,6 +725,7 @@ buffer_release_decode :: proc(data: []byte) -> Buffer_Release_Event {
 DATA_OFFER_INTERFACE :: "wl_data_offer"
 DATA_OFFER_VERSION :: 4
 
+DATA_OFFER_ACCEPT_OPCODE :: 0
 // accept one of the offered mime types
 // Indicate that the client can accept the given mime type, or
 // NULL for not accepted.
@@ -873,24 +739,22 @@ DATA_OFFER_VERSION :: 4
 // will be cancelled and the corresponding drag source will receive
 // wl_data_source.cancelled. Clients may still use this event in
 // conjunction with wl_data_source.action for feedback.
-DATA_OFFER_ACCEPT_OPCODE :: 0
 Data_Offer_Accept_Request :: struct {
-	data_offer : u32,
+	data_offer : Data_Offer,  // the object this event/request concerns
 	serial     : u32,  // serial number of the accept request
 	mime_type  : string,  // mime type accepted by the client
 }
-data_offer_accept_encode :: proc(req: Data_Offer_Accept_Request, allocator: mem.Allocator) -> (encoded: []byte, err: mem.Allocator_Error) {
-	object := req.data_offer
+data_offer_accept_write :: proc(buf: ^[dynamic]byte, req: Data_Offer_Accept_Request) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
+	object := u32(req.data_offer)
 	opcode := u16(DATA_OFFER_ACCEPT_OPCODE)
 	size := u16(8 + size_of(req.serial) + util.compute_string_size(req.mime_type))
-	msg := make([dynamic]byte, 0, size, allocator) or_return
-	util.write(&msg, object, opcode, size)
-	util.write(&msg, req.serial)
-	util.write(&msg, req.mime_type)
-	encoded = msg[:]
+	num_appended = util.write(buf, object, opcode, size) or_return
+	num_appended += util.write(buf, req.serial) or_return
+	num_appended += util.write(buf, req.mime_type) or_return
 	return
 }
 
+DATA_OFFER_RECEIVE_OPCODE :: 1
 // request that the data is transferred
 // To transfer the offered data, the client issues this request
 // and indicates the mime type it wants to receive.  The transfer
@@ -905,40 +769,36 @@ data_offer_accept_encode :: proc(req: Data_Offer_Accept_Request, allocator: mem.
 // both before and after wl_data_device.drop. Drag-and-drop destination
 // clients may preemptively fetch data or examine it more closely to
 // determine acceptance.
-DATA_OFFER_RECEIVE_OPCODE :: 1
 Data_Offer_Receive_Request :: struct {
-	data_offer : u32,
+	data_offer : Data_Offer,  // the object this event/request concerns
 	mime_type  : string,  // mime type desired by receiver
 	fd         : linux.Fd,  // file descriptor for data transfer
 }
-data_offer_receive_encode :: proc(req: Data_Offer_Receive_Request, allocator: mem.Allocator) -> (encoded: []byte, err: mem.Allocator_Error) {
-	object := req.data_offer
+data_offer_receive_write :: proc(buf: ^[dynamic]byte, req: Data_Offer_Receive_Request) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
+	object := u32(req.data_offer)
 	opcode := u16(DATA_OFFER_RECEIVE_OPCODE)
 	size := u16(8 + util.compute_string_size(req.mime_type))
-	msg := make([dynamic]byte, 0, size, allocator) or_return
-	util.write(&msg, object, opcode, size)
-	util.write(&msg, req.mime_type)
+	num_appended = util.write(buf, object, opcode, size) or_return
+	num_appended += util.write(buf, req.mime_type) or_return
 	// fd: fd — sent via SCM_RIGHTS, not in the body
-	encoded = msg[:]
 	return
 }
 
+DATA_OFFER_DESTROY_OPCODE :: 2
 // destroy data offer
 // Destroy the data offer.
-DATA_OFFER_DESTROY_OPCODE :: 2
 Data_Offer_Destroy_Request :: struct {
-	data_offer : u32,
+	data_offer : Data_Offer,  // the object this event/request concerns
 }
-data_offer_destroy_encode :: proc(req: Data_Offer_Destroy_Request, allocator: mem.Allocator) -> (encoded: []byte, err: mem.Allocator_Error) {
-	object := req.data_offer
+data_offer_destroy_write :: proc(buf: ^[dynamic]byte, req: Data_Offer_Destroy_Request) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
+	object := u32(req.data_offer)
 	opcode := u16(DATA_OFFER_DESTROY_OPCODE)
 	size := u16(8)
-	msg := make([dynamic]byte, 0, size, allocator) or_return
-	util.write(&msg, object, opcode, size)
-	encoded = msg[:]
+	num_appended = util.write(buf, object, opcode, size) or_return
 	return
 }
 
+DATA_OFFER_FINISH_OPCODE :: 3
 // the offer will no longer be used
 // Notifies the compositor that the drag destination successfully
 // finished the drag-and-drop operation.
@@ -951,20 +811,18 @@ data_offer_destroy_encode :: proc(req: Data_Offer_Destroy_Request, allocator: me
 // wl_data_offer.action.
 // If wl_data_offer.finish request is received for a non drag and drop
 // operation, the invalid_finish protocol error is raised.
-DATA_OFFER_FINISH_OPCODE :: 3
 Data_Offer_Finish_Request :: struct {
-	data_offer : u32,
+	data_offer : Data_Offer,  // the object this event/request concerns
 }
-data_offer_finish_encode :: proc(req: Data_Offer_Finish_Request, allocator: mem.Allocator) -> (encoded: []byte, err: mem.Allocator_Error) {
-	object := req.data_offer
+data_offer_finish_write :: proc(buf: ^[dynamic]byte, req: Data_Offer_Finish_Request) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
+	object := u32(req.data_offer)
 	opcode := u16(DATA_OFFER_FINISH_OPCODE)
 	size := u16(8)
-	msg := make([dynamic]byte, 0, size, allocator) or_return
-	util.write(&msg, object, opcode, size)
-	encoded = msg[:]
+	num_appended = util.write(buf, object, opcode, size) or_return
 	return
 }
 
+DATA_OFFER_SET_ACTIONS_OPCODE :: 4
 // set the available/preferred drag-and-drop actions
 // Sets the actions that the destination side client supports for
 // this operation. This request may trigger the emission of
@@ -991,58 +849,57 @@ data_offer_finish_encode :: proc(req: Data_Offer_Finish_Request, allocator: mem.
 // is expected to perform wl_data_offer.destroy right away.
 // This request can only be made on drag-and-drop offers, a protocol error
 // will be raised otherwise.
-DATA_OFFER_SET_ACTIONS_OPCODE :: 4
 Data_Offer_Set_Actions_Request :: struct {
-	data_offer       : u32,
+	data_offer       : Data_Offer,  // the object this event/request concerns
 	dnd_actions      : Data_Device_Manager_Dnd_Action_Set,  // actions supported by the destination client
 	preferred_action : Data_Device_Manager_Dnd_Action_Set,  // action preferred by the destination client
 }
-data_offer_set_actions_encode :: proc(req: Data_Offer_Set_Actions_Request, allocator: mem.Allocator) -> (encoded: []byte, err: mem.Allocator_Error) {
-	object := req.data_offer
+data_offer_set_actions_write :: proc(buf: ^[dynamic]byte, req: Data_Offer_Set_Actions_Request) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
+	object := u32(req.data_offer)
 	opcode := u16(DATA_OFFER_SET_ACTIONS_OPCODE)
 	size := u16(8 + size_of(req.dnd_actions) + size_of(req.preferred_action))
-	msg := make([dynamic]byte, 0, size, allocator) or_return
-	util.write(&msg, object, opcode, size)
-	util.write_u32(&msg, transmute(u32)req.dnd_actions)
-	util.write_u32(&msg, transmute(u32)req.preferred_action)
-	encoded = msg[:]
+	num_appended = util.write(buf, object, opcode, size) or_return
+	num_appended += util.write(buf, transmute(u32)req.dnd_actions) or_return
+	num_appended += util.write(buf, transmute(u32)req.preferred_action) or_return
 	return
 }
 
+DATA_OFFER_OFFER_OPCODE :: 0
 // advertise offered mime type
 // Sent immediately after creating the wl_data_offer object.  One
 // event per offered mime type.
-DATA_OFFER_OFFER_OPCODE :: 0
 Data_Offer_Offer_Event :: struct {
-	mime_type : string,  // offered mime type
+	data_offer : Data_Offer,  // the object this event/request concerns
+	mime_type  : string,  // offered mime type
 }
-data_offer_offer_decode :: proc(data: []byte, allocator: mem.Allocator) -> Data_Offer_Offer_Event {
+data_offer_offer_read :: proc(data: []byte) -> (Data_Offer_Offer_Event, int) {
 	e: Data_Offer_Offer_Event
 	r: int
 	n := r
 	e.mime_type, r = util.read_string(data[n:]); n += r
-	e.mime_type = strings.clone(e.mime_type, allocator)
-	return e
+	return e, n
 }
 
+DATA_OFFER_SOURCE_ACTIONS_OPCODE :: 1
 // notify the source-side available actions
 // This event indicates the actions offered by the data source. It
 // will be sent immediately after creating the wl_data_offer object,
 // or anytime the source side changes its offered actions through
 // wl_data_source.set_actions.
-DATA_OFFER_SOURCE_ACTIONS_OPCODE :: 1
 Data_Offer_Source_Actions_Event :: struct {
+	data_offer     : Data_Offer,  // the object this event/request concerns
 	source_actions : Data_Device_Manager_Dnd_Action_Set,  // actions offered by the data source
 }
-data_offer_source_actions_decode :: proc(data: []byte) -> Data_Offer_Source_Actions_Event {
+data_offer_source_actions_read :: proc(data: []byte) -> (Data_Offer_Source_Actions_Event, int) {
 	e: Data_Offer_Source_Actions_Event
 	r: int
 	n := r
 	val_source_actions, _ := util.read_u32(data[n:]); n += 4
 	e.source_actions = transmute(Data_Device_Manager_Dnd_Action_Set)val_source_actions
-	return e
+	return e, n
 }
 
+DATA_OFFER_ACTION_OPCODE :: 2
 // notify the selected action
 // This event indicates the action selected by the compositor after
 // matching the source/destination side actions. Only one action (or
@@ -1073,17 +930,17 @@ data_offer_source_actions_decode :: proc(data: []byte) -> Data_Offer_Source_Acti
 // user (e.g. popping up a menu with the available options). The
 // final wl_data_offer.set_actions and wl_data_offer.accept requests
 // must happen before the call to wl_data_offer.finish.
-DATA_OFFER_ACTION_OPCODE :: 2
 Data_Offer_Action_Event :: struct {
+	data_offer : Data_Offer,  // the object this event/request concerns
 	dnd_action : Data_Device_Manager_Dnd_Action_Set,  // action selected by the compositor
 }
-data_offer_action_decode :: proc(data: []byte) -> Data_Offer_Action_Event {
+data_offer_action_read :: proc(data: []byte) -> (Data_Offer_Action_Event, int) {
 	e: Data_Offer_Action_Event
 	r: int
 	n := r
 	val_dnd_action, _ := util.read_u32(data[n:]); n += 4
 	e.dnd_action = transmute(Data_Device_Manager_Dnd_Action_Set)val_dnd_action
-	return e
+	return e, n
 }
 
 Data_Offer_Error :: enum u32 {
@@ -1101,42 +958,39 @@ Data_Offer_Error :: enum u32 {
 DATA_SOURCE_INTERFACE :: "wl_data_source"
 DATA_SOURCE_VERSION :: 4
 
+DATA_SOURCE_OFFER_OPCODE :: 0
 // add an offered mime type
 // This request adds a mime type to the set of mime types
 // advertised to targets.  Can be called several times to offer
 // multiple types.
-DATA_SOURCE_OFFER_OPCODE :: 0
 Data_Source_Offer_Request :: struct {
-	data_source : u32,
+	data_source : Data_Source,  // the object this event/request concerns
 	mime_type   : string,  // mime type offered by the data source
 }
-data_source_offer_encode :: proc(req: Data_Source_Offer_Request, allocator: mem.Allocator) -> (encoded: []byte, err: mem.Allocator_Error) {
-	object := req.data_source
+data_source_offer_write :: proc(buf: ^[dynamic]byte, req: Data_Source_Offer_Request) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
+	object := u32(req.data_source)
 	opcode := u16(DATA_SOURCE_OFFER_OPCODE)
 	size := u16(8 + util.compute_string_size(req.mime_type))
-	msg := make([dynamic]byte, 0, size, allocator) or_return
-	util.write(&msg, object, opcode, size)
-	util.write(&msg, req.mime_type)
-	encoded = msg[:]
+	num_appended = util.write(buf, object, opcode, size) or_return
+	num_appended += util.write(buf, req.mime_type) or_return
 	return
 }
 
+DATA_SOURCE_DESTROY_OPCODE :: 1
 // destroy the data source
 // Destroy the data source.
-DATA_SOURCE_DESTROY_OPCODE :: 1
 Data_Source_Destroy_Request :: struct {
-	data_source : u32,
+	data_source : Data_Source,  // the object this event/request concerns
 }
-data_source_destroy_encode :: proc(req: Data_Source_Destroy_Request, allocator: mem.Allocator) -> (encoded: []byte, err: mem.Allocator_Error) {
-	object := req.data_source
+data_source_destroy_write :: proc(buf: ^[dynamic]byte, req: Data_Source_Destroy_Request) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
+	object := u32(req.data_source)
 	opcode := u16(DATA_SOURCE_DESTROY_OPCODE)
 	size := u16(8)
-	msg := make([dynamic]byte, 0, size, allocator) or_return
-	util.write(&msg, object, opcode, size)
-	encoded = msg[:]
+	num_appended = util.write(buf, object, opcode, size) or_return
 	return
 }
 
+DATA_SOURCE_SET_ACTIONS_OPCODE :: 2
 // set the available drag-and-drop actions
 // Sets the actions that the source side client supports for this
 // operation. This request may trigger wl_data_source.action and
@@ -1149,58 +1003,56 @@ data_source_destroy_encode :: proc(req: Data_Source_Destroy_Request, allocator: 
 // used in drag-and-drop, so it must be performed before
 // wl_data_device.start_drag. Attempting to use the source other than
 // for drag-and-drop will raise a protocol error.
-DATA_SOURCE_SET_ACTIONS_OPCODE :: 2
 Data_Source_Set_Actions_Request :: struct {
-	data_source : u32,
+	data_source : Data_Source,  // the object this event/request concerns
 	dnd_actions : Data_Device_Manager_Dnd_Action_Set,  // actions supported by the data source
 }
-data_source_set_actions_encode :: proc(req: Data_Source_Set_Actions_Request, allocator: mem.Allocator) -> (encoded: []byte, err: mem.Allocator_Error) {
-	object := req.data_source
+data_source_set_actions_write :: proc(buf: ^[dynamic]byte, req: Data_Source_Set_Actions_Request) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
+	object := u32(req.data_source)
 	opcode := u16(DATA_SOURCE_SET_ACTIONS_OPCODE)
 	size := u16(8 + size_of(req.dnd_actions))
-	msg := make([dynamic]byte, 0, size, allocator) or_return
-	util.write(&msg, object, opcode, size)
-	util.write_u32(&msg, transmute(u32)req.dnd_actions)
-	encoded = msg[:]
+	num_appended = util.write(buf, object, opcode, size) or_return
+	num_appended += util.write(buf, transmute(u32)req.dnd_actions) or_return
 	return
 }
 
+DATA_SOURCE_TARGET_OPCODE :: 0
 // a target accepts an offered mime type
 // Sent when a target accepts pointer_focus or motion events.  If
 // a target does not accept any of the offered types, type is NULL.
 // Used for feedback during drag-and-drop.
-DATA_SOURCE_TARGET_OPCODE :: 0
 Data_Source_Target_Event :: struct {
-	mime_type : string,  // mime type accepted by the target
+	data_source : Data_Source,  // the object this event/request concerns
+	mime_type   : string,  // mime type accepted by the target
 }
-data_source_target_decode :: proc(data: []byte, allocator: mem.Allocator) -> Data_Source_Target_Event {
+data_source_target_read :: proc(data: []byte) -> (Data_Source_Target_Event, int) {
 	e: Data_Source_Target_Event
 	r: int
 	n := r
 	e.mime_type, r = util.read_string(data[n:]); n += r
-	e.mime_type = strings.clone(e.mime_type, allocator)
-	return e
+	return e, n
 }
 
+DATA_SOURCE_SEND_OPCODE :: 1
 // send the data
 // Request for data from the client.  Send the data as the
 // specified mime type over the passed file descriptor, then
 // close it.
-DATA_SOURCE_SEND_OPCODE :: 1
 Data_Source_Send_Event :: struct {
-	mime_type : string,  // mime type for the data
-	fd        : linux.Fd,  // file descriptor for the data
+	data_source : Data_Source,  // the object this event/request concerns
+	mime_type   : string,  // mime type for the data
+	fd          : linux.Fd,  // file descriptor for the data
 }
-data_source_send_decode :: proc(data: []byte, fds: ^[dynamic]linux.Fd, allocator: mem.Allocator) -> Data_Source_Send_Event {
+data_source_send_read :: proc(data: []byte, fds: ^[dynamic; 28]linux.Fd) -> (Data_Source_Send_Event, int) {
 	e: Data_Source_Send_Event
 	r: int
 	n := r
 	e.mime_type, r = util.read_string(data[n:]); n += r
-	e.mime_type = strings.clone(e.mime_type, allocator)
 	e.fd = pop_front(fds)
-	return e
+	return e, n
 }
 
+DATA_SOURCE_CANCELLED_OPCODE :: 2
 // selection was cancelled
 // This data source is no longer valid. There are several reasons why
 // this could happen:
@@ -1219,15 +1071,17 @@ data_source_send_decode :: proc(data: []byte, fds: ^[dynamic]linux.Fd, allocator
 // For objects of version 2 or older, wl_data_source.cancelled will
 // only be emitted if the data source was replaced by another data
 // source.
-DATA_SOURCE_CANCELLED_OPCODE :: 2
-Data_Source_Cancelled_Event :: struct {}
-data_source_cancelled_decode :: proc(data: []byte) -> Data_Source_Cancelled_Event {
+Data_Source_Cancelled_Event :: struct {
+	data_source : Data_Source,  // the object this event/request concerns
+}
+data_source_cancelled_read :: proc(data: []byte) -> (Data_Source_Cancelled_Event, int) {
 	e: Data_Source_Cancelled_Event
 	r: int
 	n := r
-	return e
+	return e, n
 }
 
+DATA_SOURCE_DND_DROP_PERFORMED_OPCODE :: 3
 // the drag-and-drop operation physically finished
 // The user performed the drop action. This event does not indicate
 // acceptance, wl_data_source.cancelled may still be emitted afterwards
@@ -1236,30 +1090,34 @@ data_source_cancelled_decode :: proc(data: []byte) -> Data_Source_Cancelled_Even
 // the drag-and-drop operation before this event could happen.
 // Note that the data_source may still be used in the future and should
 // not be destroyed here.
-DATA_SOURCE_DND_DROP_PERFORMED_OPCODE :: 3
-Data_Source_Dnd_Drop_Performed_Event :: struct {}
-data_source_dnd_drop_performed_decode :: proc(data: []byte) -> Data_Source_Dnd_Drop_Performed_Event {
+Data_Source_Dnd_Drop_Performed_Event :: struct {
+	data_source : Data_Source,  // the object this event/request concerns
+}
+data_source_dnd_drop_performed_read :: proc(data: []byte) -> (Data_Source_Dnd_Drop_Performed_Event, int) {
 	e: Data_Source_Dnd_Drop_Performed_Event
 	r: int
 	n := r
-	return e
+	return e, n
 }
 
+DATA_SOURCE_DND_FINISHED_OPCODE :: 4
 // the drag-and-drop operation concluded
 // The drop destination finished interoperating with this data
 // source, so the client is now free to destroy this data source and
 // free all associated data.
 // If the action used to perform the operation was "move", the
 // source can now delete the transferred data.
-DATA_SOURCE_DND_FINISHED_OPCODE :: 4
-Data_Source_Dnd_Finished_Event :: struct {}
-data_source_dnd_finished_decode :: proc(data: []byte) -> Data_Source_Dnd_Finished_Event {
+Data_Source_Dnd_Finished_Event :: struct {
+	data_source : Data_Source,  // the object this event/request concerns
+}
+data_source_dnd_finished_read :: proc(data: []byte) -> (Data_Source_Dnd_Finished_Event, int) {
 	e: Data_Source_Dnd_Finished_Event
 	r: int
 	n := r
-	return e
+	return e, n
 }
 
+DATA_SOURCE_ACTION_OPCODE :: 5
 // notify the selected action
 // This event indicates the action selected by the compositor after
 // matching the source/destination side actions. Only one action (or
@@ -1281,17 +1139,17 @@ data_source_dnd_finished_decode :: proc(data: []byte) -> Data_Source_Dnd_Finishe
 // always be applied in wl_data_source.dnd_finished.
 // Clients can trigger cursor surface changes from this point, so
 // they reflect the current action.
-DATA_SOURCE_ACTION_OPCODE :: 5
 Data_Source_Action_Event :: struct {
-	dnd_action : Data_Device_Manager_Dnd_Action_Set,  // action selected by the compositor
+	data_source : Data_Source,  // the object this event/request concerns
+	dnd_action  : Data_Device_Manager_Dnd_Action_Set,  // action selected by the compositor
 }
-data_source_action_decode :: proc(data: []byte) -> Data_Source_Action_Event {
+data_source_action_read :: proc(data: []byte) -> (Data_Source_Action_Event, int) {
 	e: Data_Source_Action_Event
 	r: int
 	n := r
 	val_dnd_action, _ := util.read_u32(data[n:]); n += 4
 	e.dnd_action = transmute(Data_Device_Manager_Dnd_Action_Set)val_dnd_action
-	return e
+	return e, n
 }
 
 Data_Source_Error :: enum u32 {
@@ -1307,6 +1165,7 @@ Data_Source_Error :: enum u32 {
 DATA_DEVICE_INTERFACE :: "wl_data_device"
 DATA_DEVICE_VERSION :: 4
 
+DATA_DEVICE_START_DRAG_OPCODE :: 0
 // start drag-and-drop operation
 // This request asks the compositor to start a drag-and-drop
 // operation on behalf of the client.
@@ -1332,28 +1191,26 @@ DATA_DEVICE_VERSION :: 4
 // The given source may not be used in any further set_selection or
 // start_drag requests. Attempting to reuse a previously-used source
 // may send a used_source error.
-DATA_DEVICE_START_DRAG_OPCODE :: 0
 Data_Device_Start_Drag_Request :: struct {
-	data_device : u32,
-	source      : u32,  // data source for the eventual transfer
-	origin      : u32,  // surface where the drag originates
-	icon        : u32,  // drag-and-drop icon surface
+	data_device : Data_Device,  // the object this event/request concerns
+	source      : Data_Source,  // data source for the eventual transfer
+	origin      : Surface,  // surface where the drag originates
+	icon        : Surface,  // drag-and-drop icon surface
 	serial      : u32,  // serial number of the implicit grab on the origin
 }
-data_device_start_drag_encode :: proc(req: Data_Device_Start_Drag_Request, allocator: mem.Allocator) -> (encoded: []byte, err: mem.Allocator_Error) {
-	object := req.data_device
+data_device_start_drag_write :: proc(buf: ^[dynamic]byte, req: Data_Device_Start_Drag_Request) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
+	object := u32(req.data_device)
 	opcode := u16(DATA_DEVICE_START_DRAG_OPCODE)
 	size := u16(8 + size_of(req.source) + size_of(req.origin) + size_of(req.icon) + size_of(req.serial))
-	msg := make([dynamic]byte, 0, size, allocator) or_return
-	util.write(&msg, object, opcode, size)
-	util.write(&msg, req.source)
-	util.write(&msg, req.origin)
-	util.write(&msg, req.icon)
-	util.write(&msg, req.serial)
-	encoded = msg[:]
+	num_appended = util.write(buf, object, opcode, size) or_return
+	num_appended += util.write(buf, u32(req.source)) or_return
+	num_appended += util.write(buf, u32(req.origin)) or_return
+	num_appended += util.write(buf, u32(req.icon)) or_return
+	num_appended += util.write(buf, req.serial) or_return
 	return
 }
 
+DATA_DEVICE_SET_SELECTION_OPCODE :: 1
 // copy data to the selection
 // This request asks the compositor to set the selection
 // to the data from the source on behalf of the client.
@@ -1361,40 +1218,36 @@ data_device_start_drag_encode :: proc(req: Data_Device_Start_Drag_Request, alloc
 // The given source may not be used in any further set_selection or
 // start_drag requests. Attempting to reuse a previously-used source
 // may send a used_source error.
-DATA_DEVICE_SET_SELECTION_OPCODE :: 1
 Data_Device_Set_Selection_Request :: struct {
-	data_device : u32,
-	source      : u32,  // data source for the selection
+	data_device : Data_Device,  // the object this event/request concerns
+	source      : Data_Source,  // data source for the selection
 	serial      : u32,  // serial number of the event that triggered this request
 }
-data_device_set_selection_encode :: proc(req: Data_Device_Set_Selection_Request, allocator: mem.Allocator) -> (encoded: []byte, err: mem.Allocator_Error) {
-	object := req.data_device
+data_device_set_selection_write :: proc(buf: ^[dynamic]byte, req: Data_Device_Set_Selection_Request) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
+	object := u32(req.data_device)
 	opcode := u16(DATA_DEVICE_SET_SELECTION_OPCODE)
 	size := u16(8 + size_of(req.source) + size_of(req.serial))
-	msg := make([dynamic]byte, 0, size, allocator) or_return
-	util.write(&msg, object, opcode, size)
-	util.write(&msg, req.source)
-	util.write(&msg, req.serial)
-	encoded = msg[:]
+	num_appended = util.write(buf, object, opcode, size) or_return
+	num_appended += util.write(buf, u32(req.source)) or_return
+	num_appended += util.write(buf, req.serial) or_return
 	return
 }
 
+DATA_DEVICE_RELEASE_OPCODE :: 2
 // destroy data device
 // This request destroys the data device.
-DATA_DEVICE_RELEASE_OPCODE :: 2
 Data_Device_Release_Request :: struct {
-	data_device : u32,
+	data_device : Data_Device,  // the object this event/request concerns
 }
-data_device_release_encode :: proc(req: Data_Device_Release_Request, allocator: mem.Allocator) -> (encoded: []byte, err: mem.Allocator_Error) {
-	object := req.data_device
+data_device_release_write :: proc(buf: ^[dynamic]byte, req: Data_Device_Release_Request) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
+	object := u32(req.data_device)
 	opcode := u16(DATA_DEVICE_RELEASE_OPCODE)
 	size := u16(8)
-	msg := make([dynamic]byte, 0, size, allocator) or_return
-	util.write(&msg, object, opcode, size)
-	encoded = msg[:]
+	num_appended = util.write(buf, object, opcode, size) or_return
 	return
 }
 
+DATA_DEVICE_DATA_OFFER_OPCODE :: 0
 // introduce a new wl_data_offer
 // The data_offer event introduces a new wl_data_offer object,
 // which will subsequently be used in either the
@@ -1403,77 +1256,85 @@ data_device_release_encode :: proc(req: Data_Device_Release_Request, allocator: 
 // following the data_device.data_offer event, the new data_offer
 // object will send out data_offer.offer events to describe the
 // mime types it offers.
-DATA_DEVICE_DATA_OFFER_OPCODE :: 0
 Data_Device_Data_Offer_Event :: struct {
-	id : u32,  // the new data_offer object
+	data_device : Data_Device,  // the object this event/request concerns
+	id          : Data_Offer,  // the new data_offer object
 }
-data_device_data_offer_decode :: proc(data: []byte) -> Data_Device_Data_Offer_Event {
+data_device_data_offer_read :: proc(data: []byte) -> (Data_Device_Data_Offer_Event, int) {
 	e: Data_Device_Data_Offer_Event
 	r: int
 	n := r
-	e.id, r = util.read_u32(data[n:]); n += r
-	return e
+	val_id, _ := util.read_u32(data[n:]); n += 4
+	e.id = Data_Offer(val_id)
+	return e, n
 }
 
+DATA_DEVICE_ENTER_OPCODE :: 1
 // initiate drag-and-drop session
 // This event is sent when an active drag-and-drop pointer enters
 // a surface owned by the client.  The position of the pointer at
 // enter time is provided by the x and y arguments, in surface-local
 // coordinates.
-DATA_DEVICE_ENTER_OPCODE :: 1
 Data_Device_Enter_Event :: struct {
-	serial  : u32,  // serial number of the enter event
-	surface : u32,  // client surface entered
-	x       : util.Fixed,  // surface-local x coordinate
-	y       : util.Fixed,  // surface-local y coordinate
-	id      : u32,  // source data_offer object
+	data_device : Data_Device,  // the object this event/request concerns
+	serial      : u32,  // serial number of the enter event
+	surface     : Surface,  // client surface entered
+	x           : util.Fixed,  // surface-local x coordinate
+	y           : util.Fixed,  // surface-local y coordinate
+	id          : Data_Offer,  // source data_offer object
 }
-data_device_enter_decode :: proc(data: []byte) -> Data_Device_Enter_Event {
+data_device_enter_read :: proc(data: []byte) -> (Data_Device_Enter_Event, int) {
 	e: Data_Device_Enter_Event
 	r: int
 	n := r
 	e.serial, r = util.read_u32(data[n:]); n += r
-	e.surface, r = util.read_u32(data[n:]); n += r
+	val_surface, _ := util.read_u32(data[n:]); n += 4
+	e.surface = Surface(val_surface)
 	e.x, r = util.read_fixed(data[n:]); n += r
 	e.y, r = util.read_fixed(data[n:]); n += r
-	e.id, r = util.read_u32(data[n:]); n += r
-	return e
+	val_id, _ := util.read_u32(data[n:]); n += 4
+	e.id = Data_Offer(val_id)
+	return e, n
 }
 
+DATA_DEVICE_LEAVE_OPCODE :: 2
 // end drag-and-drop session
 // This event is sent when the drag-and-drop pointer leaves the
 // surface and the session ends.  The client must destroy the
 // wl_data_offer introduced at enter time at this point.
-DATA_DEVICE_LEAVE_OPCODE :: 2
-Data_Device_Leave_Event :: struct {}
-data_device_leave_decode :: proc(data: []byte) -> Data_Device_Leave_Event {
+Data_Device_Leave_Event :: struct {
+	data_device : Data_Device,  // the object this event/request concerns
+}
+data_device_leave_read :: proc(data: []byte) -> (Data_Device_Leave_Event, int) {
 	e: Data_Device_Leave_Event
 	r: int
 	n := r
-	return e
+	return e, n
 }
 
+DATA_DEVICE_MOTION_OPCODE :: 3
 // drag-and-drop session motion
 // This event is sent when the drag-and-drop pointer moves within
 // the currently focused surface. The new position of the pointer
 // is provided by the x and y arguments, in surface-local
 // coordinates.
-DATA_DEVICE_MOTION_OPCODE :: 3
 Data_Device_Motion_Event :: struct {
-	time : u32,  // timestamp with millisecond granularity
-	x    : util.Fixed,  // surface-local x coordinate
-	y    : util.Fixed,  // surface-local y coordinate
+	data_device : Data_Device,  // the object this event/request concerns
+	time        : u32,  // timestamp with millisecond granularity
+	x           : util.Fixed,  // surface-local x coordinate
+	y           : util.Fixed,  // surface-local y coordinate
 }
-data_device_motion_decode :: proc(data: []byte) -> Data_Device_Motion_Event {
+data_device_motion_read :: proc(data: []byte) -> (Data_Device_Motion_Event, int) {
 	e: Data_Device_Motion_Event
 	r: int
 	n := r
 	e.time, r = util.read_u32(data[n:]); n += r
 	e.x, r = util.read_fixed(data[n:]); n += r
 	e.y, r = util.read_fixed(data[n:]); n += r
-	return e
+	return e, n
 }
 
+DATA_DEVICE_DROP_OPCODE :: 4
 // end drag-and-drop session successfully
 // The event is sent when a drag-and-drop operation is ended
 // because the implicit grab is removed.
@@ -1486,15 +1347,17 @@ data_device_motion_decode :: proc(data: []byte) -> Data_Device_Motion_Event {
 // final. The drag-and-drop destination is expected to perform one last
 // wl_data_offer.set_actions request, or wl_data_offer.destroy in order
 // to cancel the operation.
-DATA_DEVICE_DROP_OPCODE :: 4
-Data_Device_Drop_Event :: struct {}
-data_device_drop_decode :: proc(data: []byte) -> Data_Device_Drop_Event {
+Data_Device_Drop_Event :: struct {
+	data_device : Data_Device,  // the object this event/request concerns
+}
+data_device_drop_read :: proc(data: []byte) -> (Data_Device_Drop_Event, int) {
 	e: Data_Device_Drop_Event
 	r: int
 	n := r
-	return e
+	return e, n
 }
 
+DATA_DEVICE_SELECTION_OPCODE :: 5
 // advertise new selection
 // The selection event is sent out to notify the client of a new
 // wl_data_offer for the selection for this device.  The
@@ -1508,16 +1371,17 @@ data_device_drop_decode :: proc(data: []byte) -> Data_Device_Drop_Event {
 // keyboard focus within the same client doesn't mean a new selection
 // will be sent.  The client must destroy the previous selection
 // data_offer, if any, upon receiving this event.
-DATA_DEVICE_SELECTION_OPCODE :: 5
 Data_Device_Selection_Event :: struct {
-	id : u32,  // selection data_offer object
+	data_device : Data_Device,  // the object this event/request concerns
+	id          : Data_Offer,  // selection data_offer object
 }
-data_device_selection_decode :: proc(data: []byte) -> Data_Device_Selection_Event {
+data_device_selection_read :: proc(data: []byte) -> (Data_Device_Selection_Event, int) {
 	e: Data_Device_Selection_Event
 	r: int
 	n := r
-	e.id, r = util.read_u32(data[n:]); n += r
-	return e
+	val_id, _ := util.read_u32(data[n:]); n += 4
+	e.id = Data_Offer(val_id)
+	return e, n
 }
 
 Data_Device_Error :: enum u32 {
@@ -1538,56 +1402,50 @@ Data_Device_Error :: enum u32 {
 DATA_DEVICE_MANAGER_INTERFACE :: "wl_data_device_manager"
 DATA_DEVICE_MANAGER_VERSION :: 4
 
+DATA_DEVICE_MANAGER_CREATE_DATA_SOURCE_OPCODE :: 0
 // create a new data source
 // Create a new data source.
-DATA_DEVICE_MANAGER_CREATE_DATA_SOURCE_OPCODE :: 0
 Data_Device_Manager_Create_Data_Source_Request :: struct {
-	data_device_manager : u32,
+	data_device_manager : Data_Device_Manager,  // the object this event/request concerns
 }
-data_device_manager_create_data_source_encode :: proc(req: Data_Device_Manager_Create_Data_Source_Request, new_id: u32, allocator: mem.Allocator) -> (encoded: []byte, err: mem.Allocator_Error) {
-	object := req.data_device_manager
+data_device_manager_create_data_source_write :: proc(buf: ^[dynamic]byte, req: Data_Device_Manager_Create_Data_Source_Request, new_id: u32) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
+	object := u32(req.data_device_manager)
 	opcode := u16(DATA_DEVICE_MANAGER_CREATE_DATA_SOURCE_OPCODE)
 	size := u16(8 + size_of(new_id))
-	msg := make([dynamic]byte, 0, size, allocator) or_return
-	util.write(&msg, object, opcode, size)
-	util.write(&msg, new_id)
-	encoded = msg[:]
+	num_appended = util.write(buf, object, opcode, size) or_return
+	num_appended += util.write(buf, new_id) or_return
 	return
 }
 
+DATA_DEVICE_MANAGER_GET_DATA_DEVICE_OPCODE :: 1
 // create a new data device
 // Create a new data device for a given seat.
-DATA_DEVICE_MANAGER_GET_DATA_DEVICE_OPCODE :: 1
 Data_Device_Manager_Get_Data_Device_Request :: struct {
-	data_device_manager : u32,
-	seat                : u32,  // seat associated with the data device
+	data_device_manager : Data_Device_Manager,  // the object this event/request concerns
+	seat                : Seat,  // seat associated with the data device
 }
-data_device_manager_get_data_device_encode :: proc(req: Data_Device_Manager_Get_Data_Device_Request, new_id: u32, allocator: mem.Allocator) -> (encoded: []byte, err: mem.Allocator_Error) {
-	object := req.data_device_manager
+data_device_manager_get_data_device_write :: proc(buf: ^[dynamic]byte, req: Data_Device_Manager_Get_Data_Device_Request, new_id: u32) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
+	object := u32(req.data_device_manager)
 	opcode := u16(DATA_DEVICE_MANAGER_GET_DATA_DEVICE_OPCODE)
 	size := u16(8 + size_of(new_id) + size_of(req.seat))
-	msg := make([dynamic]byte, 0, size, allocator) or_return
-	util.write(&msg, object, opcode, size)
-	util.write(&msg, new_id)
-	util.write(&msg, req.seat)
-	encoded = msg[:]
+	num_appended = util.write(buf, object, opcode, size) or_return
+	num_appended += util.write(buf, new_id) or_return
+	num_appended += util.write(buf, u32(req.seat)) or_return
 	return
 }
 
+DATA_DEVICE_MANAGER_RELEASE_OPCODE :: 2
 // destroy wl_data_device_manager
 // This request destroys the wl_data_device_manager. This has no effect on any other
 // objects.
-DATA_DEVICE_MANAGER_RELEASE_OPCODE :: 2
 Data_Device_Manager_Release_Request :: struct {
-	data_device_manager : u32,
+	data_device_manager : Data_Device_Manager,  // the object this event/request concerns
 }
-data_device_manager_release_encode :: proc(req: Data_Device_Manager_Release_Request, allocator: mem.Allocator) -> (encoded: []byte, err: mem.Allocator_Error) {
-	object := req.data_device_manager
+data_device_manager_release_write :: proc(buf: ^[dynamic]byte, req: Data_Device_Manager_Release_Request) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
+	object := u32(req.data_device_manager)
 	opcode := u16(DATA_DEVICE_MANAGER_RELEASE_OPCODE)
 	size := u16(8)
-	msg := make([dynamic]byte, 0, size, allocator) or_return
-	util.write(&msg, object, opcode, size)
-	encoded = msg[:]
+	num_appended = util.write(buf, object, opcode, size) or_return
 	return
 }
 
@@ -1629,25 +1487,23 @@ Data_Device_Manager_Dnd_Action_Set :: bit_set[Data_Device_Manager_Dnd_Action; u3
 SHELL_INTERFACE :: "wl_shell"
 SHELL_VERSION :: 1
 
+SHELL_GET_SHELL_SURFACE_OPCODE :: 0
 // create a shell surface from a surface
 // Create a shell surface for an existing surface. This gives
 // the wl_surface the role of a shell surface. If the wl_surface
 // already has another role, it raises a protocol error.
 // Only one shell surface can be associated with a given surface.
-SHELL_GET_SHELL_SURFACE_OPCODE :: 0
 Shell_Get_Shell_Surface_Request :: struct {
-	shell   : u32,
-	surface : u32,  // surface to be given the shell surface role
+	shell   : Shell,  // the object this event/request concerns
+	surface : Surface,  // surface to be given the shell surface role
 }
-shell_get_shell_surface_encode :: proc(req: Shell_Get_Shell_Surface_Request, new_id: u32, allocator: mem.Allocator) -> (encoded: []byte, err: mem.Allocator_Error) {
-	object := req.shell
+shell_get_shell_surface_write :: proc(buf: ^[dynamic]byte, req: Shell_Get_Shell_Surface_Request, new_id: u32) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
+	object := u32(req.shell)
 	opcode := u16(SHELL_GET_SHELL_SURFACE_OPCODE)
 	size := u16(8 + size_of(new_id) + size_of(req.surface))
-	msg := make([dynamic]byte, 0, size, allocator) or_return
-	util.write(&msg, object, opcode, size)
-	util.write(&msg, new_id)
-	util.write(&msg, req.surface)
-	encoded = msg[:]
+	num_appended = util.write(buf, object, opcode, size) or_return
+	num_appended += util.write(buf, new_id) or_return
+	num_appended += util.write(buf, u32(req.surface)) or_return
 	return
 }
 
@@ -1668,118 +1524,109 @@ Shell_Error :: enum u32 {
 SHELL_SURFACE_INTERFACE :: "wl_shell_surface"
 SHELL_SURFACE_VERSION :: 1
 
+SHELL_SURFACE_PONG_OPCODE :: 0
 // respond to a ping event
 // A client must respond to a ping event with a pong request or
 // the client may be deemed unresponsive.
-SHELL_SURFACE_PONG_OPCODE :: 0
 Shell_Surface_Pong_Request :: struct {
-	shell_surface : u32,
+	shell_surface : Shell_Surface,  // the object this event/request concerns
 	serial        : u32,  // serial number of the ping event
 }
-shell_surface_pong_encode :: proc(req: Shell_Surface_Pong_Request, allocator: mem.Allocator) -> (encoded: []byte, err: mem.Allocator_Error) {
-	object := req.shell_surface
+shell_surface_pong_write :: proc(buf: ^[dynamic]byte, req: Shell_Surface_Pong_Request) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
+	object := u32(req.shell_surface)
 	opcode := u16(SHELL_SURFACE_PONG_OPCODE)
 	size := u16(8 + size_of(req.serial))
-	msg := make([dynamic]byte, 0, size, allocator) or_return
-	util.write(&msg, object, opcode, size)
-	util.write(&msg, req.serial)
-	encoded = msg[:]
+	num_appended = util.write(buf, object, opcode, size) or_return
+	num_appended += util.write(buf, req.serial) or_return
 	return
 }
 
+SHELL_SURFACE_MOVE_OPCODE :: 1
 // start an interactive move
 // Start a pointer-driven move of the surface.
 // This request must be used in response to a button press event.
 // The server may ignore move requests depending on the state of
 // the surface (e.g. fullscreen or maximized).
-SHELL_SURFACE_MOVE_OPCODE :: 1
 Shell_Surface_Move_Request :: struct {
-	shell_surface : u32,
-	seat          : u32,  // seat whose pointer is used
+	shell_surface : Shell_Surface,  // the object this event/request concerns
+	seat          : Seat,  // seat whose pointer is used
 	serial        : u32,  // serial number of the implicit grab on the pointer
 }
-shell_surface_move_encode :: proc(req: Shell_Surface_Move_Request, allocator: mem.Allocator) -> (encoded: []byte, err: mem.Allocator_Error) {
-	object := req.shell_surface
+shell_surface_move_write :: proc(buf: ^[dynamic]byte, req: Shell_Surface_Move_Request) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
+	object := u32(req.shell_surface)
 	opcode := u16(SHELL_SURFACE_MOVE_OPCODE)
 	size := u16(8 + size_of(req.seat) + size_of(req.serial))
-	msg := make([dynamic]byte, 0, size, allocator) or_return
-	util.write(&msg, object, opcode, size)
-	util.write(&msg, req.seat)
-	util.write(&msg, req.serial)
-	encoded = msg[:]
+	num_appended = util.write(buf, object, opcode, size) or_return
+	num_appended += util.write(buf, u32(req.seat)) or_return
+	num_appended += util.write(buf, req.serial) or_return
 	return
 }
 
+SHELL_SURFACE_RESIZE_OPCODE :: 2
 // start an interactive resize
 // Start a pointer-driven resizing of the surface.
 // This request must be used in response to a button press event.
 // The server may ignore resize requests depending on the state of
 // the surface (e.g. fullscreen or maximized).
-SHELL_SURFACE_RESIZE_OPCODE :: 2
 Shell_Surface_Resize_Request :: struct {
-	shell_surface : u32,
-	seat          : u32,  // seat whose pointer is used
+	shell_surface : Shell_Surface,  // the object this event/request concerns
+	seat          : Seat,  // seat whose pointer is used
 	serial        : u32,  // serial number of the implicit grab on the pointer
 	edges         : Shell_Surface_Resize_Set,  // which edge or corner is being dragged
 }
-shell_surface_resize_encode :: proc(req: Shell_Surface_Resize_Request, allocator: mem.Allocator) -> (encoded: []byte, err: mem.Allocator_Error) {
-	object := req.shell_surface
+shell_surface_resize_write :: proc(buf: ^[dynamic]byte, req: Shell_Surface_Resize_Request) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
+	object := u32(req.shell_surface)
 	opcode := u16(SHELL_SURFACE_RESIZE_OPCODE)
 	size := u16(8 + size_of(req.seat) + size_of(req.serial) + size_of(req.edges))
-	msg := make([dynamic]byte, 0, size, allocator) or_return
-	util.write(&msg, object, opcode, size)
-	util.write(&msg, req.seat)
-	util.write(&msg, req.serial)
-	util.write_u32(&msg, transmute(u32)req.edges)
-	encoded = msg[:]
+	num_appended = util.write(buf, object, opcode, size) or_return
+	num_appended += util.write(buf, u32(req.seat)) or_return
+	num_appended += util.write(buf, req.serial) or_return
+	num_appended += util.write(buf, transmute(u32)req.edges) or_return
 	return
 }
 
+SHELL_SURFACE_SET_TOPLEVEL_OPCODE :: 3
 // make the surface a toplevel surface
 // Map the surface as a toplevel surface.
 // A toplevel surface is not fullscreen, maximized or transient.
-SHELL_SURFACE_SET_TOPLEVEL_OPCODE :: 3
 Shell_Surface_Set_Toplevel_Request :: struct {
-	shell_surface : u32,
+	shell_surface : Shell_Surface,  // the object this event/request concerns
 }
-shell_surface_set_toplevel_encode :: proc(req: Shell_Surface_Set_Toplevel_Request, allocator: mem.Allocator) -> (encoded: []byte, err: mem.Allocator_Error) {
-	object := req.shell_surface
+shell_surface_set_toplevel_write :: proc(buf: ^[dynamic]byte, req: Shell_Surface_Set_Toplevel_Request) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
+	object := u32(req.shell_surface)
 	opcode := u16(SHELL_SURFACE_SET_TOPLEVEL_OPCODE)
 	size := u16(8)
-	msg := make([dynamic]byte, 0, size, allocator) or_return
-	util.write(&msg, object, opcode, size)
-	encoded = msg[:]
+	num_appended = util.write(buf, object, opcode, size) or_return
 	return
 }
 
+SHELL_SURFACE_SET_TRANSIENT_OPCODE :: 4
 // make the surface a transient surface
 // Map the surface relative to an existing surface.
 // The x and y arguments specify the location of the upper left
 // corner of the surface relative to the upper left corner of the
 // parent surface, in surface-local coordinates.
 // The flags argument controls details of the transient behaviour.
-SHELL_SURFACE_SET_TRANSIENT_OPCODE :: 4
 Shell_Surface_Set_Transient_Request :: struct {
-	shell_surface : u32,
-	parent        : u32,  // parent surface
+	shell_surface : Shell_Surface,  // the object this event/request concerns
+	parent        : Surface,  // parent surface
 	x             : i32,  // surface-local x coordinate
 	y             : i32,  // surface-local y coordinate
 	flags         : Shell_Surface_Transient_Set,  // transient surface behavior
 }
-shell_surface_set_transient_encode :: proc(req: Shell_Surface_Set_Transient_Request, allocator: mem.Allocator) -> (encoded: []byte, err: mem.Allocator_Error) {
-	object := req.shell_surface
+shell_surface_set_transient_write :: proc(buf: ^[dynamic]byte, req: Shell_Surface_Set_Transient_Request) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
+	object := u32(req.shell_surface)
 	opcode := u16(SHELL_SURFACE_SET_TRANSIENT_OPCODE)
 	size := u16(8 + size_of(req.parent) + size_of(req.x) + size_of(req.y) + size_of(req.flags))
-	msg := make([dynamic]byte, 0, size, allocator) or_return
-	util.write(&msg, object, opcode, size)
-	util.write(&msg, req.parent)
-	util.write(&msg, req.x)
-	util.write(&msg, req.y)
-	util.write_u32(&msg, transmute(u32)req.flags)
-	encoded = msg[:]
+	num_appended = util.write(buf, object, opcode, size) or_return
+	num_appended += util.write(buf, u32(req.parent)) or_return
+	num_appended += util.write(buf, req.x) or_return
+	num_appended += util.write(buf, req.y) or_return
+	num_appended += util.write(buf, transmute(u32)req.flags) or_return
 	return
 }
 
+SHELL_SURFACE_SET_FULLSCREEN_OPCODE :: 5
 // make the surface a fullscreen surface
 // Map the surface as a fullscreen surface.
 // If an output parameter is given then the surface will be made
@@ -1808,26 +1655,24 @@ shell_surface_set_transient_encode :: proc(req: Shell_Surface_Set_Transient_Requ
 // The compositor must reply to this request with a configure event
 // with the dimensions for the output on which the surface will
 // be made fullscreen.
-SHELL_SURFACE_SET_FULLSCREEN_OPCODE :: 5
 Shell_Surface_Set_Fullscreen_Request :: struct {
-	shell_surface : u32,
-	method        : u32,  // method for resolving size conflict
+	shell_surface : Shell_Surface,  // the object this event/request concerns
+	method        : Shell_Surface_Fullscreen_Method,  // method for resolving size conflict
 	framerate     : u32,  // framerate in mHz
-	output        : u32,  // output on which the surface is to be fullscreen
+	output        : Output,  // output on which the surface is to be fullscreen
 }
-shell_surface_set_fullscreen_encode :: proc(req: Shell_Surface_Set_Fullscreen_Request, allocator: mem.Allocator) -> (encoded: []byte, err: mem.Allocator_Error) {
-	object := req.shell_surface
+shell_surface_set_fullscreen_write :: proc(buf: ^[dynamic]byte, req: Shell_Surface_Set_Fullscreen_Request) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
+	object := u32(req.shell_surface)
 	opcode := u16(SHELL_SURFACE_SET_FULLSCREEN_OPCODE)
 	size := u16(8 + size_of(req.method) + size_of(req.framerate) + size_of(req.output))
-	msg := make([dynamic]byte, 0, size, allocator) or_return
-	util.write(&msg, object, opcode, size)
-	util.write(&msg, req.method)
-	util.write(&msg, req.framerate)
-	util.write(&msg, req.output)
-	encoded = msg[:]
+	num_appended = util.write(buf, object, opcode, size) or_return
+	num_appended += util.write(buf, u32(req.method)) or_return
+	num_appended += util.write(buf, req.framerate) or_return
+	num_appended += util.write(buf, u32(req.output)) or_return
 	return
 }
 
+SHELL_SURFACE_SET_POPUP_OPCODE :: 6
 // make the surface a popup surface
 // Map the surface as a popup.
 // A popup surface is a transient surface with an added pointer
@@ -1844,32 +1689,30 @@ shell_surface_set_fullscreen_encode :: proc(req: Shell_Surface_Set_Fullscreen_Re
 // The x and y arguments specify the location of the upper left
 // corner of the surface relative to the upper left corner of the
 // parent surface, in surface-local coordinates.
-SHELL_SURFACE_SET_POPUP_OPCODE :: 6
 Shell_Surface_Set_Popup_Request :: struct {
-	shell_surface : u32,
-	seat          : u32,  // seat whose pointer is used
+	shell_surface : Shell_Surface,  // the object this event/request concerns
+	seat          : Seat,  // seat whose pointer is used
 	serial        : u32,  // serial number of the implicit grab on the pointer
-	parent        : u32,  // parent surface
+	parent        : Surface,  // parent surface
 	x             : i32,  // surface-local x coordinate
 	y             : i32,  // surface-local y coordinate
 	flags         : Shell_Surface_Transient_Set,  // transient surface behavior
 }
-shell_surface_set_popup_encode :: proc(req: Shell_Surface_Set_Popup_Request, allocator: mem.Allocator) -> (encoded: []byte, err: mem.Allocator_Error) {
-	object := req.shell_surface
+shell_surface_set_popup_write :: proc(buf: ^[dynamic]byte, req: Shell_Surface_Set_Popup_Request) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
+	object := u32(req.shell_surface)
 	opcode := u16(SHELL_SURFACE_SET_POPUP_OPCODE)
 	size := u16(8 + size_of(req.seat) + size_of(req.serial) + size_of(req.parent) + size_of(req.x) + size_of(req.y) + size_of(req.flags))
-	msg := make([dynamic]byte, 0, size, allocator) or_return
-	util.write(&msg, object, opcode, size)
-	util.write(&msg, req.seat)
-	util.write(&msg, req.serial)
-	util.write(&msg, req.parent)
-	util.write(&msg, req.x)
-	util.write(&msg, req.y)
-	util.write_u32(&msg, transmute(u32)req.flags)
-	encoded = msg[:]
+	num_appended = util.write(buf, object, opcode, size) or_return
+	num_appended += util.write(buf, u32(req.seat)) or_return
+	num_appended += util.write(buf, req.serial) or_return
+	num_appended += util.write(buf, u32(req.parent)) or_return
+	num_appended += util.write(buf, req.x) or_return
+	num_appended += util.write(buf, req.y) or_return
+	num_appended += util.write(buf, transmute(u32)req.flags) or_return
 	return
 }
 
+SHELL_SURFACE_SET_MAXIMIZED_OPCODE :: 7
 // make the surface a maximized surface
 // Map the surface as a maximized surface.
 // If an output parameter is given then the surface will be
@@ -1885,81 +1728,76 @@ shell_surface_set_popup_encode :: proc(req: Shell_Surface_Set_Popup_Request, all
 // the main difference between a maximized shell surface and a
 // fullscreen shell surface.
 // The details depend on the compositor implementation.
-SHELL_SURFACE_SET_MAXIMIZED_OPCODE :: 7
 Shell_Surface_Set_Maximized_Request :: struct {
-	shell_surface : u32,
-	output        : u32,  // output on which the surface is to be maximized
+	shell_surface : Shell_Surface,  // the object this event/request concerns
+	output        : Output,  // output on which the surface is to be maximized
 }
-shell_surface_set_maximized_encode :: proc(req: Shell_Surface_Set_Maximized_Request, allocator: mem.Allocator) -> (encoded: []byte, err: mem.Allocator_Error) {
-	object := req.shell_surface
+shell_surface_set_maximized_write :: proc(buf: ^[dynamic]byte, req: Shell_Surface_Set_Maximized_Request) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
+	object := u32(req.shell_surface)
 	opcode := u16(SHELL_SURFACE_SET_MAXIMIZED_OPCODE)
 	size := u16(8 + size_of(req.output))
-	msg := make([dynamic]byte, 0, size, allocator) or_return
-	util.write(&msg, object, opcode, size)
-	util.write(&msg, req.output)
-	encoded = msg[:]
+	num_appended = util.write(buf, object, opcode, size) or_return
+	num_appended += util.write(buf, u32(req.output)) or_return
 	return
 }
 
+SHELL_SURFACE_SET_TITLE_OPCODE :: 8
 // set surface title
 // Set a short title for the surface.
 // This string may be used to identify the surface in a task bar,
 // window list, or other user interface elements provided by the
 // compositor.
 // The string must be encoded in UTF-8.
-SHELL_SURFACE_SET_TITLE_OPCODE :: 8
 Shell_Surface_Set_Title_Request :: struct {
-	shell_surface : u32,
+	shell_surface : Shell_Surface,  // the object this event/request concerns
 	title         : string,  // surface title
 }
-shell_surface_set_title_encode :: proc(req: Shell_Surface_Set_Title_Request, allocator: mem.Allocator) -> (encoded: []byte, err: mem.Allocator_Error) {
-	object := req.shell_surface
+shell_surface_set_title_write :: proc(buf: ^[dynamic]byte, req: Shell_Surface_Set_Title_Request) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
+	object := u32(req.shell_surface)
 	opcode := u16(SHELL_SURFACE_SET_TITLE_OPCODE)
 	size := u16(8 + util.compute_string_size(req.title))
-	msg := make([dynamic]byte, 0, size, allocator) or_return
-	util.write(&msg, object, opcode, size)
-	util.write(&msg, req.title)
-	encoded = msg[:]
+	num_appended = util.write(buf, object, opcode, size) or_return
+	num_appended += util.write(buf, req.title) or_return
 	return
 }
 
+SHELL_SURFACE_SET_CLASS_OPCODE :: 9
 // set surface class
 // Set a class for the surface.
 // The surface class identifies the general class of applications
 // to which the surface belongs. A common convention is to use the
 // file name (or the full path if it is a non-standard location) of
 // the application's .desktop file as the class.
-SHELL_SURFACE_SET_CLASS_OPCODE :: 9
 Shell_Surface_Set_Class_Request :: struct {
-	shell_surface : u32,
+	shell_surface : Shell_Surface,  // the object this event/request concerns
 	class_        : string,  // surface class
 }
-shell_surface_set_class_encode :: proc(req: Shell_Surface_Set_Class_Request, allocator: mem.Allocator) -> (encoded: []byte, err: mem.Allocator_Error) {
-	object := req.shell_surface
+shell_surface_set_class_write :: proc(buf: ^[dynamic]byte, req: Shell_Surface_Set_Class_Request) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
+	object := u32(req.shell_surface)
 	opcode := u16(SHELL_SURFACE_SET_CLASS_OPCODE)
 	size := u16(8 + util.compute_string_size(req.class_))
-	msg := make([dynamic]byte, 0, size, allocator) or_return
-	util.write(&msg, object, opcode, size)
-	util.write(&msg, req.class_)
-	encoded = msg[:]
+	num_appended = util.write(buf, object, opcode, size) or_return
+	num_appended += util.write(buf, req.class_) or_return
 	return
 }
 
+SHELL_SURFACE_PING_OPCODE :: 0
 // ping client
 // Ping a client to check if it is receiving events and sending
 // requests. A client is expected to reply with a pong request.
-SHELL_SURFACE_PING_OPCODE :: 0
 Shell_Surface_Ping_Event :: struct {
-	serial : u32,  // serial number of the ping
+	shell_surface : Shell_Surface,  // the object this event/request concerns
+	serial        : u32,  // serial number of the ping
 }
-shell_surface_ping_decode :: proc(data: []byte) -> Shell_Surface_Ping_Event {
+shell_surface_ping_read :: proc(data: []byte) -> (Shell_Surface_Ping_Event, int) {
 	e: Shell_Surface_Ping_Event
 	r: int
 	n := r
 	e.serial, r = util.read_u32(data[n:]); n += r
-	return e
+	return e, n
 }
 
+SHELL_SURFACE_CONFIGURE_OPCODE :: 1
 // suggest resize
 // The configure event asks the client to resize its surface.
 // The size is a hint, in the sense that the client is free to
@@ -1974,13 +1812,13 @@ shell_surface_ping_decode :: proc(data: []byte) -> Shell_Surface_Ping_Event {
 // event it received.
 // The width and height arguments specify the size of the window
 // in surface-local coordinates.
-SHELL_SURFACE_CONFIGURE_OPCODE :: 1
 Shell_Surface_Configure_Event :: struct {
-	edges  : Shell_Surface_Resize_Set,  // how the surface was resized
-	width  : i32,  // new width of the surface
-	height : i32,  // new height of the surface
+	shell_surface : Shell_Surface,  // the object this event/request concerns
+	edges         : Shell_Surface_Resize_Set,  // how the surface was resized
+	width         : i32,  // new width of the surface
+	height        : i32,  // new height of the surface
 }
-shell_surface_configure_decode :: proc(data: []byte) -> Shell_Surface_Configure_Event {
+shell_surface_configure_read :: proc(data: []byte) -> (Shell_Surface_Configure_Event, int) {
 	e: Shell_Surface_Configure_Event
 	r: int
 	n := r
@@ -1988,20 +1826,22 @@ shell_surface_configure_decode :: proc(data: []byte) -> Shell_Surface_Configure_
 	e.edges = transmute(Shell_Surface_Resize_Set)val_edges
 	e.width, r = util.read_i32(data[n:]); n += r
 	e.height, r = util.read_i32(data[n:]); n += r
-	return e
+	return e, n
 }
 
+SHELL_SURFACE_POPUP_DONE_OPCODE :: 2
 // popup interaction is done
 // The popup_done event is sent out when a popup grab is broken,
 // that is, when the user clicks a surface that doesn't belong
 // to the client owning the popup surface.
-SHELL_SURFACE_POPUP_DONE_OPCODE :: 2
-Shell_Surface_Popup_Done_Event :: struct {}
-shell_surface_popup_done_decode :: proc(data: []byte) -> Shell_Surface_Popup_Done_Event {
+Shell_Surface_Popup_Done_Event :: struct {
+	shell_surface : Shell_Surface,  // the object this event/request concerns
+}
+shell_surface_popup_done_read :: proc(data: []byte) -> (Shell_Surface_Popup_Done_Event, int) {
 	e: Shell_Surface_Popup_Done_Event
 	r: int
 	n := r
-	return e
+	return e, n
 }
 
 // edge values for resizing
@@ -2077,22 +1917,21 @@ Shell_Surface_Fullscreen_Method :: enum u32 {
 SURFACE_INTERFACE :: "wl_surface"
 SURFACE_VERSION :: 7
 
+SURFACE_DESTROY_OPCODE :: 0
 // delete surface
 // Deletes the surface and invalidates its object ID.
-SURFACE_DESTROY_OPCODE :: 0
 Surface_Destroy_Request :: struct {
-	surface : u32,
+	surface : Surface,  // the object this event/request concerns
 }
-surface_destroy_encode :: proc(req: Surface_Destroy_Request, allocator: mem.Allocator) -> (encoded: []byte, err: mem.Allocator_Error) {
-	object := req.surface
+surface_destroy_write :: proc(buf: ^[dynamic]byte, req: Surface_Destroy_Request) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
+	object := u32(req.surface)
 	opcode := u16(SURFACE_DESTROY_OPCODE)
 	size := u16(8)
-	msg := make([dynamic]byte, 0, size, allocator) or_return
-	util.write(&msg, object, opcode, size)
-	encoded = msg[:]
+	num_appended = util.write(buf, object, opcode, size) or_return
 	return
 }
 
+SURFACE_ATTACH_OPCODE :: 1
 // set the surface contents
 // Set a buffer as the content of this surface.
 // The new size of the surface is calculated based on the buffer
@@ -2151,26 +1990,24 @@ surface_destroy_encode :: proc(req: Surface_Destroy_Request, allocator: mem.Allo
 // maximise compatibility should not destroy pending buffers and should
 // ensure that they explicitly remove content from surfaces, even after
 // destroying buffers.
-SURFACE_ATTACH_OPCODE :: 1
 Surface_Attach_Request :: struct {
-	surface : u32,
-	buffer  : u32,  // buffer of surface contents
+	surface : Surface,  // the object this event/request concerns
+	buffer  : Buffer,  // buffer of surface contents
 	x       : i32,  // surface-local x coordinate
 	y       : i32,  // surface-local y coordinate
 }
-surface_attach_encode :: proc(req: Surface_Attach_Request, allocator: mem.Allocator) -> (encoded: []byte, err: mem.Allocator_Error) {
-	object := req.surface
+surface_attach_write :: proc(buf: ^[dynamic]byte, req: Surface_Attach_Request) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
+	object := u32(req.surface)
 	opcode := u16(SURFACE_ATTACH_OPCODE)
 	size := u16(8 + size_of(req.buffer) + size_of(req.x) + size_of(req.y))
-	msg := make([dynamic]byte, 0, size, allocator) or_return
-	util.write(&msg, object, opcode, size)
-	util.write(&msg, req.buffer)
-	util.write(&msg, req.x)
-	util.write(&msg, req.y)
-	encoded = msg[:]
+	num_appended = util.write(buf, object, opcode, size) or_return
+	num_appended += util.write(buf, u32(req.buffer)) or_return
+	num_appended += util.write(buf, req.x) or_return
+	num_appended += util.write(buf, req.y) or_return
 	return
 }
 
+SURFACE_DAMAGE_OPCODE :: 2
 // mark part of the surface damaged
 // This request is used to describe the regions where the pending
 // buffer is different from the current surface contents, and where
@@ -2188,28 +2025,26 @@ surface_attach_encode :: proc(req: Surface_Attach_Request, allocator: mem.Alloca
 // Note! New clients should not use this request. Instead damage can be
 // posted with wl_surface.damage_buffer which uses buffer coordinates
 // instead of surface coordinates.
-SURFACE_DAMAGE_OPCODE :: 2
 Surface_Damage_Request :: struct {
-	surface : u32,
+	surface : Surface,  // the object this event/request concerns
 	x       : i32,  // surface-local x coordinate
 	y       : i32,  // surface-local y coordinate
 	width   : i32,  // width of damage rectangle
 	height  : i32,  // height of damage rectangle
 }
-surface_damage_encode :: proc(req: Surface_Damage_Request, allocator: mem.Allocator) -> (encoded: []byte, err: mem.Allocator_Error) {
-	object := req.surface
+surface_damage_write :: proc(buf: ^[dynamic]byte, req: Surface_Damage_Request) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
+	object := u32(req.surface)
 	opcode := u16(SURFACE_DAMAGE_OPCODE)
 	size := u16(8 + size_of(req.x) + size_of(req.y) + size_of(req.width) + size_of(req.height))
-	msg := make([dynamic]byte, 0, size, allocator) or_return
-	util.write(&msg, object, opcode, size)
-	util.write(&msg, req.x)
-	util.write(&msg, req.y)
-	util.write(&msg, req.width)
-	util.write(&msg, req.height)
-	encoded = msg[:]
+	num_appended = util.write(buf, object, opcode, size) or_return
+	num_appended += util.write(buf, req.x) or_return
+	num_appended += util.write(buf, req.y) or_return
+	num_appended += util.write(buf, req.width) or_return
+	num_appended += util.write(buf, req.height) or_return
 	return
 }
 
+SURFACE_FRAME_OPCODE :: 3
 // request a frame throttling hint
 // Request a notification when it is a good time to start drawing a new
 // frame, by creating a frame callback. This is useful for throttling
@@ -2237,21 +2072,19 @@ surface_damage_encode :: proc(req: Surface_Damage_Request, allocator: mem.Alloca
 // attempt to use it after that point.
 // The callback_data passed in the callback is the current time, in
 // milliseconds, with an undefined base.
-SURFACE_FRAME_OPCODE :: 3
 Surface_Frame_Request :: struct {
-	surface : u32,
+	surface : Surface,  // the object this event/request concerns
 }
-surface_frame_encode :: proc(req: Surface_Frame_Request, new_id: u32, allocator: mem.Allocator) -> (encoded: []byte, err: mem.Allocator_Error) {
-	object := req.surface
+surface_frame_write :: proc(buf: ^[dynamic]byte, req: Surface_Frame_Request, new_id: u32) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
+	object := u32(req.surface)
 	opcode := u16(SURFACE_FRAME_OPCODE)
 	size := u16(8 + size_of(new_id))
-	msg := make([dynamic]byte, 0, size, allocator) or_return
-	util.write(&msg, object, opcode, size)
-	util.write(&msg, new_id)
-	encoded = msg[:]
+	num_appended = util.write(buf, object, opcode, size) or_return
+	num_appended += util.write(buf, new_id) or_return
 	return
 }
 
+SURFACE_SET_OPAQUE_REGION_OPCODE :: 4
 // set opaque region
 // This request sets the region of the surface that contains
 // opaque content.
@@ -2271,22 +2104,20 @@ surface_frame_encode :: proc(req: Surface_Frame_Request, new_id: u32, allocator:
 // opaque region has copy semantics, and the wl_region object can be
 // destroyed immediately. A NULL wl_region causes the pending opaque
 // region to be set to empty.
-SURFACE_SET_OPAQUE_REGION_OPCODE :: 4
 Surface_Set_Opaque_Region_Request :: struct {
-	surface : u32,
-	region  : u32,  // opaque region of the surface
+	surface : Surface,  // the object this event/request concerns
+	region  : Region,  // opaque region of the surface
 }
-surface_set_opaque_region_encode :: proc(req: Surface_Set_Opaque_Region_Request, allocator: mem.Allocator) -> (encoded: []byte, err: mem.Allocator_Error) {
-	object := req.surface
+surface_set_opaque_region_write :: proc(buf: ^[dynamic]byte, req: Surface_Set_Opaque_Region_Request) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
+	object := u32(req.surface)
 	opcode := u16(SURFACE_SET_OPAQUE_REGION_OPCODE)
 	size := u16(8 + size_of(req.region))
-	msg := make([dynamic]byte, 0, size, allocator) or_return
-	util.write(&msg, object, opcode, size)
-	util.write(&msg, req.region)
-	encoded = msg[:]
+	num_appended = util.write(buf, object, opcode, size) or_return
+	num_appended += util.write(buf, u32(req.region)) or_return
 	return
 }
 
+SURFACE_SET_INPUT_REGION_OPCODE :: 5
 // set input region
 // This request sets the region of the surface that can receive
 // pointer and touch events.
@@ -2305,22 +2136,20 @@ surface_set_opaque_region_encode :: proc(req: Surface_Set_Opaque_Region_Request,
 // has copy semantics, and the wl_region object can be destroyed
 // immediately. A NULL wl_region causes the input region to be set
 // to infinite.
-SURFACE_SET_INPUT_REGION_OPCODE :: 5
 Surface_Set_Input_Region_Request :: struct {
-	surface : u32,
-	region  : u32,  // input region of the surface
+	surface : Surface,  // the object this event/request concerns
+	region  : Region,  // input region of the surface
 }
-surface_set_input_region_encode :: proc(req: Surface_Set_Input_Region_Request, allocator: mem.Allocator) -> (encoded: []byte, err: mem.Allocator_Error) {
-	object := req.surface
+surface_set_input_region_write :: proc(buf: ^[dynamic]byte, req: Surface_Set_Input_Region_Request) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
+	object := u32(req.surface)
 	opcode := u16(SURFACE_SET_INPUT_REGION_OPCODE)
 	size := u16(8 + size_of(req.region))
-	msg := make([dynamic]byte, 0, size, allocator) or_return
-	util.write(&msg, object, opcode, size)
-	util.write(&msg, req.region)
-	encoded = msg[:]
+	num_appended = util.write(buf, object, opcode, size) or_return
+	num_appended += util.write(buf, u32(req.region)) or_return
 	return
 }
 
+SURFACE_COMMIT_OPCODE :: 6
 // commit pending surface state
 // Surface state (input, opaque, and damage regions, attached buffers,
 // etc.) is double-buffered. Protocol requests modify the pending state,
@@ -2358,20 +2187,18 @@ surface_set_input_region_encode :: proc(req: Surface_Set_Input_Region_Request, a
 // the newly attached wl_buffers, except for wl_surface.attach itself. If
 // there is no newly attached wl_buffer, the coordinates are relative to
 // the previous content update.
-SURFACE_COMMIT_OPCODE :: 6
 Surface_Commit_Request :: struct {
-	surface : u32,
+	surface : Surface,  // the object this event/request concerns
 }
-surface_commit_encode :: proc(req: Surface_Commit_Request, allocator: mem.Allocator) -> (encoded: []byte, err: mem.Allocator_Error) {
-	object := req.surface
+surface_commit_write :: proc(buf: ^[dynamic]byte, req: Surface_Commit_Request) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
+	object := u32(req.surface)
 	opcode := u16(SURFACE_COMMIT_OPCODE)
 	size := u16(8)
-	msg := make([dynamic]byte, 0, size, allocator) or_return
-	util.write(&msg, object, opcode, size)
-	encoded = msg[:]
+	num_appended = util.write(buf, object, opcode, size) or_return
 	return
 }
 
+SURFACE_SET_BUFFER_TRANSFORM_OPCODE :: 7
 // sets the buffer transformation
 // This request sets the transformation that the client has already applied
 // to the content of the buffer. The accepted values for the transform
@@ -2397,22 +2224,20 @@ surface_commit_encode :: proc(req: Surface_Commit_Request, allocator: mem.Alloca
 // If transform is not one of the values from the
 // wl_output.transform enum the invalid_transform protocol error
 // is raised.
-SURFACE_SET_BUFFER_TRANSFORM_OPCODE :: 7
 Surface_Set_Buffer_Transform_Request :: struct {
-	surface   : u32,
-	transform : i32,  // transform for interpreting buffer contents
+	surface   : Surface,  // the object this event/request concerns
+	transform : Output_Transform,  // transform for interpreting buffer contents
 }
-surface_set_buffer_transform_encode :: proc(req: Surface_Set_Buffer_Transform_Request, allocator: mem.Allocator) -> (encoded: []byte, err: mem.Allocator_Error) {
-	object := req.surface
+surface_set_buffer_transform_write :: proc(buf: ^[dynamic]byte, req: Surface_Set_Buffer_Transform_Request) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
+	object := u32(req.surface)
 	opcode := u16(SURFACE_SET_BUFFER_TRANSFORM_OPCODE)
 	size := u16(8 + size_of(req.transform))
-	msg := make([dynamic]byte, 0, size, allocator) or_return
-	util.write(&msg, object, opcode, size)
-	util.write(&msg, req.transform)
-	encoded = msg[:]
+	num_appended = util.write(buf, object, opcode, size) or_return
+	num_appended += util.write(buf, i32(req.transform)) or_return
 	return
 }
 
+SURFACE_SET_BUFFER_SCALE_OPCODE :: 8
 // sets the buffer scaling factor
 // This request sets an optional scaling factor on how the compositor
 // interprets the contents of the buffer attached to the window.
@@ -2431,22 +2256,20 @@ surface_set_buffer_transform_encode :: proc(req: Surface_Set_Buffer_Transform_Re
 // than the desired surface size.
 // If scale is not greater than 0 the invalid_scale protocol error is
 // raised.
-SURFACE_SET_BUFFER_SCALE_OPCODE :: 8
 Surface_Set_Buffer_Scale_Request :: struct {
-	surface : u32,
+	surface : Surface,  // the object this event/request concerns
 	scale   : i32,  // scale for interpreting buffer contents
 }
-surface_set_buffer_scale_encode :: proc(req: Surface_Set_Buffer_Scale_Request, allocator: mem.Allocator) -> (encoded: []byte, err: mem.Allocator_Error) {
-	object := req.surface
+surface_set_buffer_scale_write :: proc(buf: ^[dynamic]byte, req: Surface_Set_Buffer_Scale_Request) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
+	object := u32(req.surface)
 	opcode := u16(SURFACE_SET_BUFFER_SCALE_OPCODE)
 	size := u16(8 + size_of(req.scale))
-	msg := make([dynamic]byte, 0, size, allocator) or_return
-	util.write(&msg, object, opcode, size)
-	util.write(&msg, req.scale)
-	encoded = msg[:]
+	num_appended = util.write(buf, object, opcode, size) or_return
+	num_appended += util.write(buf, req.scale) or_return
 	return
 }
 
+SURFACE_DAMAGE_BUFFER_OPCODE :: 9
 // mark part of the surface damaged using buffer coordinates
 // This request is used to describe the regions where the pending
 // buffer is different from the current surface contents, and where
@@ -2474,28 +2297,26 @@ surface_set_buffer_scale_encode :: proc(req: Surface_Set_Buffer_Scale_Request, a
 // kinds of damage into account will have to accumulate damage from the
 // two requests separately and only transform from one to the other
 // after receiving the wl_surface.commit.
-SURFACE_DAMAGE_BUFFER_OPCODE :: 9
 Surface_Damage_Buffer_Request :: struct {
-	surface : u32,
+	surface : Surface,  // the object this event/request concerns
 	x       : i32,  // buffer-local x coordinate
 	y       : i32,  // buffer-local y coordinate
 	width   : i32,  // width of damage rectangle
 	height  : i32,  // height of damage rectangle
 }
-surface_damage_buffer_encode :: proc(req: Surface_Damage_Buffer_Request, allocator: mem.Allocator) -> (encoded: []byte, err: mem.Allocator_Error) {
-	object := req.surface
+surface_damage_buffer_write :: proc(buf: ^[dynamic]byte, req: Surface_Damage_Buffer_Request) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
+	object := u32(req.surface)
 	opcode := u16(SURFACE_DAMAGE_BUFFER_OPCODE)
 	size := u16(8 + size_of(req.x) + size_of(req.y) + size_of(req.width) + size_of(req.height))
-	msg := make([dynamic]byte, 0, size, allocator) or_return
-	util.write(&msg, object, opcode, size)
-	util.write(&msg, req.x)
-	util.write(&msg, req.y)
-	util.write(&msg, req.width)
-	util.write(&msg, req.height)
-	encoded = msg[:]
+	num_appended = util.write(buf, object, opcode, size) or_return
+	num_appended += util.write(buf, req.x) or_return
+	num_appended += util.write(buf, req.y) or_return
+	num_appended += util.write(buf, req.width) or_return
+	num_appended += util.write(buf, req.height) or_return
 	return
 }
 
+SURFACE_OFFSET_OPCODE :: 10
 // set the surface contents offset
 // The x and y arguments specify the location of the new pending
 // buffer's upper left corner, relative to the current buffer's upper
@@ -2509,24 +2330,22 @@ surface_damage_buffer_encode :: proc(req: Surface_Damage_Buffer_Request, allocat
 // This request is semantically equivalent to and the replaces the x and y
 // arguments in the wl_surface.attach request in wl_surface versions prior
 // to 5. See wl_surface.attach for details.
-SURFACE_OFFSET_OPCODE :: 10
 Surface_Offset_Request :: struct {
-	surface : u32,
+	surface : Surface,  // the object this event/request concerns
 	x       : i32,  // surface-local x coordinate
 	y       : i32,  // surface-local y coordinate
 }
-surface_offset_encode :: proc(req: Surface_Offset_Request, allocator: mem.Allocator) -> (encoded: []byte, err: mem.Allocator_Error) {
-	object := req.surface
+surface_offset_write :: proc(buf: ^[dynamic]byte, req: Surface_Offset_Request) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
+	object := u32(req.surface)
 	opcode := u16(SURFACE_OFFSET_OPCODE)
 	size := u16(8 + size_of(req.x) + size_of(req.y))
-	msg := make([dynamic]byte, 0, size, allocator) or_return
-	util.write(&msg, object, opcode, size)
-	util.write(&msg, req.x)
-	util.write(&msg, req.y)
-	encoded = msg[:]
+	num_appended = util.write(buf, object, opcode, size) or_return
+	num_appended += util.write(buf, req.x) or_return
+	num_appended += util.write(buf, req.y) or_return
 	return
 }
 
+SURFACE_GET_RELEASE_OPCODE :: 11
 // get a release callback
 // Create a callback for the release of the buffer attached by the client
 // with wl_surface.attach.
@@ -2542,38 +2361,38 @@ surface_offset_encode :: proc(req: Surface_Offset_Request, allocator: mem.Alloca
 // Sending this request without attaching a non-null buffer in the same
 // content update is a protocol error. The compositor will send the
 // no_buffer error in this case.
-SURFACE_GET_RELEASE_OPCODE :: 11
 Surface_Get_Release_Request :: struct {
-	surface : u32,
+	surface : Surface,  // the object this event/request concerns
 }
-surface_get_release_encode :: proc(req: Surface_Get_Release_Request, new_id: u32, allocator: mem.Allocator) -> (encoded: []byte, err: mem.Allocator_Error) {
-	object := req.surface
+surface_get_release_write :: proc(buf: ^[dynamic]byte, req: Surface_Get_Release_Request, new_id: u32) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
+	object := u32(req.surface)
 	opcode := u16(SURFACE_GET_RELEASE_OPCODE)
 	size := u16(8 + size_of(new_id))
-	msg := make([dynamic]byte, 0, size, allocator) or_return
-	util.write(&msg, object, opcode, size)
-	util.write(&msg, new_id)
-	encoded = msg[:]
+	num_appended = util.write(buf, object, opcode, size) or_return
+	num_appended += util.write(buf, new_id) or_return
 	return
 }
 
+SURFACE_ENTER_OPCODE :: 0
 // surface enters an output
 // This is emitted whenever a surface's creation, movement, or resizing
 // results in some part of it being within the scanout region of an
 // output.
 // Note that a surface may be overlapping with zero or more outputs.
-SURFACE_ENTER_OPCODE :: 0
 Surface_Enter_Event :: struct {
-	output : u32,  // output entered by the surface
+	surface : Surface,  // the object this event/request concerns
+	output  : Output,  // output entered by the surface
 }
-surface_enter_decode :: proc(data: []byte) -> Surface_Enter_Event {
+surface_enter_read :: proc(data: []byte) -> (Surface_Enter_Event, int) {
 	e: Surface_Enter_Event
 	r: int
 	n := r
-	e.output, r = util.read_u32(data[n:]); n += r
-	return e
+	val_output, _ := util.read_u32(data[n:]); n += 4
+	e.output = Output(val_output)
+	return e, n
 }
 
+SURFACE_LEAVE_OPCODE :: 1
 // surface leaves an output
 // This is emitted whenever a surface's creation, movement, or resizing
 // results in it no longer having any part of it within the scanout region
@@ -2583,18 +2402,20 @@ surface_enter_decode :: proc(data: []byte) -> Surface_Enter_Event {
 // has been sent, and the compositor might expect new surface content
 // updates even if no enter event has been sent. The frame event should be
 // used instead.
-SURFACE_LEAVE_OPCODE :: 1
 Surface_Leave_Event :: struct {
-	output : u32,  // output left by the surface
+	surface : Surface,  // the object this event/request concerns
+	output  : Output,  // output left by the surface
 }
-surface_leave_decode :: proc(data: []byte) -> Surface_Leave_Event {
+surface_leave_read :: proc(data: []byte) -> (Surface_Leave_Event, int) {
 	e: Surface_Leave_Event
 	r: int
 	n := r
-	e.output, r = util.read_u32(data[n:]); n += r
-	return e
+	val_output, _ := util.read_u32(data[n:]); n += 4
+	e.output = Output(val_output)
+	return e, n
 }
 
+SURFACE_PREFERRED_BUFFER_SCALE_OPCODE :: 2
 // preferred buffer scale for the surface
 // This event indicates the preferred buffer scale for this surface. It is
 // sent whenever the compositor's preference changes.
@@ -2605,18 +2426,19 @@ surface_leave_decode :: proc(data: []byte) -> Surface_Leave_Event {
 // have rendered with. This allows clients to supply a higher detail
 // buffer.
 // The compositor shall emit a scale value greater than 0.
-SURFACE_PREFERRED_BUFFER_SCALE_OPCODE :: 2
 Surface_Preferred_Buffer_Scale_Event :: struct {
-	factor : i32,  // preferred scaling factor
+	surface : Surface,  // the object this event/request concerns
+	factor  : i32,  // preferred scaling factor
 }
-surface_preferred_buffer_scale_decode :: proc(data: []byte) -> Surface_Preferred_Buffer_Scale_Event {
+surface_preferred_buffer_scale_read :: proc(data: []byte) -> (Surface_Preferred_Buffer_Scale_Event, int) {
 	e: Surface_Preferred_Buffer_Scale_Event
 	r: int
 	n := r
 	e.factor, r = util.read_i32(data[n:]); n += r
-	return e
+	return e, n
 }
 
+SURFACE_PREFERRED_BUFFER_TRANSFORM_OPCODE :: 3
 // preferred buffer transform for the surface
 // This event indicates the preferred buffer transform for this surface.
 // It is sent whenever the compositor's preference changes.
@@ -2625,16 +2447,17 @@ surface_preferred_buffer_scale_decode :: proc(data: []byte) -> Surface_Preferred
 // Applying this transformation to the surface buffer contents and using
 // wl_surface.set_buffer_transform might allow the compositor to use the
 // surface buffer more efficiently.
-SURFACE_PREFERRED_BUFFER_TRANSFORM_OPCODE :: 3
 Surface_Preferred_Buffer_Transform_Event :: struct {
-	transform : u32,  // preferred transform
+	surface   : Surface,  // the object this event/request concerns
+	transform : Output_Transform,  // preferred transform
 }
-surface_preferred_buffer_transform_decode :: proc(data: []byte) -> Surface_Preferred_Buffer_Transform_Event {
+surface_preferred_buffer_transform_read :: proc(data: []byte) -> (Surface_Preferred_Buffer_Transform_Event, int) {
 	e: Surface_Preferred_Buffer_Transform_Event
 	r: int
 	n := r
-	e.transform, r = util.read_u32(data[n:]); n += r
-	return e
+	val_transform, _ := util.read_u32(data[n:]); n += 4
+	e.transform = transmute(Output_Transform)val_transform
+	return e, n
 }
 
 // wl_surface error values
@@ -2656,6 +2479,7 @@ Surface_Error :: enum u32 {
 SEAT_INTERFACE :: "wl_seat"
 SEAT_VERSION :: 11
 
+SEAT_GET_POINTER_OPCODE :: 0
 // return pointer object
 // The ID provided will be initialized to the wl_pointer interface
 // for this seat.
@@ -2664,21 +2488,19 @@ SEAT_VERSION :: 11
 // It is a protocol violation to issue this request on a seat that has
 // never had the pointer capability. The missing_capability error will
 // be sent in this case.
-SEAT_GET_POINTER_OPCODE :: 0
 Seat_Get_Pointer_Request :: struct {
-	seat : u32,
+	seat : Seat,  // the object this event/request concerns
 }
-seat_get_pointer_encode :: proc(req: Seat_Get_Pointer_Request, new_id: u32, allocator: mem.Allocator) -> (encoded: []byte, err: mem.Allocator_Error) {
-	object := req.seat
+seat_get_pointer_write :: proc(buf: ^[dynamic]byte, req: Seat_Get_Pointer_Request, new_id: u32) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
+	object := u32(req.seat)
 	opcode := u16(SEAT_GET_POINTER_OPCODE)
 	size := u16(8 + size_of(new_id))
-	msg := make([dynamic]byte, 0, size, allocator) or_return
-	util.write(&msg, object, opcode, size)
-	util.write(&msg, new_id)
-	encoded = msg[:]
+	num_appended = util.write(buf, object, opcode, size) or_return
+	num_appended += util.write(buf, new_id) or_return
 	return
 }
 
+SEAT_GET_KEYBOARD_OPCODE :: 1
 // return keyboard object
 // The ID provided will be initialized to the wl_keyboard interface
 // for this seat.
@@ -2687,21 +2509,19 @@ seat_get_pointer_encode :: proc(req: Seat_Get_Pointer_Request, new_id: u32, allo
 // It is a protocol violation to issue this request on a seat that has
 // never had the keyboard capability. The missing_capability error will
 // be sent in this case.
-SEAT_GET_KEYBOARD_OPCODE :: 1
 Seat_Get_Keyboard_Request :: struct {
-	seat : u32,
+	seat : Seat,  // the object this event/request concerns
 }
-seat_get_keyboard_encode :: proc(req: Seat_Get_Keyboard_Request, new_id: u32, allocator: mem.Allocator) -> (encoded: []byte, err: mem.Allocator_Error) {
-	object := req.seat
+seat_get_keyboard_write :: proc(buf: ^[dynamic]byte, req: Seat_Get_Keyboard_Request, new_id: u32) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
+	object := u32(req.seat)
 	opcode := u16(SEAT_GET_KEYBOARD_OPCODE)
 	size := u16(8 + size_of(new_id))
-	msg := make([dynamic]byte, 0, size, allocator) or_return
-	util.write(&msg, object, opcode, size)
-	util.write(&msg, new_id)
-	encoded = msg[:]
+	num_appended = util.write(buf, object, opcode, size) or_return
+	num_appended += util.write(buf, new_id) or_return
 	return
 }
 
+SEAT_GET_TOUCH_OPCODE :: 2
 // return touch object
 // The ID provided will be initialized to the wl_touch interface
 // for this seat.
@@ -2710,38 +2530,34 @@ seat_get_keyboard_encode :: proc(req: Seat_Get_Keyboard_Request, new_id: u32, al
 // It is a protocol violation to issue this request on a seat that has
 // never had the touch capability. The missing_capability error will
 // be sent in this case.
-SEAT_GET_TOUCH_OPCODE :: 2
 Seat_Get_Touch_Request :: struct {
-	seat : u32,
+	seat : Seat,  // the object this event/request concerns
 }
-seat_get_touch_encode :: proc(req: Seat_Get_Touch_Request, new_id: u32, allocator: mem.Allocator) -> (encoded: []byte, err: mem.Allocator_Error) {
-	object := req.seat
+seat_get_touch_write :: proc(buf: ^[dynamic]byte, req: Seat_Get_Touch_Request, new_id: u32) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
+	object := u32(req.seat)
 	opcode := u16(SEAT_GET_TOUCH_OPCODE)
 	size := u16(8 + size_of(new_id))
-	msg := make([dynamic]byte, 0, size, allocator) or_return
-	util.write(&msg, object, opcode, size)
-	util.write(&msg, new_id)
-	encoded = msg[:]
+	num_appended = util.write(buf, object, opcode, size) or_return
+	num_appended += util.write(buf, new_id) or_return
 	return
 }
 
+SEAT_RELEASE_OPCODE :: 3
 // release the seat object
 // Using this request a client can tell the server that it is not going to
 // use the seat object anymore.
-SEAT_RELEASE_OPCODE :: 3
 Seat_Release_Request :: struct {
-	seat : u32,
+	seat : Seat,  // the object this event/request concerns
 }
-seat_release_encode :: proc(req: Seat_Release_Request, allocator: mem.Allocator) -> (encoded: []byte, err: mem.Allocator_Error) {
-	object := req.seat
+seat_release_write :: proc(buf: ^[dynamic]byte, req: Seat_Release_Request) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
+	object := u32(req.seat)
 	opcode := u16(SEAT_RELEASE_OPCODE)
 	size := u16(8)
-	msg := make([dynamic]byte, 0, size, allocator) or_return
-	util.write(&msg, object, opcode, size)
-	encoded = msg[:]
+	num_appended = util.write(buf, object, opcode, size) or_return
 	return
 }
 
+SEAT_CAPABILITIES_OPCODE :: 0
 // seat capabilities changed
 // This is sent on binding to the seat global or whenever a seat gains
 // or loses the pointer, keyboard or touch capabilities.
@@ -2764,19 +2580,20 @@ seat_release_encode :: proc(req: Seat_Release_Request, allocator: mem.Allocator)
 // recent event notifying the client of an added pointer capability.
 // The above behavior also applies to wl_keyboard and wl_touch with the
 // keyboard and touch capabilities, respectively.
-SEAT_CAPABILITIES_OPCODE :: 0
 Seat_Capabilities_Event :: struct {
+	seat         : Seat,  // the object this event/request concerns
 	capabilities : Seat_Capability_Set,  // capabilities of the seat
 }
-seat_capabilities_decode :: proc(data: []byte) -> Seat_Capabilities_Event {
+seat_capabilities_read :: proc(data: []byte) -> (Seat_Capabilities_Event, int) {
 	e: Seat_Capabilities_Event
 	r: int
 	n := r
 	val_capabilities, _ := util.read_u32(data[n:]); n += 4
 	e.capabilities = transmute(Seat_Capability_Set)val_capabilities
-	return e
+	return e, n
 }
 
+SEAT_NAME_OPCODE :: 1
 // unique identifier for this seat
 // In a multi-seat configuration the seat name can be used by clients to
 // help identify which physical devices the seat represents.
@@ -2790,17 +2607,16 @@ seat_capabilities_decode :: proc(data: []byte) -> Seat_Capabilities_Event {
 // and the name does not change over the lifetime of the wl_seat global.
 // Compositors may re-use the same seat name if the wl_seat global is
 // destroyed and re-created later.
-SEAT_NAME_OPCODE :: 1
 Seat_Name_Event :: struct {
+	seat : Seat,  // the object this event/request concerns
 	name : string,  // seat identifier
 }
-seat_name_decode :: proc(data: []byte, allocator: mem.Allocator) -> Seat_Name_Event {
+seat_name_read :: proc(data: []byte) -> (Seat_Name_Event, int) {
 	e: Seat_Name_Event
 	r: int
 	n := r
 	e.name, r = util.read_string(data[n:]); n += r
-	e.name = strings.clone(e.name, allocator)
-	return e
+	return e, n
 }
 
 // seat capability bitmask
@@ -2830,6 +2646,7 @@ Seat_Error :: enum u32 {
 POINTER_INTERFACE :: "wl_pointer"
 POINTER_VERSION :: 11
 
+POINTER_SET_CURSOR_OPCODE :: 0
 // set the pointer surface
 // Set the pointer surface, i.e., the surface that contains the
 // pointer image (cursor). This request gives the surface the role
@@ -2858,110 +2675,111 @@ POINTER_VERSION :: 11
 // The serial parameter must match the latest wl_pointer.enter
 // serial number sent to the client. Otherwise the request will be
 // ignored.
-POINTER_SET_CURSOR_OPCODE :: 0
 Pointer_Set_Cursor_Request :: struct {
-	pointer   : u32,
+	pointer   : Pointer,  // the object this event/request concerns
 	serial    : u32,  // serial number of the enter event
-	surface   : u32,  // pointer surface
+	surface   : Surface,  // pointer surface
 	hotspot_x : i32,  // surface-local x coordinate
 	hotspot_y : i32,  // surface-local y coordinate
 }
-pointer_set_cursor_encode :: proc(req: Pointer_Set_Cursor_Request, allocator: mem.Allocator) -> (encoded: []byte, err: mem.Allocator_Error) {
-	object := req.pointer
+pointer_set_cursor_write :: proc(buf: ^[dynamic]byte, req: Pointer_Set_Cursor_Request) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
+	object := u32(req.pointer)
 	opcode := u16(POINTER_SET_CURSOR_OPCODE)
 	size := u16(8 + size_of(req.serial) + size_of(req.surface) + size_of(req.hotspot_x) + size_of(req.hotspot_y))
-	msg := make([dynamic]byte, 0, size, allocator) or_return
-	util.write(&msg, object, opcode, size)
-	util.write(&msg, req.serial)
-	util.write(&msg, req.surface)
-	util.write(&msg, req.hotspot_x)
-	util.write(&msg, req.hotspot_y)
-	encoded = msg[:]
+	num_appended = util.write(buf, object, opcode, size) or_return
+	num_appended += util.write(buf, req.serial) or_return
+	num_appended += util.write(buf, u32(req.surface)) or_return
+	num_appended += util.write(buf, req.hotspot_x) or_return
+	num_appended += util.write(buf, req.hotspot_y) or_return
 	return
 }
 
+POINTER_RELEASE_OPCODE :: 1
 // release the pointer object
 // Using this request a client can tell the server that it is not going to
 // use the pointer object anymore.
 // This request destroys the pointer proxy object, so clients must not call
 // wl_pointer_destroy() after using this request.
-POINTER_RELEASE_OPCODE :: 1
 Pointer_Release_Request :: struct {
-	pointer : u32,
+	pointer : Pointer,  // the object this event/request concerns
 }
-pointer_release_encode :: proc(req: Pointer_Release_Request, allocator: mem.Allocator) -> (encoded: []byte, err: mem.Allocator_Error) {
-	object := req.pointer
+pointer_release_write :: proc(buf: ^[dynamic]byte, req: Pointer_Release_Request) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
+	object := u32(req.pointer)
 	opcode := u16(POINTER_RELEASE_OPCODE)
 	size := u16(8)
-	msg := make([dynamic]byte, 0, size, allocator) or_return
-	util.write(&msg, object, opcode, size)
-	encoded = msg[:]
+	num_appended = util.write(buf, object, opcode, size) or_return
 	return
 }
 
+POINTER_ENTER_OPCODE :: 0
 // enter event
 // Notification that this seat's pointer is focused on a certain
 // surface.
 // When a seat's focus enters a surface, the pointer image
 // is undefined and a client should respond to this event by setting
 // an appropriate pointer image with the set_cursor request.
-POINTER_ENTER_OPCODE :: 0
 Pointer_Enter_Event :: struct {
+	pointer   : Pointer,  // the object this event/request concerns
 	serial    : u32,  // serial number of the enter event
-	surface   : u32,  // surface entered by the pointer
+	surface   : Surface,  // surface entered by the pointer
 	surface_x : util.Fixed,  // surface-local x coordinate
 	surface_y : util.Fixed,  // surface-local y coordinate
 }
-pointer_enter_decode :: proc(data: []byte) -> Pointer_Enter_Event {
+pointer_enter_read :: proc(data: []byte) -> (Pointer_Enter_Event, int) {
 	e: Pointer_Enter_Event
 	r: int
 	n := r
 	e.serial, r = util.read_u32(data[n:]); n += r
-	e.surface, r = util.read_u32(data[n:]); n += r
+	val_surface, _ := util.read_u32(data[n:]); n += 4
+	e.surface = Surface(val_surface)
 	e.surface_x, r = util.read_fixed(data[n:]); n += r
 	e.surface_y, r = util.read_fixed(data[n:]); n += r
-	return e
+	return e, n
 }
 
+POINTER_LEAVE_OPCODE :: 1
 // leave event
 // Notification that this seat's pointer is no longer focused on
 // a certain surface.
 // The leave notification is sent before the enter notification
 // for the new focus.
-POINTER_LEAVE_OPCODE :: 1
 Pointer_Leave_Event :: struct {
+	pointer : Pointer,  // the object this event/request concerns
 	serial  : u32,  // serial number of the leave event
-	surface : u32,  // surface left by the pointer
+	surface : Surface,  // surface left by the pointer
 }
-pointer_leave_decode :: proc(data: []byte) -> Pointer_Leave_Event {
+pointer_leave_read :: proc(data: []byte) -> (Pointer_Leave_Event, int) {
 	e: Pointer_Leave_Event
 	r: int
 	n := r
 	e.serial, r = util.read_u32(data[n:]); n += r
-	e.surface, r = util.read_u32(data[n:]); n += r
-	return e
+	val_surface, _ := util.read_u32(data[n:]); n += 4
+	e.surface = Surface(val_surface)
+	return e, n
 }
 
+POINTER_MOTION_OPCODE :: 2
 // pointer motion event
 // Notification of pointer location change. The arguments
 // surface_x and surface_y are the location relative to the
 // focused surface.
-POINTER_MOTION_OPCODE :: 2
 Pointer_Motion_Event :: struct {
+	pointer   : Pointer,  // the object this event/request concerns
 	time      : u32,  // timestamp with millisecond granularity
 	surface_x : util.Fixed,  // surface-local x coordinate
 	surface_y : util.Fixed,  // surface-local y coordinate
 }
-pointer_motion_decode :: proc(data: []byte) -> Pointer_Motion_Event {
+pointer_motion_read :: proc(data: []byte) -> (Pointer_Motion_Event, int) {
 	e: Pointer_Motion_Event
 	r: int
 	n := r
 	e.time, r = util.read_u32(data[n:]); n += r
 	e.surface_x, r = util.read_fixed(data[n:]); n += r
 	e.surface_y, r = util.read_fixed(data[n:]); n += r
-	return e
+	return e, n
 }
 
+POINTER_BUTTON_OPCODE :: 3
 // pointer button event
 // Mouse button click and release notifications.
 // The location of the click is given by the last motion, warp or
@@ -2974,24 +2792,26 @@ pointer_motion_decode :: proc(data: []byte) -> Pointer_Motion_Event {
 // kernel's event code list. All other button codes above 0xFFFF are
 // currently undefined but may be used in future versions of this
 // protocol.
-POINTER_BUTTON_OPCODE :: 3
 Pointer_Button_Event :: struct {
-	serial : u32,  // serial number of the button event
-	time   : u32,  // timestamp with millisecond granularity
-	button : u32,  // button that produced the event
-	state  : u32,  // physical state of the button
+	pointer : Pointer,  // the object this event/request concerns
+	serial  : u32,  // serial number of the button event
+	time    : u32,  // timestamp with millisecond granularity
+	button  : u32,  // button that produced the event
+	state   : Pointer_Button_State,  // physical state of the button
 }
-pointer_button_decode :: proc(data: []byte) -> Pointer_Button_Event {
+pointer_button_read :: proc(data: []byte) -> (Pointer_Button_Event, int) {
 	e: Pointer_Button_Event
 	r: int
 	n := r
 	e.serial, r = util.read_u32(data[n:]); n += r
 	e.time, r = util.read_u32(data[n:]); n += r
 	e.button, r = util.read_u32(data[n:]); n += r
-	e.state, r = util.read_u32(data[n:]); n += r
-	return e
+	val_state, _ := util.read_u32(data[n:]); n += 4
+	e.state = transmute(Pointer_Button_State)val_state
+	return e, n
 }
 
+POINTER_AXIS_OPCODE :: 4
 // axis event
 // Scroll and other axis notifications.
 // For scroll events (vertical and horizontal scroll axes), the
@@ -3005,22 +2825,24 @@ pointer_button_decode :: proc(data: []byte) -> Pointer_Button_Event {
 // equivalent to a motion event vector.
 // When applicable, a client can transform its content relative to the
 // scroll distance.
-POINTER_AXIS_OPCODE :: 4
 Pointer_Axis_Event :: struct {
-	time  : u32,  // timestamp with millisecond granularity
-	axis  : u32,  // axis type
-	value : util.Fixed,  // length of vector in surface-local coordinate space
+	pointer : Pointer,  // the object this event/request concerns
+	time    : u32,  // timestamp with millisecond granularity
+	axis    : Pointer_Axis,  // axis type
+	value   : util.Fixed,  // length of vector in surface-local coordinate space
 }
-pointer_axis_decode :: proc(data: []byte) -> Pointer_Axis_Event {
+pointer_axis_read :: proc(data: []byte) -> (Pointer_Axis_Event, int) {
 	e: Pointer_Axis_Event
 	r: int
 	n := r
 	e.time, r = util.read_u32(data[n:]); n += r
-	e.axis, r = util.read_u32(data[n:]); n += r
+	val_axis, _ := util.read_u32(data[n:]); n += 4
+	e.axis = transmute(Pointer_Axis)val_axis
 	e.value, r = util.read_fixed(data[n:]); n += r
-	return e
+	return e, n
 }
 
+POINTER_FRAME_OPCODE :: 5
 // end of a pointer event sequence
 // Indicates the end of a set of events that logically belong together.
 // A client is expected to accumulate the data in all events within the
@@ -3052,15 +2874,17 @@ pointer_axis_decode :: proc(data: []byte) -> Pointer_Axis_Event {
 // Compositor-specific policies may require the wl_pointer.leave and
 // wl_pointer.enter event being split across multiple wl_pointer.frame
 // groups.
-POINTER_FRAME_OPCODE :: 5
-Pointer_Frame_Event :: struct {}
-pointer_frame_decode :: proc(data: []byte) -> Pointer_Frame_Event {
+Pointer_Frame_Event :: struct {
+	pointer : Pointer,  // the object this event/request concerns
+}
+pointer_frame_read :: proc(data: []byte) -> (Pointer_Frame_Event, int) {
 	e: Pointer_Frame_Event
 	r: int
 	n := r
-	return e
+	return e, n
 }
 
+POINTER_AXIS_SOURCE_OPCODE :: 6
 // axis source event
 // Source information for scroll and other axes.
 // This event does not occur on its own. It is sent before a
@@ -3082,18 +2906,20 @@ pointer_frame_decode :: proc(data: []byte) -> Pointer_Frame_Event {
 // Only one wl_pointer.axis_source event is permitted per frame.
 // The order of wl_pointer.axis_discrete and wl_pointer.axis_source is
 // not guaranteed.
-POINTER_AXIS_SOURCE_OPCODE :: 6
 Pointer_Axis_Source_Event :: struct {
-	axis_source : u32,  // source of the axis event
+	pointer     : Pointer,  // the object this event/request concerns
+	axis_source : Pointer_Axis_Source,  // source of the axis event
 }
-pointer_axis_source_decode :: proc(data: []byte) -> Pointer_Axis_Source_Event {
+pointer_axis_source_read :: proc(data: []byte) -> (Pointer_Axis_Source_Event, int) {
 	e: Pointer_Axis_Source_Event
 	r: int
 	n := r
-	e.axis_source, r = util.read_u32(data[n:]); n += r
-	return e
+	val_axis_source, _ := util.read_u32(data[n:]); n += 4
+	e.axis_source = transmute(Pointer_Axis_Source)val_axis_source
+	return e, n
 }
 
+POINTER_AXIS_STOP_OPCODE :: 7
 // axis stop event
 // Stop notification for scroll and other axes.
 // For some wl_pointer.axis_source types, a wl_pointer.axis_stop event
@@ -3106,20 +2932,22 @@ pointer_axis_source_decode :: proc(data: []byte) -> Pointer_Axis_Source_Event {
 // The timestamp is to be interpreted identical to the timestamp in the
 // wl_pointer.axis event. The timestamp value may be the same as a
 // preceding wl_pointer.axis event.
-POINTER_AXIS_STOP_OPCODE :: 7
 Pointer_Axis_Stop_Event :: struct {
-	time : u32,  // timestamp with millisecond granularity
-	axis : u32,  // the axis stopped with this event
+	pointer : Pointer,  // the object this event/request concerns
+	time    : u32,  // timestamp with millisecond granularity
+	axis    : Pointer_Axis,  // the axis stopped with this event
 }
-pointer_axis_stop_decode :: proc(data: []byte) -> Pointer_Axis_Stop_Event {
+pointer_axis_stop_read :: proc(data: []byte) -> (Pointer_Axis_Stop_Event, int) {
 	e: Pointer_Axis_Stop_Event
 	r: int
 	n := r
 	e.time, r = util.read_u32(data[n:]); n += r
-	e.axis, r = util.read_u32(data[n:]); n += r
-	return e
+	val_axis, _ := util.read_u32(data[n:]); n += 4
+	e.axis = transmute(Pointer_Axis)val_axis
+	return e, n
 }
 
+POINTER_AXIS_DISCRETE_OPCODE :: 8
 // axis click event
 // Discrete step information for scroll and other axes.
 // This event carries the axis value of the wl_pointer.axis event in
@@ -3144,20 +2972,22 @@ pointer_axis_stop_decode :: proc(data: []byte) -> Pointer_Axis_Stop_Event {
 // axis event.
 // The order of wl_pointer.axis_discrete and wl_pointer.axis_source is
 // not guaranteed.
-POINTER_AXIS_DISCRETE_OPCODE :: 8
 Pointer_Axis_Discrete_Event :: struct {
-	axis     : u32,  // axis type
+	pointer  : Pointer,  // the object this event/request concerns
+	axis     : Pointer_Axis,  // axis type
 	discrete : i32,  // number of steps
 }
-pointer_axis_discrete_decode :: proc(data: []byte) -> Pointer_Axis_Discrete_Event {
+pointer_axis_discrete_read :: proc(data: []byte) -> (Pointer_Axis_Discrete_Event, int) {
 	e: Pointer_Axis_Discrete_Event
 	r: int
 	n := r
-	e.axis, r = util.read_u32(data[n:]); n += r
+	val_axis, _ := util.read_u32(data[n:]); n += 4
+	e.axis = transmute(Pointer_Axis)val_axis
 	e.discrete, r = util.read_i32(data[n:]); n += r
-	return e
+	return e, n
 }
 
+POINTER_AXIS_VALUE120_OPCODE :: 9
 // axis high-resolution scroll event
 // Discrete high-resolution scroll information.
 // This event carries high-resolution wheel scroll information,
@@ -3175,20 +3005,22 @@ pointer_axis_discrete_decode :: proc(data: []byte) -> Pointer_Axis_Discrete_Even
 // wl_pointer.frame, the axis source applies to this event.
 // The order of wl_pointer.axis_value120 and wl_pointer.axis_source is
 // not guaranteed.
-POINTER_AXIS_VALUE120_OPCODE :: 9
 Pointer_Axis_Value120_Event :: struct {
-	axis     : u32,  // axis type
+	pointer  : Pointer,  // the object this event/request concerns
+	axis     : Pointer_Axis,  // axis type
 	value120 : i32,  // scroll distance as fraction of 120
 }
-pointer_axis_value120_decode :: proc(data: []byte) -> Pointer_Axis_Value120_Event {
+pointer_axis_value120_read :: proc(data: []byte) -> (Pointer_Axis_Value120_Event, int) {
 	e: Pointer_Axis_Value120_Event
 	r: int
 	n := r
-	e.axis, r = util.read_u32(data[n:]); n += r
+	val_axis, _ := util.read_u32(data[n:]); n += 4
+	e.axis = transmute(Pointer_Axis)val_axis
 	e.value120, r = util.read_i32(data[n:]); n += r
-	return e
+	return e, n
 }
 
+POINTER_AXIS_RELATIVE_DIRECTION_OPCODE :: 10
 // axis relative physical direction event
 // Relative directional information of the entity causing the axis
 // motion.
@@ -3220,20 +3052,23 @@ pointer_axis_value120_decode :: proc(data: []byte) -> Pointer_Axis_Value120_Even
 // The order of wl_pointer.axis_relative_direction,
 // wl_pointer.axis_discrete and wl_pointer.axis_source is not
 // guaranteed.
-POINTER_AXIS_RELATIVE_DIRECTION_OPCODE :: 10
 Pointer_Axis_Relative_Direction_Event :: struct {
-	axis      : u32,  // axis type
-	direction : u32,  // physical direction relative to axis motion
+	pointer   : Pointer,  // the object this event/request concerns
+	axis      : Pointer_Axis,  // axis type
+	direction : Pointer_Axis_Relative_Direction,  // physical direction relative to axis motion
 }
-pointer_axis_relative_direction_decode :: proc(data: []byte) -> Pointer_Axis_Relative_Direction_Event {
+pointer_axis_relative_direction_read :: proc(data: []byte) -> (Pointer_Axis_Relative_Direction_Event, int) {
 	e: Pointer_Axis_Relative_Direction_Event
 	r: int
 	n := r
-	e.axis, r = util.read_u32(data[n:]); n += r
-	e.direction, r = util.read_u32(data[n:]); n += r
-	return e
+	val_axis, _ := util.read_u32(data[n:]); n += 4
+	e.axis = transmute(Pointer_Axis)val_axis
+	val_direction, _ := util.read_u32(data[n:]); n += 4
+	e.direction = transmute(Pointer_Axis_Relative_Direction)val_direction
+	return e, n
 }
 
+POINTER_WARP_OPCODE :: 11
 // pointer warp event
 // Notification of pointer location change within a surface.
 // This location change is not due to events on the input device,
@@ -3245,18 +3080,18 @@ pointer_axis_relative_direction_decode :: proc(data: []byte) -> Pointer_Axis_Rel
 // the focused surface.
 // This event must not occur in the same wl_pointer.frame as a
 // wl_pointer.enter or wl_pointer.motion event.
-POINTER_WARP_OPCODE :: 11
 Pointer_Warp_Event :: struct {
+	pointer   : Pointer,  // the object this event/request concerns
 	surface_x : util.Fixed,  // surface-local x coordinate
 	surface_y : util.Fixed,  // surface-local y coordinate
 }
-pointer_warp_decode :: proc(data: []byte) -> Pointer_Warp_Event {
+pointer_warp_read :: proc(data: []byte) -> (Pointer_Warp_Event, int) {
 	e: Pointer_Warp_Event
 	r: int
 	n := r
 	e.surface_x, r = util.read_fixed(data[n:]); n += r
 	e.surface_y, r = util.read_fixed(data[n:]); n += r
-	return e
+	return e, n
 }
 
 Pointer_Error :: enum u32 {
@@ -3321,43 +3156,44 @@ Pointer_Axis_Relative_Direction :: enum u32 {
 KEYBOARD_INTERFACE :: "wl_keyboard"
 KEYBOARD_VERSION :: 11
 
-// release the keyboard object
 KEYBOARD_RELEASE_OPCODE :: 0
+// release the keyboard object
 Keyboard_Release_Request :: struct {
-	keyboard : u32,
+	keyboard : Keyboard,  // the object this event/request concerns
 }
-keyboard_release_encode :: proc(req: Keyboard_Release_Request, allocator: mem.Allocator) -> (encoded: []byte, err: mem.Allocator_Error) {
-	object := req.keyboard
+keyboard_release_write :: proc(buf: ^[dynamic]byte, req: Keyboard_Release_Request) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
+	object := u32(req.keyboard)
 	opcode := u16(KEYBOARD_RELEASE_OPCODE)
 	size := u16(8)
-	msg := make([dynamic]byte, 0, size, allocator) or_return
-	util.write(&msg, object, opcode, size)
-	encoded = msg[:]
+	num_appended = util.write(buf, object, opcode, size) or_return
 	return
 }
 
+KEYBOARD_KEYMAP_OPCODE :: 0
 // keyboard mapping
 // This event provides a file descriptor to the client which can be
 // memory-mapped in read-only mode to provide a keyboard mapping
 // description.
 // From version 7 onwards, the fd must be mapped with MAP_PRIVATE by
 // the recipient, as MAP_SHARED may fail.
-KEYBOARD_KEYMAP_OPCODE :: 0
 Keyboard_Keymap_Event :: struct {
-	format : u32,  // keymap format
-	fd     : linux.Fd,  // keymap file descriptor
-	size   : u32,  // keymap size, in bytes
+	keyboard : Keyboard,  // the object this event/request concerns
+	format   : Keyboard_Keymap_Format,  // keymap format
+	fd       : linux.Fd,  // keymap file descriptor
+	size     : u32,  // keymap size, in bytes
 }
-keyboard_keymap_decode :: proc(data: []byte, fds: ^[dynamic]linux.Fd) -> Keyboard_Keymap_Event {
+keyboard_keymap_read :: proc(data: []byte, fds: ^[dynamic; 28]linux.Fd) -> (Keyboard_Keymap_Event, int) {
 	e: Keyboard_Keymap_Event
 	r: int
 	n := r
-	e.format, r = util.read_u32(data[n:]); n += r
+	val_format, _ := util.read_u32(data[n:]); n += 4
+	e.format = transmute(Keyboard_Keymap_Format)val_format
 	e.fd = pop_front(fds)
 	e.size, r = util.read_u32(data[n:]); n += r
-	return e
+	return e, n
 }
 
+KEYBOARD_ENTER_OPCODE :: 1
 // enter event
 // Notification that this seat's keyboard focus is on a certain
 // surface.
@@ -3369,23 +3205,24 @@ keyboard_keymap_decode :: proc(data: []byte, fds: ^[dynamic]linux.Fd) -> Keyboar
 // wl_keyboard already had an active surface immediately before this event.
 // Clients should not use the list of pressed keys to emulate key-press
 // events. The order of keys in the list is unspecified.
-KEYBOARD_ENTER_OPCODE :: 1
 Keyboard_Enter_Event :: struct {
-	serial  : u32,  // serial number of the enter event
-	surface : u32,  // surface gaining keyboard focus
-	keys    : []u8,  // the keys currently logically down
+	keyboard : Keyboard,  // the object this event/request concerns
+	serial   : u32,  // serial number of the enter event
+	surface  : Surface,  // surface gaining keyboard focus
+	keys     : []u8,  // the keys currently logically down
 }
-keyboard_enter_decode :: proc(data: []byte, allocator: mem.Allocator) -> Keyboard_Enter_Event {
+keyboard_enter_read :: proc(data: []byte) -> (Keyboard_Enter_Event, int) {
 	e: Keyboard_Enter_Event
 	r: int
 	n := r
 	e.serial, r = util.read_u32(data[n:]); n += r
-	e.surface, r = util.read_u32(data[n:]); n += r
+	val_surface, _ := util.read_u32(data[n:]); n += 4
+	e.surface = Surface(val_surface)
 	e.keys, r = util.read_array(data[n:]); n += r
-	e.keys = bytes.clone(e.keys, allocator)
-	return e
+	return e, n
 }
 
+KEYBOARD_LEAVE_OPCODE :: 2
 // leave event
 // Notification that this seat's keyboard focus is no longer on
 // a certain surface.
@@ -3395,20 +3232,22 @@ keyboard_enter_decode :: proc(data: []byte, allocator: mem.Allocator) -> Keyboar
 // defaults. The compositor must not send this event if the active surface
 // of the wl_keyboard was not equal to the surface argument immediately
 // before this event.
-KEYBOARD_LEAVE_OPCODE :: 2
 Keyboard_Leave_Event :: struct {
-	serial  : u32,  // serial number of the leave event
-	surface : u32,  // surface that lost keyboard focus
+	keyboard : Keyboard,  // the object this event/request concerns
+	serial   : u32,  // serial number of the leave event
+	surface  : Surface,  // surface that lost keyboard focus
 }
-keyboard_leave_decode :: proc(data: []byte) -> Keyboard_Leave_Event {
+keyboard_leave_read :: proc(data: []byte) -> (Keyboard_Leave_Event, int) {
 	e: Keyboard_Leave_Event
 	r: int
 	n := r
 	e.serial, r = util.read_u32(data[n:]); n += r
-	e.surface, r = util.read_u32(data[n:]); n += r
-	return e
+	val_surface, _ := util.read_u32(data[n:]); n += 4
+	e.surface = Surface(val_surface)
+	return e, n
 }
 
+KEYBOARD_KEY_OPCODE :: 3
 // key event
 // A key was pressed or released.
 // The time argument is a timestamp with millisecond
@@ -3429,24 +3268,26 @@ keyboard_leave_decode :: proc(data: []byte) -> Keyboard_Leave_Event {
 // key state when a wl_keyboard.repeat_info event with a rate argument of
 // 0 has been received. This allows the compositor to take over the
 // responsibility of key repetition.
-KEYBOARD_KEY_OPCODE :: 3
 Keyboard_Key_Event :: struct {
-	serial : u32,  // serial number of the key event
-	time   : u32,  // timestamp with millisecond granularity
-	key    : u32,  // key that produced the event
-	state  : u32,  // physical state of the key
+	keyboard : Keyboard,  // the object this event/request concerns
+	serial   : u32,  // serial number of the key event
+	time     : u32,  // timestamp with millisecond granularity
+	key      : u32,  // key that produced the event
+	state    : Keyboard_Key_State,  // physical state of the key
 }
-keyboard_key_decode :: proc(data: []byte) -> Keyboard_Key_Event {
+keyboard_key_read :: proc(data: []byte) -> (Keyboard_Key_Event, int) {
 	e: Keyboard_Key_Event
 	r: int
 	n := r
 	e.serial, r = util.read_u32(data[n:]); n += r
 	e.time, r = util.read_u32(data[n:]); n += r
 	e.key, r = util.read_u32(data[n:]); n += r
-	e.state, r = util.read_u32(data[n:]); n += r
-	return e
+	val_state, _ := util.read_u32(data[n:]); n += 4
+	e.state = transmute(Keyboard_Key_State)val_state
+	return e, n
 }
 
+KEYBOARD_MODIFIERS_OPCODE :: 4
 // modifier and group state
 // Notifies clients that the modifier and/or group state has
 // changed, and it should update its local state.
@@ -3459,15 +3300,15 @@ keyboard_key_decode :: proc(data: []byte) -> Keyboard_Key_Event {
 // wl_keyboard.modifiers event with no pressed modifiers.
 // In the wl_keyboard logical state, this event updates the modifiers and
 // group.
-KEYBOARD_MODIFIERS_OPCODE :: 4
 Keyboard_Modifiers_Event :: struct {
+	keyboard       : Keyboard,  // the object this event/request concerns
 	serial         : u32,  // serial number of the modifiers event
 	mods_depressed : u32,  // depressed modifiers
 	mods_latched   : u32,  // latched modifiers
 	mods_locked    : u32,  // locked modifiers
 	group          : u32,  // keyboard layout
 }
-keyboard_modifiers_decode :: proc(data: []byte) -> Keyboard_Modifiers_Event {
+keyboard_modifiers_read :: proc(data: []byte) -> (Keyboard_Modifiers_Event, int) {
 	e: Keyboard_Modifiers_Event
 	r: int
 	n := r
@@ -3476,9 +3317,10 @@ keyboard_modifiers_decode :: proc(data: []byte) -> Keyboard_Modifiers_Event {
 	e.mods_latched, r = util.read_u32(data[n:]); n += r
 	e.mods_locked, r = util.read_u32(data[n:]); n += r
 	e.group, r = util.read_u32(data[n:]); n += r
-	return e
+	return e, n
 }
 
+KEYBOARD_REPEAT_INFO_OPCODE :: 5
 // repeat rate and delay
 // Informs the client about the keyboard's repeat rate and delay.
 // This event is sent as soon as the wl_keyboard object has been created,
@@ -3489,18 +3331,18 @@ keyboard_modifiers_decode :: proc(data: []byte) -> Keyboard_Modifiers_Event {
 // This event can be sent later on as well with a new value if necessary,
 // so clients should continue listening for the event past the creation
 // of wl_keyboard.
-KEYBOARD_REPEAT_INFO_OPCODE :: 5
 Keyboard_Repeat_Info_Event :: struct {
-	rate  : i32,  // the rate of repeating keys in characters per second
-	delay : i32,  // delay in milliseconds since key down until repeating starts
+	keyboard : Keyboard,  // the object this event/request concerns
+	rate     : i32,  // the rate of repeating keys in characters per second
+	delay    : i32,  // delay in milliseconds since key down until repeating starts
 }
-keyboard_repeat_info_decode :: proc(data: []byte) -> Keyboard_Repeat_Info_Event {
+keyboard_repeat_info_read :: proc(data: []byte) -> (Keyboard_Repeat_Info_Event, int) {
 	e: Keyboard_Repeat_Info_Event
 	r: int
 	n := r
 	e.rate, r = util.read_i32(data[n:]); n += r
 	e.delay, r = util.read_i32(data[n:]); n += r
-	return e
+	return e, n
 }
 
 // keyboard mapping format
@@ -3536,78 +3378,80 @@ Keyboard_Key_State :: enum u32 {
 TOUCH_INTERFACE :: "wl_touch"
 TOUCH_VERSION :: 11
 
-// release the touch object
 TOUCH_RELEASE_OPCODE :: 0
+// release the touch object
 Touch_Release_Request :: struct {
-	touch : u32,
+	touch : Touch,  // the object this event/request concerns
 }
-touch_release_encode :: proc(req: Touch_Release_Request, allocator: mem.Allocator) -> (encoded: []byte, err: mem.Allocator_Error) {
-	object := req.touch
+touch_release_write :: proc(buf: ^[dynamic]byte, req: Touch_Release_Request) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
+	object := u32(req.touch)
 	opcode := u16(TOUCH_RELEASE_OPCODE)
 	size := u16(8)
-	msg := make([dynamic]byte, 0, size, allocator) or_return
-	util.write(&msg, object, opcode, size)
-	encoded = msg[:]
+	num_appended = util.write(buf, object, opcode, size) or_return
 	return
 }
 
+TOUCH_DOWN_OPCODE :: 0
 // touch down event and beginning of a touch sequence
 // A new touch point has appeared on the surface. This touch point is
 // assigned a unique ID. Future events from this touch point reference
 // this ID. The ID ceases to be valid after a touch up event and may be
 // reused in the future.
-TOUCH_DOWN_OPCODE :: 0
 Touch_Down_Event :: struct {
+	touch   : Touch,  // the object this event/request concerns
 	serial  : u32,  // serial number of the touch down event
 	time    : u32,  // timestamp with millisecond granularity
-	surface : u32,  // surface touched
+	surface : Surface,  // surface touched
 	id      : i32,  // the unique ID of this touch point
 	x       : util.Fixed,  // surface-local x coordinate
 	y       : util.Fixed,  // surface-local y coordinate
 }
-touch_down_decode :: proc(data: []byte) -> Touch_Down_Event {
+touch_down_read :: proc(data: []byte) -> (Touch_Down_Event, int) {
 	e: Touch_Down_Event
 	r: int
 	n := r
 	e.serial, r = util.read_u32(data[n:]); n += r
 	e.time, r = util.read_u32(data[n:]); n += r
-	e.surface, r = util.read_u32(data[n:]); n += r
+	val_surface, _ := util.read_u32(data[n:]); n += 4
+	e.surface = Surface(val_surface)
 	e.id, r = util.read_i32(data[n:]); n += r
 	e.x, r = util.read_fixed(data[n:]); n += r
 	e.y, r = util.read_fixed(data[n:]); n += r
-	return e
+	return e, n
 }
 
+TOUCH_UP_OPCODE :: 1
 // end of a touch event sequence
 // The touch point has disappeared. No further events will be sent for
 // this touch point and the touch point's ID is released and may be
 // reused in a future touch down event.
-TOUCH_UP_OPCODE :: 1
 Touch_Up_Event :: struct {
+	touch  : Touch,  // the object this event/request concerns
 	serial : u32,  // serial number of the touch up event
 	time   : u32,  // timestamp with millisecond granularity
 	id     : i32,  // the unique ID of this touch point
 }
-touch_up_decode :: proc(data: []byte) -> Touch_Up_Event {
+touch_up_read :: proc(data: []byte) -> (Touch_Up_Event, int) {
 	e: Touch_Up_Event
 	r: int
 	n := r
 	e.serial, r = util.read_u32(data[n:]); n += r
 	e.time, r = util.read_u32(data[n:]); n += r
 	e.id, r = util.read_i32(data[n:]); n += r
-	return e
+	return e, n
 }
 
+TOUCH_MOTION_OPCODE :: 2
 // update of touch point coordinates
 // A touch point has changed coordinates.
-TOUCH_MOTION_OPCODE :: 2
 Touch_Motion_Event :: struct {
-	time : u32,  // timestamp with millisecond granularity
-	id   : i32,  // the unique ID of this touch point
-	x    : util.Fixed,  // surface-local x coordinate
-	y    : util.Fixed,  // surface-local y coordinate
+	touch : Touch,  // the object this event/request concerns
+	time  : u32,  // timestamp with millisecond granularity
+	id    : i32,  // the unique ID of this touch point
+	x     : util.Fixed,  // surface-local x coordinate
+	y     : util.Fixed,  // surface-local y coordinate
 }
-touch_motion_decode :: proc(data: []byte) -> Touch_Motion_Event {
+touch_motion_read :: proc(data: []byte) -> (Touch_Motion_Event, int) {
 	e: Touch_Motion_Event
 	r: int
 	n := r
@@ -3615,9 +3459,10 @@ touch_motion_decode :: proc(data: []byte) -> Touch_Motion_Event {
 	e.id, r = util.read_i32(data[n:]); n += r
 	e.x, r = util.read_fixed(data[n:]); n += r
 	e.y, r = util.read_fixed(data[n:]); n += r
-	return e
+	return e, n
 }
 
+TOUCH_FRAME_OPCODE :: 3
 // end of touch frame event
 // Indicates the end of a set of events that logically belong together.
 // A client is expected to accumulate the data in all events within the
@@ -3626,15 +3471,17 @@ touch_motion_decode :: proc(data: []byte) -> Touch_Motion_Event {
 // guarantee is provided about the set of events within a frame. A client
 // must assume that any state not updated in a frame is unchanged from the
 // previously known state.
-TOUCH_FRAME_OPCODE :: 3
-Touch_Frame_Event :: struct {}
-touch_frame_decode :: proc(data: []byte) -> Touch_Frame_Event {
+Touch_Frame_Event :: struct {
+	touch : Touch,  // the object this event/request concerns
+}
+touch_frame_read :: proc(data: []byte) -> (Touch_Frame_Event, int) {
 	e: Touch_Frame_Event
 	r: int
 	n := r
-	return e
+	return e, n
 }
 
+TOUCH_CANCEL_OPCODE :: 4
 // touch session cancelled
 // Sent if the compositor decides the touch stream is a global
 // gesture. No further events are sent to the clients from that
@@ -3643,15 +3490,17 @@ touch_frame_decode :: proc(data: []byte) -> Touch_Frame_Event {
 // responsible for finalizing the touch points, future touch points on
 // this surface may reuse the touch point ID.
 // No frame event is required after the cancel event.
-TOUCH_CANCEL_OPCODE :: 4
-Touch_Cancel_Event :: struct {}
-touch_cancel_decode :: proc(data: []byte) -> Touch_Cancel_Event {
+Touch_Cancel_Event :: struct {
+	touch : Touch,  // the object this event/request concerns
+}
+touch_cancel_read :: proc(data: []byte) -> (Touch_Cancel_Event, int) {
 	e: Touch_Cancel_Event
 	r: int
 	n := r
-	return e
+	return e, n
 }
 
+TOUCH_SHAPE_OPCODE :: 5
 // update shape of touch point
 // Sent when a touchpoint has changed its shape.
 // This event does not occur on its own. It is sent before a
@@ -3674,22 +3523,23 @@ touch_cancel_decode :: proc(data: []byte) -> Touch_Cancel_Event {
 // This event is only sent by the compositor if the touch device supports
 // shape reports. The client has to make reasonable assumptions about the
 // shape if it did not receive this event.
-TOUCH_SHAPE_OPCODE :: 5
 Touch_Shape_Event :: struct {
+	touch : Touch,  // the object this event/request concerns
 	id    : i32,  // the unique ID of this touch point
 	major : util.Fixed,  // length of the major axis in surface-local coordinates
 	minor : util.Fixed,  // length of the minor axis in surface-local coordinates
 }
-touch_shape_decode :: proc(data: []byte) -> Touch_Shape_Event {
+touch_shape_read :: proc(data: []byte) -> (Touch_Shape_Event, int) {
 	e: Touch_Shape_Event
 	r: int
 	n := r
 	e.id, r = util.read_i32(data[n:]); n += r
 	e.major, r = util.read_fixed(data[n:]); n += r
 	e.minor, r = util.read_fixed(data[n:]); n += r
-	return e
+	return e, n
 }
 
+TOUCH_ORIENTATION_OPCODE :: 6
 // update orientation of touch point
 // Sent when a touchpoint has changed its orientation.
 // This event does not occur on its own. It is sent before a
@@ -3710,18 +3560,18 @@ touch_shape_decode :: proc(data: []byte) -> Touch_Shape_Event {
 // 90 degrees.
 // This event is only sent by the compositor if the touch device supports
 // orientation reports.
-TOUCH_ORIENTATION_OPCODE :: 6
 Touch_Orientation_Event :: struct {
+	touch       : Touch,  // the object this event/request concerns
 	id          : i32,  // the unique ID of this touch point
 	orientation : util.Fixed,  // angle between major axis and positive surface y-axis in degrees
 }
-touch_orientation_decode :: proc(data: []byte) -> Touch_Orientation_Event {
+touch_orientation_read :: proc(data: []byte) -> (Touch_Orientation_Event, int) {
 	e: Touch_Orientation_Event
 	r: int
 	n := r
 	e.id, r = util.read_i32(data[n:]); n += r
 	e.orientation, r = util.read_fixed(data[n:]); n += r
-	return e
+	return e, n
 }
 
 // compositor output region
@@ -3734,23 +3584,22 @@ touch_orientation_decode :: proc(data: []byte) -> Touch_Orientation_Event {
 OUTPUT_INTERFACE :: "wl_output"
 OUTPUT_VERSION :: 4
 
+OUTPUT_RELEASE_OPCODE :: 0
 // release the output object
 // Using this request a client can tell the server that it is not going to
 // use the output object anymore.
-OUTPUT_RELEASE_OPCODE :: 0
 Output_Release_Request :: struct {
-	output : u32,
+	output : Output,  // the object this event/request concerns
 }
-output_release_encode :: proc(req: Output_Release_Request, allocator: mem.Allocator) -> (encoded: []byte, err: mem.Allocator_Error) {
-	object := req.output
+output_release_write :: proc(buf: ^[dynamic]byte, req: Output_Release_Request) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
+	object := u32(req.output)
 	opcode := u16(OUTPUT_RELEASE_OPCODE)
 	size := u16(8)
-	msg := make([dynamic]byte, 0, size, allocator) or_return
-	util.write(&msg, object, opcode, size)
-	encoded = msg[:]
+	num_appended = util.write(buf, object, opcode, size) or_return
 	return
 }
 
+OUTPUT_GEOMETRY_OPCODE :: 0
 // properties of the output
 // The geometry event describes geometric properties of the output.
 // The event is sent when binding to the output object and whenever
@@ -3768,18 +3617,18 @@ output_release_encode :: proc(req: Output_Release_Request, allocator: mem.Alloca
 // outputs, might fake this information. Instead of using x and y, clients
 // should use xdg_output.logical_position. Instead of using make and model,
 // clients should use name and description.
-OUTPUT_GEOMETRY_OPCODE :: 0
 Output_Geometry_Event :: struct {
+	output          : Output,  // the object this event/request concerns
 	x               : i32,  // x position within the global compositor space
 	y               : i32,  // y position within the global compositor space
 	physical_width  : i32,  // width in millimeters of the output
 	physical_height : i32,  // height in millimeters of the output
-	subpixel        : i32,  // subpixel orientation of the output
+	subpixel        : Output_Subpixel,  // subpixel orientation of the output
 	make            : string,  // textual description of the manufacturer
 	model           : string,  // textual description of the model
-	transform       : i32,  // additional transformation applied to buffer contents during presentation
+	transform       : Output_Transform,  // additional transformation applied to buffer contents during presentation
 }
-output_geometry_decode :: proc(data: []byte, allocator: mem.Allocator) -> Output_Geometry_Event {
+output_geometry_read :: proc(data: []byte) -> (Output_Geometry_Event, int) {
 	e: Output_Geometry_Event
 	r: int
 	n := r
@@ -3787,15 +3636,16 @@ output_geometry_decode :: proc(data: []byte, allocator: mem.Allocator) -> Output
 	e.y, r = util.read_i32(data[n:]); n += r
 	e.physical_width, r = util.read_i32(data[n:]); n += r
 	e.physical_height, r = util.read_i32(data[n:]); n += r
-	e.subpixel, r = util.read_i32(data[n:]); n += r
+	val_subpixel, _ := util.read_i32(data[n:]); n += 4
+	e.subpixel = transmute(Output_Subpixel)val_subpixel
 	e.make, r = util.read_string(data[n:]); n += r
-	e.make = strings.clone(e.make, allocator)
 	e.model, r = util.read_string(data[n:]); n += r
-	e.model = strings.clone(e.model, allocator)
-	e.transform, r = util.read_i32(data[n:]); n += r
-	return e
+	val_transform, _ := util.read_i32(data[n:]); n += 4
+	e.transform = transmute(Output_Transform)val_transform
+	return e, n
 }
 
+OUTPUT_MODE_OPCODE :: 1
 // advertise available modes for the output
 // The mode event describes an available mode for the output.
 // The event is sent when binding to the output object and there
@@ -3823,14 +3673,14 @@ output_geometry_decode :: proc(data: []byte, allocator: mem.Allocator) -> Output
 // Note: this information is not always meaningful for all outputs. Some
 // compositors, such as those exposing virtual outputs, might fake the
 // refresh rate or the size.
-OUTPUT_MODE_OPCODE :: 1
 Output_Mode_Event :: struct {
+	output  : Output,  // the object this event/request concerns
 	flags   : Output_Mode_Set,  // bitfield of mode flags
 	width   : i32,  // width of the mode in hardware units
 	height  : i32,  // height of the mode in hardware units
 	refresh : i32,  // vertical refresh rate in mHz
 }
-output_mode_decode :: proc(data: []byte) -> Output_Mode_Event {
+output_mode_read :: proc(data: []byte) -> (Output_Mode_Event, int) {
 	e: Output_Mode_Event
 	r: int
 	n := r
@@ -3839,24 +3689,27 @@ output_mode_decode :: proc(data: []byte) -> Output_Mode_Event {
 	e.width, r = util.read_i32(data[n:]); n += r
 	e.height, r = util.read_i32(data[n:]); n += r
 	e.refresh, r = util.read_i32(data[n:]); n += r
-	return e
+	return e, n
 }
 
+OUTPUT_DONE_OPCODE :: 2
 // sent all information about output
 // This event is sent after all other properties have been
 // sent after binding to the output object and after any
 // other property changes done after that. This allows
 // changes to the output properties to be seen as
 // atomic, even if they happen via multiple events.
-OUTPUT_DONE_OPCODE :: 2
-Output_Done_Event :: struct {}
-output_done_decode :: proc(data: []byte) -> Output_Done_Event {
+Output_Done_Event :: struct {
+	output : Output,  // the object this event/request concerns
+}
+output_done_read :: proc(data: []byte) -> (Output_Done_Event, int) {
 	e: Output_Done_Event
 	r: int
 	n := r
-	return e
+	return e, n
 }
 
+OUTPUT_SCALE_OPCODE :: 3
 // output scaling properties
 // This event contains scaling geometry information
 // that is not in the geometry event. It may be sent after
@@ -3873,18 +3726,19 @@ output_done_decode :: proc(data: []byte) -> Output_Done_Event {
 // instead of this event to find the preferred buffer
 // scale to use for a surface.
 // The scale event will be followed by a done event.
-OUTPUT_SCALE_OPCODE :: 3
 Output_Scale_Event :: struct {
+	output : Output,  // the object this event/request concerns
 	factor : i32,  // scaling factor of output
 }
-output_scale_decode :: proc(data: []byte) -> Output_Scale_Event {
+output_scale_read :: proc(data: []byte) -> (Output_Scale_Event, int) {
 	e: Output_Scale_Event
 	r: int
 	n := r
 	e.factor, r = util.read_i32(data[n:]); n += r
-	return e
+	return e, n
 }
 
+OUTPUT_NAME_OPCODE :: 4
 // name of this output
 // Many compositors will assign user-friendly names to their outputs, show
 // them to the user, allow the user to refer to an output, etc. The client
@@ -3907,19 +3761,19 @@ output_scale_decode :: proc(data: []byte) -> Output_Scale_Event {
 // destroyed and re-created later. Compositors should avoid re-using the
 // same name if possible.
 // The name event will be followed by a done event.
-OUTPUT_NAME_OPCODE :: 4
 Output_Name_Event :: struct {
-	name : string,  // output name
+	output : Output,  // the object this event/request concerns
+	name   : string,  // output name
 }
-output_name_decode :: proc(data: []byte, allocator: mem.Allocator) -> Output_Name_Event {
+output_name_read :: proc(data: []byte) -> (Output_Name_Event, int) {
 	e: Output_Name_Event
 	r: int
 	n := r
 	e.name, r = util.read_string(data[n:]); n += r
-	e.name = strings.clone(e.name, allocator)
-	return e
+	return e, n
 }
 
+OUTPUT_DESCRIPTION_OPCODE :: 5
 // human-readable description of this output
 // Many compositors can produce human-readable descriptions of their
 // outputs. The client may wish to know this description as well, e.g. for
@@ -3932,17 +3786,16 @@ output_name_decode :: proc(data: []byte, allocator: mem.Allocator) -> Output_Nam
 // whenever the description changes. The description is optional, and may
 // not be sent at all.
 // The description event will be followed by a done event.
-OUTPUT_DESCRIPTION_OPCODE :: 5
 Output_Description_Event :: struct {
+	output      : Output,  // the object this event/request concerns
 	description : string,  // output description
 }
-output_description_decode :: proc(data: []byte, allocator: mem.Allocator) -> Output_Description_Event {
+output_description_read :: proc(data: []byte) -> (Output_Description_Event, int) {
 	e: Output_Description_Event
 	r: int
 	n := r
 	e.description, r = util.read_string(data[n:]); n += r
-	e.description = strings.clone(e.description, allocator)
-	return e
+	return e, n
 }
 
 // subpixel geometry information
@@ -3993,67 +3846,61 @@ Output_Mode_Set :: bit_set[Output_Mode; u32]
 REGION_INTERFACE :: "wl_region"
 REGION_VERSION :: 7
 
+REGION_DESTROY_OPCODE :: 0
 // destroy region
 // Destroy the region.  This will invalidate the object ID.
-REGION_DESTROY_OPCODE :: 0
 Region_Destroy_Request :: struct {
-	region : u32,
+	region : Region,  // the object this event/request concerns
 }
-region_destroy_encode :: proc(req: Region_Destroy_Request, allocator: mem.Allocator) -> (encoded: []byte, err: mem.Allocator_Error) {
-	object := req.region
+region_destroy_write :: proc(buf: ^[dynamic]byte, req: Region_Destroy_Request) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
+	object := u32(req.region)
 	opcode := u16(REGION_DESTROY_OPCODE)
 	size := u16(8)
-	msg := make([dynamic]byte, 0, size, allocator) or_return
-	util.write(&msg, object, opcode, size)
-	encoded = msg[:]
+	num_appended = util.write(buf, object, opcode, size) or_return
 	return
 }
 
+REGION_ADD_OPCODE :: 1
 // add rectangle to region
 // Add the specified rectangle to the region.
-REGION_ADD_OPCODE :: 1
 Region_Add_Request :: struct {
-	region : u32,
+	region : Region,  // the object this event/request concerns
 	x      : i32,  // region-local x coordinate
 	y      : i32,  // region-local y coordinate
 	width  : i32,  // rectangle width
 	height : i32,  // rectangle height
 }
-region_add_encode :: proc(req: Region_Add_Request, allocator: mem.Allocator) -> (encoded: []byte, err: mem.Allocator_Error) {
-	object := req.region
+region_add_write :: proc(buf: ^[dynamic]byte, req: Region_Add_Request) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
+	object := u32(req.region)
 	opcode := u16(REGION_ADD_OPCODE)
 	size := u16(8 + size_of(req.x) + size_of(req.y) + size_of(req.width) + size_of(req.height))
-	msg := make([dynamic]byte, 0, size, allocator) or_return
-	util.write(&msg, object, opcode, size)
-	util.write(&msg, req.x)
-	util.write(&msg, req.y)
-	util.write(&msg, req.width)
-	util.write(&msg, req.height)
-	encoded = msg[:]
+	num_appended = util.write(buf, object, opcode, size) or_return
+	num_appended += util.write(buf, req.x) or_return
+	num_appended += util.write(buf, req.y) or_return
+	num_appended += util.write(buf, req.width) or_return
+	num_appended += util.write(buf, req.height) or_return
 	return
 }
 
+REGION_SUBTRACT_OPCODE :: 2
 // subtract rectangle from region
 // Subtract the specified rectangle from the region.
-REGION_SUBTRACT_OPCODE :: 2
 Region_Subtract_Request :: struct {
-	region : u32,
+	region : Region,  // the object this event/request concerns
 	x      : i32,  // region-local x coordinate
 	y      : i32,  // region-local y coordinate
 	width  : i32,  // rectangle width
 	height : i32,  // rectangle height
 }
-region_subtract_encode :: proc(req: Region_Subtract_Request, allocator: mem.Allocator) -> (encoded: []byte, err: mem.Allocator_Error) {
-	object := req.region
+region_subtract_write :: proc(buf: ^[dynamic]byte, req: Region_Subtract_Request) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
+	object := u32(req.region)
 	opcode := u16(REGION_SUBTRACT_OPCODE)
 	size := u16(8 + size_of(req.x) + size_of(req.y) + size_of(req.width) + size_of(req.height))
-	msg := make([dynamic]byte, 0, size, allocator) or_return
-	util.write(&msg, object, opcode, size)
-	util.write(&msg, req.x)
-	util.write(&msg, req.y)
-	util.write(&msg, req.width)
-	util.write(&msg, req.height)
-	encoded = msg[:]
+	num_appended = util.write(buf, object, opcode, size) or_return
+	num_appended += util.write(buf, req.x) or_return
+	num_appended += util.write(buf, req.y) or_return
+	num_appended += util.write(buf, req.width) or_return
+	num_appended += util.write(buf, req.height) or_return
 	return
 }
 
@@ -4077,24 +3924,23 @@ region_subtract_encode :: proc(req: Region_Subtract_Request, allocator: mem.Allo
 SUBCOMPOSITOR_INTERFACE :: "wl_subcompositor"
 SUBCOMPOSITOR_VERSION :: 1
 
+SUBCOMPOSITOR_DESTROY_OPCODE :: 0
 // unbind from the subcompositor interface
 // Informs the server that the client will not be using this
 // protocol object anymore. This does not affect any other
 // objects, wl_subsurface objects included.
-SUBCOMPOSITOR_DESTROY_OPCODE :: 0
 Subcompositor_Destroy_Request :: struct {
-	subcompositor : u32,
+	subcompositor : Subcompositor,  // the object this event/request concerns
 }
-subcompositor_destroy_encode :: proc(req: Subcompositor_Destroy_Request, allocator: mem.Allocator) -> (encoded: []byte, err: mem.Allocator_Error) {
-	object := req.subcompositor
+subcompositor_destroy_write :: proc(buf: ^[dynamic]byte, req: Subcompositor_Destroy_Request) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
+	object := u32(req.subcompositor)
 	opcode := u16(SUBCOMPOSITOR_DESTROY_OPCODE)
 	size := u16(8)
-	msg := make([dynamic]byte, 0, size, allocator) or_return
-	util.write(&msg, object, opcode, size)
-	encoded = msg[:]
+	num_appended = util.write(buf, object, opcode, size) or_return
 	return
 }
 
+SUBCOMPOSITOR_GET_SUBSURFACE_OPCODE :: 1
 // give a surface the role sub-surface
 // Create a sub-surface interface for the given surface, and
 // associate it with the given parent surface. This turns a
@@ -4111,22 +3957,19 @@ subcompositor_destroy_encode :: proc(req: Subcompositor_Destroy_Request, allocat
 // bad_parent protocol error is raised.
 // This request modifies the behaviour of wl_surface.commit request on
 // the sub-surface, see the documentation on wl_subsurface interface.
-SUBCOMPOSITOR_GET_SUBSURFACE_OPCODE :: 1
 Subcompositor_Get_Subsurface_Request :: struct {
-	subcompositor : u32,
-	surface       : u32,  // the surface to be turned into a sub-surface
-	parent        : u32,  // the parent surface
+	subcompositor : Subcompositor,  // the object this event/request concerns
+	surface       : Surface,  // the surface to be turned into a sub-surface
+	parent        : Surface,  // the parent surface
 }
-subcompositor_get_subsurface_encode :: proc(req: Subcompositor_Get_Subsurface_Request, new_id: u32, allocator: mem.Allocator) -> (encoded: []byte, err: mem.Allocator_Error) {
-	object := req.subcompositor
+subcompositor_get_subsurface_write :: proc(buf: ^[dynamic]byte, req: Subcompositor_Get_Subsurface_Request, new_id: u32) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
+	object := u32(req.subcompositor)
 	opcode := u16(SUBCOMPOSITOR_GET_SUBSURFACE_OPCODE)
 	size := u16(8 + size_of(new_id) + size_of(req.surface) + size_of(req.parent))
-	msg := make([dynamic]byte, 0, size, allocator) or_return
-	util.write(&msg, object, opcode, size)
-	util.write(&msg, new_id)
-	util.write(&msg, req.surface)
-	util.write(&msg, req.parent)
-	encoded = msg[:]
+	num_appended = util.write(buf, object, opcode, size) or_return
+	num_appended += util.write(buf, new_id) or_return
+	num_appended += util.write(buf, u32(req.surface)) or_return
+	num_appended += util.write(buf, u32(req.parent)) or_return
 	return
 }
 
@@ -4175,25 +4018,24 @@ Subcompositor_Error :: enum u32 {
 SUBSURFACE_INTERFACE :: "wl_subsurface"
 SUBSURFACE_VERSION :: 1
 
+SUBSURFACE_DESTROY_OPCODE :: 0
 // remove sub-surface interface
 // The sub-surface interface is removed from the wl_surface object
 // that was turned into a sub-surface with a
 // wl_subcompositor.get_subsurface request. The wl_surface's association
 // to the parent is deleted. The wl_surface is unmapped immediately.
-SUBSURFACE_DESTROY_OPCODE :: 0
 Subsurface_Destroy_Request :: struct {
-	subsurface : u32,
+	subsurface : Subsurface,  // the object this event/request concerns
 }
-subsurface_destroy_encode :: proc(req: Subsurface_Destroy_Request, allocator: mem.Allocator) -> (encoded: []byte, err: mem.Allocator_Error) {
-	object := req.subsurface
+subsurface_destroy_write :: proc(buf: ^[dynamic]byte, req: Subsurface_Destroy_Request) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
+	object := u32(req.subsurface)
 	opcode := u16(SUBSURFACE_DESTROY_OPCODE)
 	size := u16(8)
-	msg := make([dynamic]byte, 0, size, allocator) or_return
-	util.write(&msg, object, opcode, size)
-	encoded = msg[:]
+	num_appended = util.write(buf, object, opcode, size) or_return
 	return
 }
 
+SUBSURFACE_SET_POSITION_OPCODE :: 1
 // reposition the sub-surface
 // This sets the position of the sub-surface, relative to the parent
 // surface.
@@ -4204,24 +4046,22 @@ subsurface_destroy_encode :: proc(req: Subsurface_Destroy_Request, allocator: me
 // The initial position is 0, 0.
 // Position is double-buffered state on the parent surface, see
 // wl_subsurface and wl_surface.commit for more information.
-SUBSURFACE_SET_POSITION_OPCODE :: 1
 Subsurface_Set_Position_Request :: struct {
-	subsurface : u32,
+	subsurface : Subsurface,  // the object this event/request concerns
 	x          : i32,  // x coordinate in the parent surface
 	y          : i32,  // y coordinate in the parent surface
 }
-subsurface_set_position_encode :: proc(req: Subsurface_Set_Position_Request, allocator: mem.Allocator) -> (encoded: []byte, err: mem.Allocator_Error) {
-	object := req.subsurface
+subsurface_set_position_write :: proc(buf: ^[dynamic]byte, req: Subsurface_Set_Position_Request) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
+	object := u32(req.subsurface)
 	opcode := u16(SUBSURFACE_SET_POSITION_OPCODE)
 	size := u16(8 + size_of(req.x) + size_of(req.y))
-	msg := make([dynamic]byte, 0, size, allocator) or_return
-	util.write(&msg, object, opcode, size)
-	util.write(&msg, req.x)
-	util.write(&msg, req.y)
-	encoded = msg[:]
+	num_appended = util.write(buf, object, opcode, size) or_return
+	num_appended += util.write(buf, req.x) or_return
+	num_appended += util.write(buf, req.y) or_return
 	return
 }
 
+SUBSURFACE_PLACE_ABOVE_OPCODE :: 2
 // restack the sub-surface
 // This sub-surface is taken from the stack, and put back just
 // above the reference surface, changing the z-order of the sub-surfaces.
@@ -4232,74 +4072,65 @@ subsurface_set_position_encode :: proc(req: Subsurface_Set_Position_Request, all
 // of its siblings and parent.
 // Z-order is double-buffered state on the parent surface, see
 // wl_subsurface and wl_surface.commit for more information.
-SUBSURFACE_PLACE_ABOVE_OPCODE :: 2
 Subsurface_Place_Above_Request :: struct {
-	subsurface : u32,
-	sibling    : u32,  // the reference surface
+	subsurface : Subsurface,  // the object this event/request concerns
+	sibling    : Surface,  // the reference surface
 }
-subsurface_place_above_encode :: proc(req: Subsurface_Place_Above_Request, allocator: mem.Allocator) -> (encoded: []byte, err: mem.Allocator_Error) {
-	object := req.subsurface
+subsurface_place_above_write :: proc(buf: ^[dynamic]byte, req: Subsurface_Place_Above_Request) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
+	object := u32(req.subsurface)
 	opcode := u16(SUBSURFACE_PLACE_ABOVE_OPCODE)
 	size := u16(8 + size_of(req.sibling))
-	msg := make([dynamic]byte, 0, size, allocator) or_return
-	util.write(&msg, object, opcode, size)
-	util.write(&msg, req.sibling)
-	encoded = msg[:]
+	num_appended = util.write(buf, object, opcode, size) or_return
+	num_appended += util.write(buf, u32(req.sibling)) or_return
 	return
 }
 
+SUBSURFACE_PLACE_BELOW_OPCODE :: 3
 // restack the sub-surface
 // The sub-surface is placed just below the reference surface.
 // See wl_subsurface.place_above.
-SUBSURFACE_PLACE_BELOW_OPCODE :: 3
 Subsurface_Place_Below_Request :: struct {
-	subsurface : u32,
-	sibling    : u32,  // the reference surface
+	subsurface : Subsurface,  // the object this event/request concerns
+	sibling    : Surface,  // the reference surface
 }
-subsurface_place_below_encode :: proc(req: Subsurface_Place_Below_Request, allocator: mem.Allocator) -> (encoded: []byte, err: mem.Allocator_Error) {
-	object := req.subsurface
+subsurface_place_below_write :: proc(buf: ^[dynamic]byte, req: Subsurface_Place_Below_Request) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
+	object := u32(req.subsurface)
 	opcode := u16(SUBSURFACE_PLACE_BELOW_OPCODE)
 	size := u16(8 + size_of(req.sibling))
-	msg := make([dynamic]byte, 0, size, allocator) or_return
-	util.write(&msg, object, opcode, size)
-	util.write(&msg, req.sibling)
-	encoded = msg[:]
+	num_appended = util.write(buf, object, opcode, size) or_return
+	num_appended += util.write(buf, u32(req.sibling)) or_return
 	return
 }
 
+SUBSURFACE_SET_SYNC_OPCODE :: 4
 // set sub-surface to synchronized mode
 // Change the commit behaviour of the sub-surface to synchronized
 // mode.
 // See wl_subsurface and wl_surface.commit for more information.
-SUBSURFACE_SET_SYNC_OPCODE :: 4
 Subsurface_Set_Sync_Request :: struct {
-	subsurface : u32,
+	subsurface : Subsurface,  // the object this event/request concerns
 }
-subsurface_set_sync_encode :: proc(req: Subsurface_Set_Sync_Request, allocator: mem.Allocator) -> (encoded: []byte, err: mem.Allocator_Error) {
-	object := req.subsurface
+subsurface_set_sync_write :: proc(buf: ^[dynamic]byte, req: Subsurface_Set_Sync_Request) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
+	object := u32(req.subsurface)
 	opcode := u16(SUBSURFACE_SET_SYNC_OPCODE)
 	size := u16(8)
-	msg := make([dynamic]byte, 0, size, allocator) or_return
-	util.write(&msg, object, opcode, size)
-	encoded = msg[:]
+	num_appended = util.write(buf, object, opcode, size) or_return
 	return
 }
 
+SUBSURFACE_SET_DESYNC_OPCODE :: 5
 // set sub-surface to desynchronized mode
 // Change the commit behaviour of the sub-surface to desynchronized
 // mode.
 // See wl_subsurface and wl_surface.commit for more information.
-SUBSURFACE_SET_DESYNC_OPCODE :: 5
 Subsurface_Set_Desync_Request :: struct {
-	subsurface : u32,
+	subsurface : Subsurface,  // the object this event/request concerns
 }
-subsurface_set_desync_encode :: proc(req: Subsurface_Set_Desync_Request, allocator: mem.Allocator) -> (encoded: []byte, err: mem.Allocator_Error) {
-	object := req.subsurface
+subsurface_set_desync_write :: proc(buf: ^[dynamic]byte, req: Subsurface_Set_Desync_Request) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
+	object := u32(req.subsurface)
 	opcode := u16(SUBSURFACE_SET_DESYNC_OPCODE)
 	size := u16(8)
-	msg := make([dynamic]byte, 0, size, allocator) or_return
-	util.write(&msg, object, opcode, size)
-	encoded = msg[:]
+	num_appended = util.write(buf, object, opcode, size) or_return
 	return
 }
 
@@ -4313,21 +4144,20 @@ Subsurface_Error :: enum u32 {
 FIXES_INTERFACE :: "wl_fixes"
 FIXES_VERSION :: 2
 
-// destroys this object
 FIXES_DESTROY_OPCODE :: 0
+// destroys this object
 Fixes_Destroy_Request :: struct {
-	fixes : u32,
+	fixes : Fixes,  // the object this event/request concerns
 }
-fixes_destroy_encode :: proc(req: Fixes_Destroy_Request, allocator: mem.Allocator) -> (encoded: []byte, err: mem.Allocator_Error) {
-	object := req.fixes
+fixes_destroy_write :: proc(buf: ^[dynamic]byte, req: Fixes_Destroy_Request) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
+	object := u32(req.fixes)
 	opcode := u16(FIXES_DESTROY_OPCODE)
 	size := u16(8)
-	msg := make([dynamic]byte, 0, size, allocator) or_return
-	util.write(&msg, object, opcode, size)
-	encoded = msg[:]
+	num_appended = util.write(buf, object, opcode, size) or_return
 	return
 }
 
+FIXES_DESTROY_REGISTRY_OPCODE :: 1
 // destroy a wl_registry
 // This request destroys a wl_registry object.
 // The client should no longer use the wl_registry after making this
@@ -4336,22 +4166,20 @@ fixes_destroy_encode :: proc(req: Fixes_Destroy_Request, allocator: mem.Allocato
 // of the registry and will no longer emit any events on the registry. The
 // client should re-use the object ID once it receives the
 // wl_display.delete_id event.
-FIXES_DESTROY_REGISTRY_OPCODE :: 1
 Fixes_Destroy_Registry_Request :: struct {
-	fixes    : u32,
-	registry : u32,  // the registry to destroy
+	fixes    : Fixes,  // the object this event/request concerns
+	registry : Registry,  // the registry to destroy
 }
-fixes_destroy_registry_encode :: proc(req: Fixes_Destroy_Registry_Request, allocator: mem.Allocator) -> (encoded: []byte, err: mem.Allocator_Error) {
-	object := req.fixes
+fixes_destroy_registry_write :: proc(buf: ^[dynamic]byte, req: Fixes_Destroy_Registry_Request) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
+	object := u32(req.fixes)
 	opcode := u16(FIXES_DESTROY_REGISTRY_OPCODE)
 	size := u16(8 + size_of(req.registry))
-	msg := make([dynamic]byte, 0, size, allocator) or_return
-	util.write(&msg, object, opcode, size)
-	util.write(&msg, req.registry)
-	encoded = msg[:]
+	num_appended = util.write(buf, object, opcode, size) or_return
+	num_appended += util.write(buf, u32(req.registry)) or_return
 	return
 }
 
+FIXES_ACK_GLOBAL_REMOVE_OPCODE :: 2
 // acknowledge global removal
 // Acknowledge the removal of the specified global.
 // If no global with the specified name exists or the global is not removed,
@@ -4370,21 +4198,18 @@ fixes_destroy_registry_encode :: proc(req: Fixes_Destroy_Registry_Request, alloc
 // The client must call the wl_fixes.ack_global_remove() request in
 // response to a wl_registry.global_remove() event even if it did not bind
 // the corresponding global.
-FIXES_ACK_GLOBAL_REMOVE_OPCODE :: 2
 Fixes_Ack_Global_Remove_Request :: struct {
-	fixes    : u32,
-	registry : u32,  // the registry object
+	fixes    : Fixes,  // the object this event/request concerns
+	registry : Registry,  // the registry object
 	name     : u32,  // unique name of the global
 }
-fixes_ack_global_remove_encode :: proc(req: Fixes_Ack_Global_Remove_Request, allocator: mem.Allocator) -> (encoded: []byte, err: mem.Allocator_Error) {
-	object := req.fixes
+fixes_ack_global_remove_write :: proc(buf: ^[dynamic]byte, req: Fixes_Ack_Global_Remove_Request) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
+	object := u32(req.fixes)
 	opcode := u16(FIXES_ACK_GLOBAL_REMOVE_OPCODE)
 	size := u16(8 + size_of(req.registry) + size_of(req.name))
-	msg := make([dynamic]byte, 0, size, allocator) or_return
-	util.write(&msg, object, opcode, size)
-	util.write(&msg, req.registry)
-	util.write(&msg, req.name)
-	encoded = msg[:]
+	num_appended = util.write(buf, object, opcode, size) or_return
+	num_appended += util.write(buf, u32(req.registry)) or_return
+	num_appended += util.write(buf, req.name) or_return
 	return
 }
 
