@@ -247,7 +247,7 @@ create_swapchain :: proc(p_device: vk.PhysicalDevice, device: vk.Device, queue: 
 		create_params := dmabuf.Dmabuf_Create_Params_Request {
 			dmabuf = create_info.surface.linux_dmabuf,
 		}
-		params_id, _ := client.queue_request(create_info.surface.client, create_params)
+		params_id, _ := client.request_queue(create_info.surface.client, create_params)
 		sc.buffer_params[i] = params_id
 
 		params_add := dmabuf.Buffer_Params_Add_Request {
@@ -258,7 +258,7 @@ create_swapchain :: proc(p_device: vk.PhysicalDevice, device: vk.Device, queue: 
 			modifier_lo   = u32(create_info.image_create_info.drm_format_modifier),
 			modifier_hi   = u32(create_info.image_create_info.drm_format_modifier >> 32),
 		}
-		client.queue_request(create_info.surface.client, params_add)
+		client.request_queue(create_info.surface.client, params_add)
 
 		create_immed := dmabuf.Buffer_Params_Create_Immed_Request {
 			buffer_params = params_id,
@@ -267,7 +267,7 @@ create_swapchain :: proc(p_device: vk.PhysicalDevice, device: vk.Device, queue: 
 			format        = fourcc,
 			flags         = create_info.buffer_params_flags,
 		}
-		sc.wl_buffers[i], _ = client.queue_request(create_info.surface.client, create_immed)
+		sc.wl_buffers[i], _ = client.request_queue(create_info.surface.client, create_immed)
 
 		fence_ci := vk.FenceCreateInfo {
 			sType = .FENCE_CREATE_INFO,
@@ -287,11 +287,11 @@ destroy_swapchain :: proc(sc: ^Swapchain, allocator: ^vk.AllocationCallbacks = n
 		destroy := wl.Buffer_Destroy_Request {
 			buffer = sc.wl_buffers[i],
 		}
-		client.queue_request(sc.surface.client, destroy)
+		client.request_queue(sc.surface.client, destroy)
 		params_destroy := dmabuf.Buffer_Params_Destroy_Request {
 			buffer_params = sc.buffer_params[i],
 		}
-		client.queue_request(sc.surface.client, params_destroy)
+		client.request_queue(sc.surface.client, params_destroy)
 		linux.close(sc.dmabuf_fd[i])
 
 		vk.DestroyFence(sc.device, sc.fences[i], allocator)
@@ -323,11 +323,11 @@ swapchain_present :: proc(sc: ^Swapchain, idx: int, submit_info: []vk.SubmitInfo
 		surface = sc.surface.wl_surface,
 		buffer  = sc.wl_buffers[idx],
 	}
-	client.queue_request(sc.surface.client, attach)
+	client.request_queue(sc.surface.client, attach)
 	commit := wl.Surface_Commit_Request {
 		surface = sc.surface.wl_surface,
 	}
-	client.queue_request(sc.surface.client, commit)
+	client.request_queue(sc.surface.client, commit)
 	return .SUCCESS
 }
 

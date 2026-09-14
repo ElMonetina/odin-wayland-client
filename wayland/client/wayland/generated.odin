@@ -26,9 +26,7 @@ package wayland
 // SOFTWARE.
 
 import util "../util"
-import "core:bytes"
-import "core:mem"
-import "core:strings"
+import "base:runtime"
 import "core:sys/linux"
 
 // The core global object, it is always defined to be equal to 1
@@ -79,14 +77,12 @@ DISPLAY_SYNC_OPCODE :: 0
 Display_Sync_Request :: struct {
 	display : Display,  // the object this event/request concerns
 }
-display_sync_encode :: proc(req: Display_Sync_Request, new_id: u32, allocator: mem.Allocator) -> (encoded: []byte, err: mem.Allocator_Error) {
+display_sync_write :: proc(buf: ^[dynamic]byte, req: Display_Sync_Request, new_id: u32) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
 	object := u32(req.display)
 	opcode := u16(DISPLAY_SYNC_OPCODE)
 	size := u16(8 + size_of(new_id))
-	msg := make([dynamic]byte, 0, size, allocator) or_return
-	util.write(&msg, object, opcode, size)
-	util.write(&msg, new_id)
-	encoded = msg[:]
+	num_appended = util.write(buf, object, opcode, size) or_return
+	num_appended += util.write(buf, new_id) or_return
 	return
 }
 
@@ -103,14 +99,12 @@ DISPLAY_GET_REGISTRY_OPCODE :: 1
 Display_Get_Registry_Request :: struct {
 	display : Display,  // the object this event/request concerns
 }
-display_get_registry_encode :: proc(req: Display_Get_Registry_Request, new_id: u32, allocator: mem.Allocator) -> (encoded: []byte, err: mem.Allocator_Error) {
+display_get_registry_write :: proc(buf: ^[dynamic]byte, req: Display_Get_Registry_Request, new_id: u32) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
 	object := u32(req.display)
 	opcode := u16(DISPLAY_GET_REGISTRY_OPCODE)
 	size := u16(8 + size_of(new_id))
-	msg := make([dynamic]byte, 0, size, allocator) or_return
-	util.write(&msg, object, opcode, size)
-	util.write(&msg, new_id)
-	encoded = msg[:]
+	num_appended = util.write(buf, object, opcode, size) or_return
+	num_appended += util.write(buf, new_id) or_return
 	return
 }
 
@@ -129,15 +123,14 @@ Display_Error_Event :: struct {
 	code      : u32,  // error code
 	message   : string,  // error description
 }
-display_error_decode :: proc(data: []byte, allocator: mem.Allocator) -> Display_Error_Event {
+display_error_read :: proc(data: []byte) -> (Display_Error_Event, int) {
 	e: Display_Error_Event
 	r: int
 	n := r
 	e.object_id, r = util.read_u32(data[n:]); n += r
 	e.code, r = util.read_u32(data[n:]); n += r
 	e.message, r = util.read_string(data[n:]); n += r
-	e.message = strings.clone(e.message, allocator)
-	return e
+	return e, n
 }
 
 DISPLAY_DELETE_ID_OPCODE :: 1
@@ -153,12 +146,12 @@ Display_Delete_Id_Event :: struct {
 	display : Display,  // the object this event/request concerns
 	id      : u32,  // deleted object ID
 }
-display_delete_id_decode :: proc(data: []byte) -> Display_Delete_Id_Event {
+display_delete_id_read :: proc(data: []byte) -> (Display_Delete_Id_Event, int) {
 	e: Display_Delete_Id_Event
 	r: int
 	n := r
 	e.id, r = util.read_u32(data[n:]); n += r
-	return e
+	return e, n
 }
 
 // global error values
@@ -203,17 +196,15 @@ Registry_Bind_Request :: struct {
 	interface : string,
 	version   : u32,
 }
-registry_bind_encode :: proc(req: Registry_Bind_Request, new_id: u32, allocator: mem.Allocator) -> (encoded: []byte, err: mem.Allocator_Error) {
+registry_bind_write :: proc(buf: ^[dynamic]byte, req: Registry_Bind_Request, new_id: u32) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
 	object := u32(req.registry)
 	opcode := u16(REGISTRY_BIND_OPCODE)
 	size := u16(8 + size_of(req.name) + util.compute_string_size(req.interface) + size_of(req.version) + size_of(new_id))
-	msg := make([dynamic]byte, 0, size, allocator) or_return
-	util.write(&msg, object, opcode, size)
-	util.write(&msg, req.name)
-	util.write(&msg, req.interface)
-	util.write(&msg, req.version)
-	util.write(&msg, new_id)
-	encoded = msg[:]
+	num_appended = util.write(buf, object, opcode, size) or_return
+	num_appended += util.write(buf, req.name) or_return
+	num_appended += util.write(buf, req.interface) or_return
+	num_appended += util.write(buf, req.version) or_return
+	num_appended += util.write(buf, new_id) or_return
 	return
 }
 
@@ -229,15 +220,14 @@ Registry_Global_Event :: struct {
 	interface : string,  // interface implemented by the object
 	version   : u32,  // interface version
 }
-registry_global_decode :: proc(data: []byte, allocator: mem.Allocator) -> Registry_Global_Event {
+registry_global_read :: proc(data: []byte) -> (Registry_Global_Event, int) {
 	e: Registry_Global_Event
 	r: int
 	n := r
 	e.name, r = util.read_u32(data[n:]); n += r
 	e.interface, r = util.read_string(data[n:]); n += r
-	e.interface = strings.clone(e.interface, allocator)
 	e.version, r = util.read_u32(data[n:]); n += r
-	return e
+	return e, n
 }
 
 REGISTRY_GLOBAL_REMOVE_OPCODE :: 1
@@ -254,12 +244,12 @@ Registry_Global_Remove_Event :: struct {
 	registry : Registry,  // the object this event/request concerns
 	name     : u32,  // numeric name of the global object
 }
-registry_global_remove_decode :: proc(data: []byte) -> Registry_Global_Remove_Event {
+registry_global_remove_read :: proc(data: []byte) -> (Registry_Global_Remove_Event, int) {
 	e: Registry_Global_Remove_Event
 	r: int
 	n := r
 	e.name, r = util.read_u32(data[n:]); n += r
-	return e
+	return e, n
 }
 
 // callback object
@@ -277,12 +267,12 @@ Callback_Done_Event :: struct {
 	callback      : Callback,  // the object this event/request concerns
 	callback_data : u32,  // request-specific data for the callback
 }
-callback_done_decode :: proc(data: []byte) -> Callback_Done_Event {
+callback_done_read :: proc(data: []byte) -> (Callback_Done_Event, int) {
 	e: Callback_Done_Event
 	r: int
 	n := r
 	e.callback_data, r = util.read_u32(data[n:]); n += r
-	return e
+	return e, n
 }
 
 // the compositor singleton
@@ -298,14 +288,12 @@ COMPOSITOR_CREATE_SURFACE_OPCODE :: 0
 Compositor_Create_Surface_Request :: struct {
 	compositor : Compositor,  // the object this event/request concerns
 }
-compositor_create_surface_encode :: proc(req: Compositor_Create_Surface_Request, new_id: u32, allocator: mem.Allocator) -> (encoded: []byte, err: mem.Allocator_Error) {
+compositor_create_surface_write :: proc(buf: ^[dynamic]byte, req: Compositor_Create_Surface_Request, new_id: u32) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
 	object := u32(req.compositor)
 	opcode := u16(COMPOSITOR_CREATE_SURFACE_OPCODE)
 	size := u16(8 + size_of(new_id))
-	msg := make([dynamic]byte, 0, size, allocator) or_return
-	util.write(&msg, object, opcode, size)
-	util.write(&msg, new_id)
-	encoded = msg[:]
+	num_appended = util.write(buf, object, opcode, size) or_return
+	num_appended += util.write(buf, new_id) or_return
 	return
 }
 
@@ -315,14 +303,12 @@ COMPOSITOR_CREATE_REGION_OPCODE :: 1
 Compositor_Create_Region_Request :: struct {
 	compositor : Compositor,  // the object this event/request concerns
 }
-compositor_create_region_encode :: proc(req: Compositor_Create_Region_Request, new_id: u32, allocator: mem.Allocator) -> (encoded: []byte, err: mem.Allocator_Error) {
+compositor_create_region_write :: proc(buf: ^[dynamic]byte, req: Compositor_Create_Region_Request, new_id: u32) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
 	object := u32(req.compositor)
 	opcode := u16(COMPOSITOR_CREATE_REGION_OPCODE)
 	size := u16(8 + size_of(new_id))
-	msg := make([dynamic]byte, 0, size, allocator) or_return
-	util.write(&msg, object, opcode, size)
-	util.write(&msg, new_id)
-	encoded = msg[:]
+	num_appended = util.write(buf, object, opcode, size) or_return
+	num_appended += util.write(buf, new_id) or_return
 	return
 }
 
@@ -332,13 +318,11 @@ COMPOSITOR_RELEASE_OPCODE :: 2
 Compositor_Release_Request :: struct {
 	compositor : Compositor,  // the object this event/request concerns
 }
-compositor_release_encode :: proc(req: Compositor_Release_Request, allocator: mem.Allocator) -> (encoded: []byte, err: mem.Allocator_Error) {
+compositor_release_write :: proc(buf: ^[dynamic]byte, req: Compositor_Release_Request) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
 	object := u32(req.compositor)
 	opcode := u16(COMPOSITOR_RELEASE_OPCODE)
 	size := u16(8)
-	msg := make([dynamic]byte, 0, size, allocator) or_return
-	util.write(&msg, object, opcode, size)
-	encoded = msg[:]
+	num_appended = util.write(buf, object, opcode, size) or_return
 	return
 }
 
@@ -372,19 +356,17 @@ Shm_Pool_Create_Buffer_Request :: struct {
 	stride   : i32,  // number of bytes from the beginning of one row to the beginning of the next row
 	format   : Shm_Format,  // buffer pixel format
 }
-shm_pool_create_buffer_encode :: proc(req: Shm_Pool_Create_Buffer_Request, new_id: u32, allocator: mem.Allocator) -> (encoded: []byte, err: mem.Allocator_Error) {
+shm_pool_create_buffer_write :: proc(buf: ^[dynamic]byte, req: Shm_Pool_Create_Buffer_Request, new_id: u32) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
 	object := u32(req.shm_pool)
 	opcode := u16(SHM_POOL_CREATE_BUFFER_OPCODE)
 	size := u16(8 + size_of(new_id) + size_of(req.offset) + size_of(req.width) + size_of(req.height) + size_of(req.stride) + size_of(req.format))
-	msg := make([dynamic]byte, 0, size, allocator) or_return
-	util.write(&msg, object, opcode, size)
-	util.write(&msg, new_id)
-	util.write(&msg, req.offset)
-	util.write(&msg, req.width)
-	util.write(&msg, req.height)
-	util.write(&msg, req.stride)
-	util.write(&msg, u32(req.format))
-	encoded = msg[:]
+	num_appended = util.write(buf, object, opcode, size) or_return
+	num_appended += util.write(buf, new_id) or_return
+	num_appended += util.write(buf, req.offset) or_return
+	num_appended += util.write(buf, req.width) or_return
+	num_appended += util.write(buf, req.height) or_return
+	num_appended += util.write(buf, req.stride) or_return
+	num_appended += util.write(buf, u32(req.format)) or_return
 	return
 }
 
@@ -397,13 +379,11 @@ SHM_POOL_DESTROY_OPCODE :: 1
 Shm_Pool_Destroy_Request :: struct {
 	shm_pool : Shm_Pool,  // the object this event/request concerns
 }
-shm_pool_destroy_encode :: proc(req: Shm_Pool_Destroy_Request, allocator: mem.Allocator) -> (encoded: []byte, err: mem.Allocator_Error) {
+shm_pool_destroy_write :: proc(buf: ^[dynamic]byte, req: Shm_Pool_Destroy_Request) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
 	object := u32(req.shm_pool)
 	opcode := u16(SHM_POOL_DESTROY_OPCODE)
 	size := u16(8)
-	msg := make([dynamic]byte, 0, size, allocator) or_return
-	util.write(&msg, object, opcode, size)
-	encoded = msg[:]
+	num_appended = util.write(buf, object, opcode, size) or_return
 	return
 }
 
@@ -422,14 +402,12 @@ Shm_Pool_Resize_Request :: struct {
 	shm_pool : Shm_Pool,  // the object this event/request concerns
 	size     : i32,  // new size of the pool, in bytes
 }
-shm_pool_resize_encode :: proc(req: Shm_Pool_Resize_Request, allocator: mem.Allocator) -> (encoded: []byte, err: mem.Allocator_Error) {
+shm_pool_resize_write :: proc(buf: ^[dynamic]byte, req: Shm_Pool_Resize_Request) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
 	object := u32(req.shm_pool)
 	opcode := u16(SHM_POOL_RESIZE_OPCODE)
 	size := u16(8 + size_of(req.size))
-	msg := make([dynamic]byte, 0, size, allocator) or_return
-	util.write(&msg, object, opcode, size)
-	util.write(&msg, req.size)
-	encoded = msg[:]
+	num_appended = util.write(buf, object, opcode, size) or_return
+	num_appended += util.write(buf, req.size) or_return
 	return
 }
 
@@ -462,16 +440,14 @@ Shm_Create_Pool_Request :: struct {
 	fd   : linux.Fd,  // file descriptor for the pool
 	size : i32,  // pool size, in bytes
 }
-shm_create_pool_encode :: proc(req: Shm_Create_Pool_Request, new_id: u32, allocator: mem.Allocator) -> (encoded: []byte, err: mem.Allocator_Error) {
+shm_create_pool_write :: proc(buf: ^[dynamic]byte, req: Shm_Create_Pool_Request, new_id: u32) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
 	object := u32(req.shm)
 	opcode := u16(SHM_CREATE_POOL_OPCODE)
 	size := u16(8 + size_of(new_id) + size_of(req.size))
-	msg := make([dynamic]byte, 0, size, allocator) or_return
-	util.write(&msg, object, opcode, size)
-	util.write(&msg, new_id)
+	num_appended = util.write(buf, object, opcode, size) or_return
+	num_appended += util.write(buf, new_id) or_return
 	// fd: fd — sent via SCM_RIGHTS, not in the body
-	util.write(&msg, req.size)
-	encoded = msg[:]
+	num_appended += util.write(buf, req.size) or_return
 	return
 }
 
@@ -483,13 +459,11 @@ SHM_RELEASE_OPCODE :: 1
 Shm_Release_Request :: struct {
 	shm : Shm,  // the object this event/request concerns
 }
-shm_release_encode :: proc(req: Shm_Release_Request, allocator: mem.Allocator) -> (encoded: []byte, err: mem.Allocator_Error) {
+shm_release_write :: proc(buf: ^[dynamic]byte, req: Shm_Release_Request) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
 	object := u32(req.shm)
 	opcode := u16(SHM_RELEASE_OPCODE)
 	size := u16(8)
-	msg := make([dynamic]byte, 0, size, allocator) or_return
-	util.write(&msg, object, opcode, size)
-	encoded = msg[:]
+	num_appended = util.write(buf, object, opcode, size) or_return
 	return
 }
 
@@ -505,13 +479,13 @@ Shm_Format_Event :: struct {
 	shm    : Shm,  // the object this event/request concerns
 	format : Shm_Format,  // buffer pixel format
 }
-shm_format_decode :: proc(data: []byte) -> Shm_Format_Event {
+shm_format_read :: proc(data: []byte) -> (Shm_Format_Event, int) {
 	e: Shm_Format_Event
 	r: int
 	n := r
 	val_format, _ := util.read_u32(data[n:]); n += 4
 	e.format = transmute(Shm_Format)val_format
-	return e
+	return e, n
 }
 
 // wl_shm error values
@@ -709,13 +683,11 @@ BUFFER_DESTROY_OPCODE :: 0
 Buffer_Destroy_Request :: struct {
 	buffer : Buffer,  // the object this event/request concerns
 }
-buffer_destroy_encode :: proc(req: Buffer_Destroy_Request, allocator: mem.Allocator) -> (encoded: []byte, err: mem.Allocator_Error) {
+buffer_destroy_write :: proc(buf: ^[dynamic]byte, req: Buffer_Destroy_Request) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
 	object := u32(req.buffer)
 	opcode := u16(BUFFER_DESTROY_OPCODE)
 	size := u16(8)
-	msg := make([dynamic]byte, 0, size, allocator) or_return
-	util.write(&msg, object, opcode, size)
-	encoded = msg[:]
+	num_appended = util.write(buf, object, opcode, size) or_return
 	return
 }
 
@@ -736,11 +708,11 @@ BUFFER_RELEASE_OPCODE :: 0
 Buffer_Release_Event :: struct {
 	buffer : Buffer,  // the object this event/request concerns
 }
-buffer_release_decode :: proc(data: []byte) -> Buffer_Release_Event {
+buffer_release_read :: proc(data: []byte) -> (Buffer_Release_Event, int) {
 	e: Buffer_Release_Event
 	r: int
 	n := r
-	return e
+	return e, n
 }
 
 // offer to transfer data
@@ -772,15 +744,13 @@ Data_Offer_Accept_Request :: struct {
 	serial     : u32,  // serial number of the accept request
 	mime_type  : string,  // mime type accepted by the client
 }
-data_offer_accept_encode :: proc(req: Data_Offer_Accept_Request, allocator: mem.Allocator) -> (encoded: []byte, err: mem.Allocator_Error) {
+data_offer_accept_write :: proc(buf: ^[dynamic]byte, req: Data_Offer_Accept_Request) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
 	object := u32(req.data_offer)
 	opcode := u16(DATA_OFFER_ACCEPT_OPCODE)
 	size := u16(8 + size_of(req.serial) + util.compute_string_size(req.mime_type))
-	msg := make([dynamic]byte, 0, size, allocator) or_return
-	util.write(&msg, object, opcode, size)
-	util.write(&msg, req.serial)
-	util.write(&msg, req.mime_type)
-	encoded = msg[:]
+	num_appended = util.write(buf, object, opcode, size) or_return
+	num_appended += util.write(buf, req.serial) or_return
+	num_appended += util.write(buf, req.mime_type) or_return
 	return
 }
 
@@ -804,15 +774,13 @@ Data_Offer_Receive_Request :: struct {
 	mime_type  : string,  // mime type desired by receiver
 	fd         : linux.Fd,  // file descriptor for data transfer
 }
-data_offer_receive_encode :: proc(req: Data_Offer_Receive_Request, allocator: mem.Allocator) -> (encoded: []byte, err: mem.Allocator_Error) {
+data_offer_receive_write :: proc(buf: ^[dynamic]byte, req: Data_Offer_Receive_Request) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
 	object := u32(req.data_offer)
 	opcode := u16(DATA_OFFER_RECEIVE_OPCODE)
 	size := u16(8 + util.compute_string_size(req.mime_type))
-	msg := make([dynamic]byte, 0, size, allocator) or_return
-	util.write(&msg, object, opcode, size)
-	util.write(&msg, req.mime_type)
+	num_appended = util.write(buf, object, opcode, size) or_return
+	num_appended += util.write(buf, req.mime_type) or_return
 	// fd: fd — sent via SCM_RIGHTS, not in the body
-	encoded = msg[:]
 	return
 }
 
@@ -822,13 +790,11 @@ DATA_OFFER_DESTROY_OPCODE :: 2
 Data_Offer_Destroy_Request :: struct {
 	data_offer : Data_Offer,  // the object this event/request concerns
 }
-data_offer_destroy_encode :: proc(req: Data_Offer_Destroy_Request, allocator: mem.Allocator) -> (encoded: []byte, err: mem.Allocator_Error) {
+data_offer_destroy_write :: proc(buf: ^[dynamic]byte, req: Data_Offer_Destroy_Request) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
 	object := u32(req.data_offer)
 	opcode := u16(DATA_OFFER_DESTROY_OPCODE)
 	size := u16(8)
-	msg := make([dynamic]byte, 0, size, allocator) or_return
-	util.write(&msg, object, opcode, size)
-	encoded = msg[:]
+	num_appended = util.write(buf, object, opcode, size) or_return
 	return
 }
 
@@ -848,13 +814,11 @@ DATA_OFFER_FINISH_OPCODE :: 3
 Data_Offer_Finish_Request :: struct {
 	data_offer : Data_Offer,  // the object this event/request concerns
 }
-data_offer_finish_encode :: proc(req: Data_Offer_Finish_Request, allocator: mem.Allocator) -> (encoded: []byte, err: mem.Allocator_Error) {
+data_offer_finish_write :: proc(buf: ^[dynamic]byte, req: Data_Offer_Finish_Request) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
 	object := u32(req.data_offer)
 	opcode := u16(DATA_OFFER_FINISH_OPCODE)
 	size := u16(8)
-	msg := make([dynamic]byte, 0, size, allocator) or_return
-	util.write(&msg, object, opcode, size)
-	encoded = msg[:]
+	num_appended = util.write(buf, object, opcode, size) or_return
 	return
 }
 
@@ -890,15 +854,13 @@ Data_Offer_Set_Actions_Request :: struct {
 	dnd_actions      : Data_Device_Manager_Dnd_Action_Set,  // actions supported by the destination client
 	preferred_action : Data_Device_Manager_Dnd_Action_Set,  // action preferred by the destination client
 }
-data_offer_set_actions_encode :: proc(req: Data_Offer_Set_Actions_Request, allocator: mem.Allocator) -> (encoded: []byte, err: mem.Allocator_Error) {
+data_offer_set_actions_write :: proc(buf: ^[dynamic]byte, req: Data_Offer_Set_Actions_Request) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
 	object := u32(req.data_offer)
 	opcode := u16(DATA_OFFER_SET_ACTIONS_OPCODE)
 	size := u16(8 + size_of(req.dnd_actions) + size_of(req.preferred_action))
-	msg := make([dynamic]byte, 0, size, allocator) or_return
-	util.write(&msg, object, opcode, size)
-	util.write_u32(&msg, transmute(u32)req.dnd_actions)
-	util.write_u32(&msg, transmute(u32)req.preferred_action)
-	encoded = msg[:]
+	num_appended = util.write(buf, object, opcode, size) or_return
+	num_appended += util.write(buf, transmute(u32)req.dnd_actions) or_return
+	num_appended += util.write(buf, transmute(u32)req.preferred_action) or_return
 	return
 }
 
@@ -910,13 +872,12 @@ Data_Offer_Offer_Event :: struct {
 	data_offer : Data_Offer,  // the object this event/request concerns
 	mime_type  : string,  // offered mime type
 }
-data_offer_offer_decode :: proc(data: []byte, allocator: mem.Allocator) -> Data_Offer_Offer_Event {
+data_offer_offer_read :: proc(data: []byte) -> (Data_Offer_Offer_Event, int) {
 	e: Data_Offer_Offer_Event
 	r: int
 	n := r
 	e.mime_type, r = util.read_string(data[n:]); n += r
-	e.mime_type = strings.clone(e.mime_type, allocator)
-	return e
+	return e, n
 }
 
 DATA_OFFER_SOURCE_ACTIONS_OPCODE :: 1
@@ -929,13 +890,13 @@ Data_Offer_Source_Actions_Event :: struct {
 	data_offer     : Data_Offer,  // the object this event/request concerns
 	source_actions : Data_Device_Manager_Dnd_Action_Set,  // actions offered by the data source
 }
-data_offer_source_actions_decode :: proc(data: []byte) -> Data_Offer_Source_Actions_Event {
+data_offer_source_actions_read :: proc(data: []byte) -> (Data_Offer_Source_Actions_Event, int) {
 	e: Data_Offer_Source_Actions_Event
 	r: int
 	n := r
 	val_source_actions, _ := util.read_u32(data[n:]); n += 4
 	e.source_actions = transmute(Data_Device_Manager_Dnd_Action_Set)val_source_actions
-	return e
+	return e, n
 }
 
 DATA_OFFER_ACTION_OPCODE :: 2
@@ -973,13 +934,13 @@ Data_Offer_Action_Event :: struct {
 	data_offer : Data_Offer,  // the object this event/request concerns
 	dnd_action : Data_Device_Manager_Dnd_Action_Set,  // action selected by the compositor
 }
-data_offer_action_decode :: proc(data: []byte) -> Data_Offer_Action_Event {
+data_offer_action_read :: proc(data: []byte) -> (Data_Offer_Action_Event, int) {
 	e: Data_Offer_Action_Event
 	r: int
 	n := r
 	val_dnd_action, _ := util.read_u32(data[n:]); n += 4
 	e.dnd_action = transmute(Data_Device_Manager_Dnd_Action_Set)val_dnd_action
-	return e
+	return e, n
 }
 
 Data_Offer_Error :: enum u32 {
@@ -1006,14 +967,12 @@ Data_Source_Offer_Request :: struct {
 	data_source : Data_Source,  // the object this event/request concerns
 	mime_type   : string,  // mime type offered by the data source
 }
-data_source_offer_encode :: proc(req: Data_Source_Offer_Request, allocator: mem.Allocator) -> (encoded: []byte, err: mem.Allocator_Error) {
+data_source_offer_write :: proc(buf: ^[dynamic]byte, req: Data_Source_Offer_Request) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
 	object := u32(req.data_source)
 	opcode := u16(DATA_SOURCE_OFFER_OPCODE)
 	size := u16(8 + util.compute_string_size(req.mime_type))
-	msg := make([dynamic]byte, 0, size, allocator) or_return
-	util.write(&msg, object, opcode, size)
-	util.write(&msg, req.mime_type)
-	encoded = msg[:]
+	num_appended = util.write(buf, object, opcode, size) or_return
+	num_appended += util.write(buf, req.mime_type) or_return
 	return
 }
 
@@ -1023,13 +982,11 @@ DATA_SOURCE_DESTROY_OPCODE :: 1
 Data_Source_Destroy_Request :: struct {
 	data_source : Data_Source,  // the object this event/request concerns
 }
-data_source_destroy_encode :: proc(req: Data_Source_Destroy_Request, allocator: mem.Allocator) -> (encoded: []byte, err: mem.Allocator_Error) {
+data_source_destroy_write :: proc(buf: ^[dynamic]byte, req: Data_Source_Destroy_Request) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
 	object := u32(req.data_source)
 	opcode := u16(DATA_SOURCE_DESTROY_OPCODE)
 	size := u16(8)
-	msg := make([dynamic]byte, 0, size, allocator) or_return
-	util.write(&msg, object, opcode, size)
-	encoded = msg[:]
+	num_appended = util.write(buf, object, opcode, size) or_return
 	return
 }
 
@@ -1050,14 +1007,12 @@ Data_Source_Set_Actions_Request :: struct {
 	data_source : Data_Source,  // the object this event/request concerns
 	dnd_actions : Data_Device_Manager_Dnd_Action_Set,  // actions supported by the data source
 }
-data_source_set_actions_encode :: proc(req: Data_Source_Set_Actions_Request, allocator: mem.Allocator) -> (encoded: []byte, err: mem.Allocator_Error) {
+data_source_set_actions_write :: proc(buf: ^[dynamic]byte, req: Data_Source_Set_Actions_Request) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
 	object := u32(req.data_source)
 	opcode := u16(DATA_SOURCE_SET_ACTIONS_OPCODE)
 	size := u16(8 + size_of(req.dnd_actions))
-	msg := make([dynamic]byte, 0, size, allocator) or_return
-	util.write(&msg, object, opcode, size)
-	util.write_u32(&msg, transmute(u32)req.dnd_actions)
-	encoded = msg[:]
+	num_appended = util.write(buf, object, opcode, size) or_return
+	num_appended += util.write(buf, transmute(u32)req.dnd_actions) or_return
 	return
 }
 
@@ -1070,13 +1025,12 @@ Data_Source_Target_Event :: struct {
 	data_source : Data_Source,  // the object this event/request concerns
 	mime_type   : string,  // mime type accepted by the target
 }
-data_source_target_decode :: proc(data: []byte, allocator: mem.Allocator) -> Data_Source_Target_Event {
+data_source_target_read :: proc(data: []byte) -> (Data_Source_Target_Event, int) {
 	e: Data_Source_Target_Event
 	r: int
 	n := r
 	e.mime_type, r = util.read_string(data[n:]); n += r
-	e.mime_type = strings.clone(e.mime_type, allocator)
-	return e
+	return e, n
 }
 
 DATA_SOURCE_SEND_OPCODE :: 1
@@ -1089,14 +1043,13 @@ Data_Source_Send_Event :: struct {
 	mime_type   : string,  // mime type for the data
 	fd          : linux.Fd,  // file descriptor for the data
 }
-data_source_send_decode :: proc(data: []byte, fds: ^[dynamic; 28]linux.Fd, allocator: mem.Allocator) -> Data_Source_Send_Event {
+data_source_send_read :: proc(data: []byte, fds: ^[dynamic; 28]linux.Fd) -> (Data_Source_Send_Event, int) {
 	e: Data_Source_Send_Event
 	r: int
 	n := r
 	e.mime_type, r = util.read_string(data[n:]); n += r
-	e.mime_type = strings.clone(e.mime_type, allocator)
 	e.fd = pop_front(fds)
-	return e
+	return e, n
 }
 
 DATA_SOURCE_CANCELLED_OPCODE :: 2
@@ -1121,11 +1074,11 @@ DATA_SOURCE_CANCELLED_OPCODE :: 2
 Data_Source_Cancelled_Event :: struct {
 	data_source : Data_Source,  // the object this event/request concerns
 }
-data_source_cancelled_decode :: proc(data: []byte) -> Data_Source_Cancelled_Event {
+data_source_cancelled_read :: proc(data: []byte) -> (Data_Source_Cancelled_Event, int) {
 	e: Data_Source_Cancelled_Event
 	r: int
 	n := r
-	return e
+	return e, n
 }
 
 DATA_SOURCE_DND_DROP_PERFORMED_OPCODE :: 3
@@ -1140,11 +1093,11 @@ DATA_SOURCE_DND_DROP_PERFORMED_OPCODE :: 3
 Data_Source_Dnd_Drop_Performed_Event :: struct {
 	data_source : Data_Source,  // the object this event/request concerns
 }
-data_source_dnd_drop_performed_decode :: proc(data: []byte) -> Data_Source_Dnd_Drop_Performed_Event {
+data_source_dnd_drop_performed_read :: proc(data: []byte) -> (Data_Source_Dnd_Drop_Performed_Event, int) {
 	e: Data_Source_Dnd_Drop_Performed_Event
 	r: int
 	n := r
-	return e
+	return e, n
 }
 
 DATA_SOURCE_DND_FINISHED_OPCODE :: 4
@@ -1157,11 +1110,11 @@ DATA_SOURCE_DND_FINISHED_OPCODE :: 4
 Data_Source_Dnd_Finished_Event :: struct {
 	data_source : Data_Source,  // the object this event/request concerns
 }
-data_source_dnd_finished_decode :: proc(data: []byte) -> Data_Source_Dnd_Finished_Event {
+data_source_dnd_finished_read :: proc(data: []byte) -> (Data_Source_Dnd_Finished_Event, int) {
 	e: Data_Source_Dnd_Finished_Event
 	r: int
 	n := r
-	return e
+	return e, n
 }
 
 DATA_SOURCE_ACTION_OPCODE :: 5
@@ -1190,13 +1143,13 @@ Data_Source_Action_Event :: struct {
 	data_source : Data_Source,  // the object this event/request concerns
 	dnd_action  : Data_Device_Manager_Dnd_Action_Set,  // action selected by the compositor
 }
-data_source_action_decode :: proc(data: []byte) -> Data_Source_Action_Event {
+data_source_action_read :: proc(data: []byte) -> (Data_Source_Action_Event, int) {
 	e: Data_Source_Action_Event
 	r: int
 	n := r
 	val_dnd_action, _ := util.read_u32(data[n:]); n += 4
 	e.dnd_action = transmute(Data_Device_Manager_Dnd_Action_Set)val_dnd_action
-	return e
+	return e, n
 }
 
 Data_Source_Error :: enum u32 {
@@ -1245,17 +1198,15 @@ Data_Device_Start_Drag_Request :: struct {
 	icon        : Surface,  // drag-and-drop icon surface
 	serial      : u32,  // serial number of the implicit grab on the origin
 }
-data_device_start_drag_encode :: proc(req: Data_Device_Start_Drag_Request, allocator: mem.Allocator) -> (encoded: []byte, err: mem.Allocator_Error) {
+data_device_start_drag_write :: proc(buf: ^[dynamic]byte, req: Data_Device_Start_Drag_Request) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
 	object := u32(req.data_device)
 	opcode := u16(DATA_DEVICE_START_DRAG_OPCODE)
 	size := u16(8 + size_of(req.source) + size_of(req.origin) + size_of(req.icon) + size_of(req.serial))
-	msg := make([dynamic]byte, 0, size, allocator) or_return
-	util.write(&msg, object, opcode, size)
-	util.write(&msg, u32(req.source))
-	util.write(&msg, u32(req.origin))
-	util.write(&msg, u32(req.icon))
-	util.write(&msg, req.serial)
-	encoded = msg[:]
+	num_appended = util.write(buf, object, opcode, size) or_return
+	num_appended += util.write(buf, u32(req.source)) or_return
+	num_appended += util.write(buf, u32(req.origin)) or_return
+	num_appended += util.write(buf, u32(req.icon)) or_return
+	num_appended += util.write(buf, req.serial) or_return
 	return
 }
 
@@ -1272,15 +1223,13 @@ Data_Device_Set_Selection_Request :: struct {
 	source      : Data_Source,  // data source for the selection
 	serial      : u32,  // serial number of the event that triggered this request
 }
-data_device_set_selection_encode :: proc(req: Data_Device_Set_Selection_Request, allocator: mem.Allocator) -> (encoded: []byte, err: mem.Allocator_Error) {
+data_device_set_selection_write :: proc(buf: ^[dynamic]byte, req: Data_Device_Set_Selection_Request) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
 	object := u32(req.data_device)
 	opcode := u16(DATA_DEVICE_SET_SELECTION_OPCODE)
 	size := u16(8 + size_of(req.source) + size_of(req.serial))
-	msg := make([dynamic]byte, 0, size, allocator) or_return
-	util.write(&msg, object, opcode, size)
-	util.write(&msg, u32(req.source))
-	util.write(&msg, req.serial)
-	encoded = msg[:]
+	num_appended = util.write(buf, object, opcode, size) or_return
+	num_appended += util.write(buf, u32(req.source)) or_return
+	num_appended += util.write(buf, req.serial) or_return
 	return
 }
 
@@ -1290,13 +1239,11 @@ DATA_DEVICE_RELEASE_OPCODE :: 2
 Data_Device_Release_Request :: struct {
 	data_device : Data_Device,  // the object this event/request concerns
 }
-data_device_release_encode :: proc(req: Data_Device_Release_Request, allocator: mem.Allocator) -> (encoded: []byte, err: mem.Allocator_Error) {
+data_device_release_write :: proc(buf: ^[dynamic]byte, req: Data_Device_Release_Request) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
 	object := u32(req.data_device)
 	opcode := u16(DATA_DEVICE_RELEASE_OPCODE)
 	size := u16(8)
-	msg := make([dynamic]byte, 0, size, allocator) or_return
-	util.write(&msg, object, opcode, size)
-	encoded = msg[:]
+	num_appended = util.write(buf, object, opcode, size) or_return
 	return
 }
 
@@ -1313,13 +1260,13 @@ Data_Device_Data_Offer_Event :: struct {
 	data_device : Data_Device,  // the object this event/request concerns
 	id          : Data_Offer,  // the new data_offer object
 }
-data_device_data_offer_decode :: proc(data: []byte) -> Data_Device_Data_Offer_Event {
+data_device_data_offer_read :: proc(data: []byte) -> (Data_Device_Data_Offer_Event, int) {
 	e: Data_Device_Data_Offer_Event
 	r: int
 	n := r
 	val_id, _ := util.read_u32(data[n:]); n += 4
 	e.id = Data_Offer(val_id)
-	return e
+	return e, n
 }
 
 DATA_DEVICE_ENTER_OPCODE :: 1
@@ -1336,7 +1283,7 @@ Data_Device_Enter_Event :: struct {
 	y           : util.Fixed,  // surface-local y coordinate
 	id          : Data_Offer,  // source data_offer object
 }
-data_device_enter_decode :: proc(data: []byte) -> Data_Device_Enter_Event {
+data_device_enter_read :: proc(data: []byte) -> (Data_Device_Enter_Event, int) {
 	e: Data_Device_Enter_Event
 	r: int
 	n := r
@@ -1347,7 +1294,7 @@ data_device_enter_decode :: proc(data: []byte) -> Data_Device_Enter_Event {
 	e.y, r = util.read_fixed(data[n:]); n += r
 	val_id, _ := util.read_u32(data[n:]); n += 4
 	e.id = Data_Offer(val_id)
-	return e
+	return e, n
 }
 
 DATA_DEVICE_LEAVE_OPCODE :: 2
@@ -1358,11 +1305,11 @@ DATA_DEVICE_LEAVE_OPCODE :: 2
 Data_Device_Leave_Event :: struct {
 	data_device : Data_Device,  // the object this event/request concerns
 }
-data_device_leave_decode :: proc(data: []byte) -> Data_Device_Leave_Event {
+data_device_leave_read :: proc(data: []byte) -> (Data_Device_Leave_Event, int) {
 	e: Data_Device_Leave_Event
 	r: int
 	n := r
-	return e
+	return e, n
 }
 
 DATA_DEVICE_MOTION_OPCODE :: 3
@@ -1377,14 +1324,14 @@ Data_Device_Motion_Event :: struct {
 	x           : util.Fixed,  // surface-local x coordinate
 	y           : util.Fixed,  // surface-local y coordinate
 }
-data_device_motion_decode :: proc(data: []byte) -> Data_Device_Motion_Event {
+data_device_motion_read :: proc(data: []byte) -> (Data_Device_Motion_Event, int) {
 	e: Data_Device_Motion_Event
 	r: int
 	n := r
 	e.time, r = util.read_u32(data[n:]); n += r
 	e.x, r = util.read_fixed(data[n:]); n += r
 	e.y, r = util.read_fixed(data[n:]); n += r
-	return e
+	return e, n
 }
 
 DATA_DEVICE_DROP_OPCODE :: 4
@@ -1403,11 +1350,11 @@ DATA_DEVICE_DROP_OPCODE :: 4
 Data_Device_Drop_Event :: struct {
 	data_device : Data_Device,  // the object this event/request concerns
 }
-data_device_drop_decode :: proc(data: []byte) -> Data_Device_Drop_Event {
+data_device_drop_read :: proc(data: []byte) -> (Data_Device_Drop_Event, int) {
 	e: Data_Device_Drop_Event
 	r: int
 	n := r
-	return e
+	return e, n
 }
 
 DATA_DEVICE_SELECTION_OPCODE :: 5
@@ -1428,13 +1375,13 @@ Data_Device_Selection_Event :: struct {
 	data_device : Data_Device,  // the object this event/request concerns
 	id          : Data_Offer,  // selection data_offer object
 }
-data_device_selection_decode :: proc(data: []byte) -> Data_Device_Selection_Event {
+data_device_selection_read :: proc(data: []byte) -> (Data_Device_Selection_Event, int) {
 	e: Data_Device_Selection_Event
 	r: int
 	n := r
 	val_id, _ := util.read_u32(data[n:]); n += 4
 	e.id = Data_Offer(val_id)
-	return e
+	return e, n
 }
 
 Data_Device_Error :: enum u32 {
@@ -1461,14 +1408,12 @@ DATA_DEVICE_MANAGER_CREATE_DATA_SOURCE_OPCODE :: 0
 Data_Device_Manager_Create_Data_Source_Request :: struct {
 	data_device_manager : Data_Device_Manager,  // the object this event/request concerns
 }
-data_device_manager_create_data_source_encode :: proc(req: Data_Device_Manager_Create_Data_Source_Request, new_id: u32, allocator: mem.Allocator) -> (encoded: []byte, err: mem.Allocator_Error) {
+data_device_manager_create_data_source_write :: proc(buf: ^[dynamic]byte, req: Data_Device_Manager_Create_Data_Source_Request, new_id: u32) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
 	object := u32(req.data_device_manager)
 	opcode := u16(DATA_DEVICE_MANAGER_CREATE_DATA_SOURCE_OPCODE)
 	size := u16(8 + size_of(new_id))
-	msg := make([dynamic]byte, 0, size, allocator) or_return
-	util.write(&msg, object, opcode, size)
-	util.write(&msg, new_id)
-	encoded = msg[:]
+	num_appended = util.write(buf, object, opcode, size) or_return
+	num_appended += util.write(buf, new_id) or_return
 	return
 }
 
@@ -1479,15 +1424,13 @@ Data_Device_Manager_Get_Data_Device_Request :: struct {
 	data_device_manager : Data_Device_Manager,  // the object this event/request concerns
 	seat                : Seat,  // seat associated with the data device
 }
-data_device_manager_get_data_device_encode :: proc(req: Data_Device_Manager_Get_Data_Device_Request, new_id: u32, allocator: mem.Allocator) -> (encoded: []byte, err: mem.Allocator_Error) {
+data_device_manager_get_data_device_write :: proc(buf: ^[dynamic]byte, req: Data_Device_Manager_Get_Data_Device_Request, new_id: u32) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
 	object := u32(req.data_device_manager)
 	opcode := u16(DATA_DEVICE_MANAGER_GET_DATA_DEVICE_OPCODE)
 	size := u16(8 + size_of(new_id) + size_of(req.seat))
-	msg := make([dynamic]byte, 0, size, allocator) or_return
-	util.write(&msg, object, opcode, size)
-	util.write(&msg, new_id)
-	util.write(&msg, u32(req.seat))
-	encoded = msg[:]
+	num_appended = util.write(buf, object, opcode, size) or_return
+	num_appended += util.write(buf, new_id) or_return
+	num_appended += util.write(buf, u32(req.seat)) or_return
 	return
 }
 
@@ -1498,13 +1441,11 @@ DATA_DEVICE_MANAGER_RELEASE_OPCODE :: 2
 Data_Device_Manager_Release_Request :: struct {
 	data_device_manager : Data_Device_Manager,  // the object this event/request concerns
 }
-data_device_manager_release_encode :: proc(req: Data_Device_Manager_Release_Request, allocator: mem.Allocator) -> (encoded: []byte, err: mem.Allocator_Error) {
+data_device_manager_release_write :: proc(buf: ^[dynamic]byte, req: Data_Device_Manager_Release_Request) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
 	object := u32(req.data_device_manager)
 	opcode := u16(DATA_DEVICE_MANAGER_RELEASE_OPCODE)
 	size := u16(8)
-	msg := make([dynamic]byte, 0, size, allocator) or_return
-	util.write(&msg, object, opcode, size)
-	encoded = msg[:]
+	num_appended = util.write(buf, object, opcode, size) or_return
 	return
 }
 
@@ -1556,15 +1497,13 @@ Shell_Get_Shell_Surface_Request :: struct {
 	shell   : Shell,  // the object this event/request concerns
 	surface : Surface,  // surface to be given the shell surface role
 }
-shell_get_shell_surface_encode :: proc(req: Shell_Get_Shell_Surface_Request, new_id: u32, allocator: mem.Allocator) -> (encoded: []byte, err: mem.Allocator_Error) {
+shell_get_shell_surface_write :: proc(buf: ^[dynamic]byte, req: Shell_Get_Shell_Surface_Request, new_id: u32) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
 	object := u32(req.shell)
 	opcode := u16(SHELL_GET_SHELL_SURFACE_OPCODE)
 	size := u16(8 + size_of(new_id) + size_of(req.surface))
-	msg := make([dynamic]byte, 0, size, allocator) or_return
-	util.write(&msg, object, opcode, size)
-	util.write(&msg, new_id)
-	util.write(&msg, u32(req.surface))
-	encoded = msg[:]
+	num_appended = util.write(buf, object, opcode, size) or_return
+	num_appended += util.write(buf, new_id) or_return
+	num_appended += util.write(buf, u32(req.surface)) or_return
 	return
 }
 
@@ -1593,14 +1532,12 @@ Shell_Surface_Pong_Request :: struct {
 	shell_surface : Shell_Surface,  // the object this event/request concerns
 	serial        : u32,  // serial number of the ping event
 }
-shell_surface_pong_encode :: proc(req: Shell_Surface_Pong_Request, allocator: mem.Allocator) -> (encoded: []byte, err: mem.Allocator_Error) {
+shell_surface_pong_write :: proc(buf: ^[dynamic]byte, req: Shell_Surface_Pong_Request) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
 	object := u32(req.shell_surface)
 	opcode := u16(SHELL_SURFACE_PONG_OPCODE)
 	size := u16(8 + size_of(req.serial))
-	msg := make([dynamic]byte, 0, size, allocator) or_return
-	util.write(&msg, object, opcode, size)
-	util.write(&msg, req.serial)
-	encoded = msg[:]
+	num_appended = util.write(buf, object, opcode, size) or_return
+	num_appended += util.write(buf, req.serial) or_return
 	return
 }
 
@@ -1615,15 +1552,13 @@ Shell_Surface_Move_Request :: struct {
 	seat          : Seat,  // seat whose pointer is used
 	serial        : u32,  // serial number of the implicit grab on the pointer
 }
-shell_surface_move_encode :: proc(req: Shell_Surface_Move_Request, allocator: mem.Allocator) -> (encoded: []byte, err: mem.Allocator_Error) {
+shell_surface_move_write :: proc(buf: ^[dynamic]byte, req: Shell_Surface_Move_Request) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
 	object := u32(req.shell_surface)
 	opcode := u16(SHELL_SURFACE_MOVE_OPCODE)
 	size := u16(8 + size_of(req.seat) + size_of(req.serial))
-	msg := make([dynamic]byte, 0, size, allocator) or_return
-	util.write(&msg, object, opcode, size)
-	util.write(&msg, u32(req.seat))
-	util.write(&msg, req.serial)
-	encoded = msg[:]
+	num_appended = util.write(buf, object, opcode, size) or_return
+	num_appended += util.write(buf, u32(req.seat)) or_return
+	num_appended += util.write(buf, req.serial) or_return
 	return
 }
 
@@ -1639,16 +1574,14 @@ Shell_Surface_Resize_Request :: struct {
 	serial        : u32,  // serial number of the implicit grab on the pointer
 	edges         : Shell_Surface_Resize_Set,  // which edge or corner is being dragged
 }
-shell_surface_resize_encode :: proc(req: Shell_Surface_Resize_Request, allocator: mem.Allocator) -> (encoded: []byte, err: mem.Allocator_Error) {
+shell_surface_resize_write :: proc(buf: ^[dynamic]byte, req: Shell_Surface_Resize_Request) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
 	object := u32(req.shell_surface)
 	opcode := u16(SHELL_SURFACE_RESIZE_OPCODE)
 	size := u16(8 + size_of(req.seat) + size_of(req.serial) + size_of(req.edges))
-	msg := make([dynamic]byte, 0, size, allocator) or_return
-	util.write(&msg, object, opcode, size)
-	util.write(&msg, u32(req.seat))
-	util.write(&msg, req.serial)
-	util.write_u32(&msg, transmute(u32)req.edges)
-	encoded = msg[:]
+	num_appended = util.write(buf, object, opcode, size) or_return
+	num_appended += util.write(buf, u32(req.seat)) or_return
+	num_appended += util.write(buf, req.serial) or_return
+	num_appended += util.write(buf, transmute(u32)req.edges) or_return
 	return
 }
 
@@ -1659,13 +1592,11 @@ SHELL_SURFACE_SET_TOPLEVEL_OPCODE :: 3
 Shell_Surface_Set_Toplevel_Request :: struct {
 	shell_surface : Shell_Surface,  // the object this event/request concerns
 }
-shell_surface_set_toplevel_encode :: proc(req: Shell_Surface_Set_Toplevel_Request, allocator: mem.Allocator) -> (encoded: []byte, err: mem.Allocator_Error) {
+shell_surface_set_toplevel_write :: proc(buf: ^[dynamic]byte, req: Shell_Surface_Set_Toplevel_Request) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
 	object := u32(req.shell_surface)
 	opcode := u16(SHELL_SURFACE_SET_TOPLEVEL_OPCODE)
 	size := u16(8)
-	msg := make([dynamic]byte, 0, size, allocator) or_return
-	util.write(&msg, object, opcode, size)
-	encoded = msg[:]
+	num_appended = util.write(buf, object, opcode, size) or_return
 	return
 }
 
@@ -1683,17 +1614,15 @@ Shell_Surface_Set_Transient_Request :: struct {
 	y             : i32,  // surface-local y coordinate
 	flags         : Shell_Surface_Transient_Set,  // transient surface behavior
 }
-shell_surface_set_transient_encode :: proc(req: Shell_Surface_Set_Transient_Request, allocator: mem.Allocator) -> (encoded: []byte, err: mem.Allocator_Error) {
+shell_surface_set_transient_write :: proc(buf: ^[dynamic]byte, req: Shell_Surface_Set_Transient_Request) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
 	object := u32(req.shell_surface)
 	opcode := u16(SHELL_SURFACE_SET_TRANSIENT_OPCODE)
 	size := u16(8 + size_of(req.parent) + size_of(req.x) + size_of(req.y) + size_of(req.flags))
-	msg := make([dynamic]byte, 0, size, allocator) or_return
-	util.write(&msg, object, opcode, size)
-	util.write(&msg, u32(req.parent))
-	util.write(&msg, req.x)
-	util.write(&msg, req.y)
-	util.write_u32(&msg, transmute(u32)req.flags)
-	encoded = msg[:]
+	num_appended = util.write(buf, object, opcode, size) or_return
+	num_appended += util.write(buf, u32(req.parent)) or_return
+	num_appended += util.write(buf, req.x) or_return
+	num_appended += util.write(buf, req.y) or_return
+	num_appended += util.write(buf, transmute(u32)req.flags) or_return
 	return
 }
 
@@ -1732,16 +1661,14 @@ Shell_Surface_Set_Fullscreen_Request :: struct {
 	framerate     : u32,  // framerate in mHz
 	output        : Output,  // output on which the surface is to be fullscreen
 }
-shell_surface_set_fullscreen_encode :: proc(req: Shell_Surface_Set_Fullscreen_Request, allocator: mem.Allocator) -> (encoded: []byte, err: mem.Allocator_Error) {
+shell_surface_set_fullscreen_write :: proc(buf: ^[dynamic]byte, req: Shell_Surface_Set_Fullscreen_Request) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
 	object := u32(req.shell_surface)
 	opcode := u16(SHELL_SURFACE_SET_FULLSCREEN_OPCODE)
 	size := u16(8 + size_of(req.method) + size_of(req.framerate) + size_of(req.output))
-	msg := make([dynamic]byte, 0, size, allocator) or_return
-	util.write(&msg, object, opcode, size)
-	util.write(&msg, u32(req.method))
-	util.write(&msg, req.framerate)
-	util.write(&msg, u32(req.output))
-	encoded = msg[:]
+	num_appended = util.write(buf, object, opcode, size) or_return
+	num_appended += util.write(buf, u32(req.method)) or_return
+	num_appended += util.write(buf, req.framerate) or_return
+	num_appended += util.write(buf, u32(req.output)) or_return
 	return
 }
 
@@ -1771,19 +1698,17 @@ Shell_Surface_Set_Popup_Request :: struct {
 	y             : i32,  // surface-local y coordinate
 	flags         : Shell_Surface_Transient_Set,  // transient surface behavior
 }
-shell_surface_set_popup_encode :: proc(req: Shell_Surface_Set_Popup_Request, allocator: mem.Allocator) -> (encoded: []byte, err: mem.Allocator_Error) {
+shell_surface_set_popup_write :: proc(buf: ^[dynamic]byte, req: Shell_Surface_Set_Popup_Request) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
 	object := u32(req.shell_surface)
 	opcode := u16(SHELL_SURFACE_SET_POPUP_OPCODE)
 	size := u16(8 + size_of(req.seat) + size_of(req.serial) + size_of(req.parent) + size_of(req.x) + size_of(req.y) + size_of(req.flags))
-	msg := make([dynamic]byte, 0, size, allocator) or_return
-	util.write(&msg, object, opcode, size)
-	util.write(&msg, u32(req.seat))
-	util.write(&msg, req.serial)
-	util.write(&msg, u32(req.parent))
-	util.write(&msg, req.x)
-	util.write(&msg, req.y)
-	util.write_u32(&msg, transmute(u32)req.flags)
-	encoded = msg[:]
+	num_appended = util.write(buf, object, opcode, size) or_return
+	num_appended += util.write(buf, u32(req.seat)) or_return
+	num_appended += util.write(buf, req.serial) or_return
+	num_appended += util.write(buf, u32(req.parent)) or_return
+	num_appended += util.write(buf, req.x) or_return
+	num_appended += util.write(buf, req.y) or_return
+	num_appended += util.write(buf, transmute(u32)req.flags) or_return
 	return
 }
 
@@ -1807,14 +1732,12 @@ Shell_Surface_Set_Maximized_Request :: struct {
 	shell_surface : Shell_Surface,  // the object this event/request concerns
 	output        : Output,  // output on which the surface is to be maximized
 }
-shell_surface_set_maximized_encode :: proc(req: Shell_Surface_Set_Maximized_Request, allocator: mem.Allocator) -> (encoded: []byte, err: mem.Allocator_Error) {
+shell_surface_set_maximized_write :: proc(buf: ^[dynamic]byte, req: Shell_Surface_Set_Maximized_Request) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
 	object := u32(req.shell_surface)
 	opcode := u16(SHELL_SURFACE_SET_MAXIMIZED_OPCODE)
 	size := u16(8 + size_of(req.output))
-	msg := make([dynamic]byte, 0, size, allocator) or_return
-	util.write(&msg, object, opcode, size)
-	util.write(&msg, u32(req.output))
-	encoded = msg[:]
+	num_appended = util.write(buf, object, opcode, size) or_return
+	num_appended += util.write(buf, u32(req.output)) or_return
 	return
 }
 
@@ -1829,14 +1752,12 @@ Shell_Surface_Set_Title_Request :: struct {
 	shell_surface : Shell_Surface,  // the object this event/request concerns
 	title         : string,  // surface title
 }
-shell_surface_set_title_encode :: proc(req: Shell_Surface_Set_Title_Request, allocator: mem.Allocator) -> (encoded: []byte, err: mem.Allocator_Error) {
+shell_surface_set_title_write :: proc(buf: ^[dynamic]byte, req: Shell_Surface_Set_Title_Request) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
 	object := u32(req.shell_surface)
 	opcode := u16(SHELL_SURFACE_SET_TITLE_OPCODE)
 	size := u16(8 + util.compute_string_size(req.title))
-	msg := make([dynamic]byte, 0, size, allocator) or_return
-	util.write(&msg, object, opcode, size)
-	util.write(&msg, req.title)
-	encoded = msg[:]
+	num_appended = util.write(buf, object, opcode, size) or_return
+	num_appended += util.write(buf, req.title) or_return
 	return
 }
 
@@ -1851,14 +1772,12 @@ Shell_Surface_Set_Class_Request :: struct {
 	shell_surface : Shell_Surface,  // the object this event/request concerns
 	class_        : string,  // surface class
 }
-shell_surface_set_class_encode :: proc(req: Shell_Surface_Set_Class_Request, allocator: mem.Allocator) -> (encoded: []byte, err: mem.Allocator_Error) {
+shell_surface_set_class_write :: proc(buf: ^[dynamic]byte, req: Shell_Surface_Set_Class_Request) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
 	object := u32(req.shell_surface)
 	opcode := u16(SHELL_SURFACE_SET_CLASS_OPCODE)
 	size := u16(8 + util.compute_string_size(req.class_))
-	msg := make([dynamic]byte, 0, size, allocator) or_return
-	util.write(&msg, object, opcode, size)
-	util.write(&msg, req.class_)
-	encoded = msg[:]
+	num_appended = util.write(buf, object, opcode, size) or_return
+	num_appended += util.write(buf, req.class_) or_return
 	return
 }
 
@@ -1870,12 +1789,12 @@ Shell_Surface_Ping_Event :: struct {
 	shell_surface : Shell_Surface,  // the object this event/request concerns
 	serial        : u32,  // serial number of the ping
 }
-shell_surface_ping_decode :: proc(data: []byte) -> Shell_Surface_Ping_Event {
+shell_surface_ping_read :: proc(data: []byte) -> (Shell_Surface_Ping_Event, int) {
 	e: Shell_Surface_Ping_Event
 	r: int
 	n := r
 	e.serial, r = util.read_u32(data[n:]); n += r
-	return e
+	return e, n
 }
 
 SHELL_SURFACE_CONFIGURE_OPCODE :: 1
@@ -1899,7 +1818,7 @@ Shell_Surface_Configure_Event :: struct {
 	width         : i32,  // new width of the surface
 	height        : i32,  // new height of the surface
 }
-shell_surface_configure_decode :: proc(data: []byte) -> Shell_Surface_Configure_Event {
+shell_surface_configure_read :: proc(data: []byte) -> (Shell_Surface_Configure_Event, int) {
 	e: Shell_Surface_Configure_Event
 	r: int
 	n := r
@@ -1907,7 +1826,7 @@ shell_surface_configure_decode :: proc(data: []byte) -> Shell_Surface_Configure_
 	e.edges = transmute(Shell_Surface_Resize_Set)val_edges
 	e.width, r = util.read_i32(data[n:]); n += r
 	e.height, r = util.read_i32(data[n:]); n += r
-	return e
+	return e, n
 }
 
 SHELL_SURFACE_POPUP_DONE_OPCODE :: 2
@@ -1918,11 +1837,11 @@ SHELL_SURFACE_POPUP_DONE_OPCODE :: 2
 Shell_Surface_Popup_Done_Event :: struct {
 	shell_surface : Shell_Surface,  // the object this event/request concerns
 }
-shell_surface_popup_done_decode :: proc(data: []byte) -> Shell_Surface_Popup_Done_Event {
+shell_surface_popup_done_read :: proc(data: []byte) -> (Shell_Surface_Popup_Done_Event, int) {
 	e: Shell_Surface_Popup_Done_Event
 	r: int
 	n := r
-	return e
+	return e, n
 }
 
 // edge values for resizing
@@ -2004,13 +1923,11 @@ SURFACE_DESTROY_OPCODE :: 0
 Surface_Destroy_Request :: struct {
 	surface : Surface,  // the object this event/request concerns
 }
-surface_destroy_encode :: proc(req: Surface_Destroy_Request, allocator: mem.Allocator) -> (encoded: []byte, err: mem.Allocator_Error) {
+surface_destroy_write :: proc(buf: ^[dynamic]byte, req: Surface_Destroy_Request) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
 	object := u32(req.surface)
 	opcode := u16(SURFACE_DESTROY_OPCODE)
 	size := u16(8)
-	msg := make([dynamic]byte, 0, size, allocator) or_return
-	util.write(&msg, object, opcode, size)
-	encoded = msg[:]
+	num_appended = util.write(buf, object, opcode, size) or_return
 	return
 }
 
@@ -2079,16 +1996,14 @@ Surface_Attach_Request :: struct {
 	x       : i32,  // surface-local x coordinate
 	y       : i32,  // surface-local y coordinate
 }
-surface_attach_encode :: proc(req: Surface_Attach_Request, allocator: mem.Allocator) -> (encoded: []byte, err: mem.Allocator_Error) {
+surface_attach_write :: proc(buf: ^[dynamic]byte, req: Surface_Attach_Request) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
 	object := u32(req.surface)
 	opcode := u16(SURFACE_ATTACH_OPCODE)
 	size := u16(8 + size_of(req.buffer) + size_of(req.x) + size_of(req.y))
-	msg := make([dynamic]byte, 0, size, allocator) or_return
-	util.write(&msg, object, opcode, size)
-	util.write(&msg, u32(req.buffer))
-	util.write(&msg, req.x)
-	util.write(&msg, req.y)
-	encoded = msg[:]
+	num_appended = util.write(buf, object, opcode, size) or_return
+	num_appended += util.write(buf, u32(req.buffer)) or_return
+	num_appended += util.write(buf, req.x) or_return
+	num_appended += util.write(buf, req.y) or_return
 	return
 }
 
@@ -2117,17 +2032,15 @@ Surface_Damage_Request :: struct {
 	width   : i32,  // width of damage rectangle
 	height  : i32,  // height of damage rectangle
 }
-surface_damage_encode :: proc(req: Surface_Damage_Request, allocator: mem.Allocator) -> (encoded: []byte, err: mem.Allocator_Error) {
+surface_damage_write :: proc(buf: ^[dynamic]byte, req: Surface_Damage_Request) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
 	object := u32(req.surface)
 	opcode := u16(SURFACE_DAMAGE_OPCODE)
 	size := u16(8 + size_of(req.x) + size_of(req.y) + size_of(req.width) + size_of(req.height))
-	msg := make([dynamic]byte, 0, size, allocator) or_return
-	util.write(&msg, object, opcode, size)
-	util.write(&msg, req.x)
-	util.write(&msg, req.y)
-	util.write(&msg, req.width)
-	util.write(&msg, req.height)
-	encoded = msg[:]
+	num_appended = util.write(buf, object, opcode, size) or_return
+	num_appended += util.write(buf, req.x) or_return
+	num_appended += util.write(buf, req.y) or_return
+	num_appended += util.write(buf, req.width) or_return
+	num_appended += util.write(buf, req.height) or_return
 	return
 }
 
@@ -2162,14 +2075,12 @@ SURFACE_FRAME_OPCODE :: 3
 Surface_Frame_Request :: struct {
 	surface : Surface,  // the object this event/request concerns
 }
-surface_frame_encode :: proc(req: Surface_Frame_Request, new_id: u32, allocator: mem.Allocator) -> (encoded: []byte, err: mem.Allocator_Error) {
+surface_frame_write :: proc(buf: ^[dynamic]byte, req: Surface_Frame_Request, new_id: u32) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
 	object := u32(req.surface)
 	opcode := u16(SURFACE_FRAME_OPCODE)
 	size := u16(8 + size_of(new_id))
-	msg := make([dynamic]byte, 0, size, allocator) or_return
-	util.write(&msg, object, opcode, size)
-	util.write(&msg, new_id)
-	encoded = msg[:]
+	num_appended = util.write(buf, object, opcode, size) or_return
+	num_appended += util.write(buf, new_id) or_return
 	return
 }
 
@@ -2197,14 +2108,12 @@ Surface_Set_Opaque_Region_Request :: struct {
 	surface : Surface,  // the object this event/request concerns
 	region  : Region,  // opaque region of the surface
 }
-surface_set_opaque_region_encode :: proc(req: Surface_Set_Opaque_Region_Request, allocator: mem.Allocator) -> (encoded: []byte, err: mem.Allocator_Error) {
+surface_set_opaque_region_write :: proc(buf: ^[dynamic]byte, req: Surface_Set_Opaque_Region_Request) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
 	object := u32(req.surface)
 	opcode := u16(SURFACE_SET_OPAQUE_REGION_OPCODE)
 	size := u16(8 + size_of(req.region))
-	msg := make([dynamic]byte, 0, size, allocator) or_return
-	util.write(&msg, object, opcode, size)
-	util.write(&msg, u32(req.region))
-	encoded = msg[:]
+	num_appended = util.write(buf, object, opcode, size) or_return
+	num_appended += util.write(buf, u32(req.region)) or_return
 	return
 }
 
@@ -2231,14 +2140,12 @@ Surface_Set_Input_Region_Request :: struct {
 	surface : Surface,  // the object this event/request concerns
 	region  : Region,  // input region of the surface
 }
-surface_set_input_region_encode :: proc(req: Surface_Set_Input_Region_Request, allocator: mem.Allocator) -> (encoded: []byte, err: mem.Allocator_Error) {
+surface_set_input_region_write :: proc(buf: ^[dynamic]byte, req: Surface_Set_Input_Region_Request) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
 	object := u32(req.surface)
 	opcode := u16(SURFACE_SET_INPUT_REGION_OPCODE)
 	size := u16(8 + size_of(req.region))
-	msg := make([dynamic]byte, 0, size, allocator) or_return
-	util.write(&msg, object, opcode, size)
-	util.write(&msg, u32(req.region))
-	encoded = msg[:]
+	num_appended = util.write(buf, object, opcode, size) or_return
+	num_appended += util.write(buf, u32(req.region)) or_return
 	return
 }
 
@@ -2283,13 +2190,11 @@ SURFACE_COMMIT_OPCODE :: 6
 Surface_Commit_Request :: struct {
 	surface : Surface,  // the object this event/request concerns
 }
-surface_commit_encode :: proc(req: Surface_Commit_Request, allocator: mem.Allocator) -> (encoded: []byte, err: mem.Allocator_Error) {
+surface_commit_write :: proc(buf: ^[dynamic]byte, req: Surface_Commit_Request) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
 	object := u32(req.surface)
 	opcode := u16(SURFACE_COMMIT_OPCODE)
 	size := u16(8)
-	msg := make([dynamic]byte, 0, size, allocator) or_return
-	util.write(&msg, object, opcode, size)
-	encoded = msg[:]
+	num_appended = util.write(buf, object, opcode, size) or_return
 	return
 }
 
@@ -2323,14 +2228,12 @@ Surface_Set_Buffer_Transform_Request :: struct {
 	surface   : Surface,  // the object this event/request concerns
 	transform : Output_Transform,  // transform for interpreting buffer contents
 }
-surface_set_buffer_transform_encode :: proc(req: Surface_Set_Buffer_Transform_Request, allocator: mem.Allocator) -> (encoded: []byte, err: mem.Allocator_Error) {
+surface_set_buffer_transform_write :: proc(buf: ^[dynamic]byte, req: Surface_Set_Buffer_Transform_Request) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
 	object := u32(req.surface)
 	opcode := u16(SURFACE_SET_BUFFER_TRANSFORM_OPCODE)
 	size := u16(8 + size_of(req.transform))
-	msg := make([dynamic]byte, 0, size, allocator) or_return
-	util.write(&msg, object, opcode, size)
-	util.write(&msg, i32(req.transform))
-	encoded = msg[:]
+	num_appended = util.write(buf, object, opcode, size) or_return
+	num_appended += util.write(buf, i32(req.transform)) or_return
 	return
 }
 
@@ -2357,14 +2260,12 @@ Surface_Set_Buffer_Scale_Request :: struct {
 	surface : Surface,  // the object this event/request concerns
 	scale   : i32,  // scale for interpreting buffer contents
 }
-surface_set_buffer_scale_encode :: proc(req: Surface_Set_Buffer_Scale_Request, allocator: mem.Allocator) -> (encoded: []byte, err: mem.Allocator_Error) {
+surface_set_buffer_scale_write :: proc(buf: ^[dynamic]byte, req: Surface_Set_Buffer_Scale_Request) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
 	object := u32(req.surface)
 	opcode := u16(SURFACE_SET_BUFFER_SCALE_OPCODE)
 	size := u16(8 + size_of(req.scale))
-	msg := make([dynamic]byte, 0, size, allocator) or_return
-	util.write(&msg, object, opcode, size)
-	util.write(&msg, req.scale)
-	encoded = msg[:]
+	num_appended = util.write(buf, object, opcode, size) or_return
+	num_appended += util.write(buf, req.scale) or_return
 	return
 }
 
@@ -2403,17 +2304,15 @@ Surface_Damage_Buffer_Request :: struct {
 	width   : i32,  // width of damage rectangle
 	height  : i32,  // height of damage rectangle
 }
-surface_damage_buffer_encode :: proc(req: Surface_Damage_Buffer_Request, allocator: mem.Allocator) -> (encoded: []byte, err: mem.Allocator_Error) {
+surface_damage_buffer_write :: proc(buf: ^[dynamic]byte, req: Surface_Damage_Buffer_Request) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
 	object := u32(req.surface)
 	opcode := u16(SURFACE_DAMAGE_BUFFER_OPCODE)
 	size := u16(8 + size_of(req.x) + size_of(req.y) + size_of(req.width) + size_of(req.height))
-	msg := make([dynamic]byte, 0, size, allocator) or_return
-	util.write(&msg, object, opcode, size)
-	util.write(&msg, req.x)
-	util.write(&msg, req.y)
-	util.write(&msg, req.width)
-	util.write(&msg, req.height)
-	encoded = msg[:]
+	num_appended = util.write(buf, object, opcode, size) or_return
+	num_appended += util.write(buf, req.x) or_return
+	num_appended += util.write(buf, req.y) or_return
+	num_appended += util.write(buf, req.width) or_return
+	num_appended += util.write(buf, req.height) or_return
 	return
 }
 
@@ -2436,15 +2335,13 @@ Surface_Offset_Request :: struct {
 	x       : i32,  // surface-local x coordinate
 	y       : i32,  // surface-local y coordinate
 }
-surface_offset_encode :: proc(req: Surface_Offset_Request, allocator: mem.Allocator) -> (encoded: []byte, err: mem.Allocator_Error) {
+surface_offset_write :: proc(buf: ^[dynamic]byte, req: Surface_Offset_Request) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
 	object := u32(req.surface)
 	opcode := u16(SURFACE_OFFSET_OPCODE)
 	size := u16(8 + size_of(req.x) + size_of(req.y))
-	msg := make([dynamic]byte, 0, size, allocator) or_return
-	util.write(&msg, object, opcode, size)
-	util.write(&msg, req.x)
-	util.write(&msg, req.y)
-	encoded = msg[:]
+	num_appended = util.write(buf, object, opcode, size) or_return
+	num_appended += util.write(buf, req.x) or_return
+	num_appended += util.write(buf, req.y) or_return
 	return
 }
 
@@ -2467,14 +2364,12 @@ SURFACE_GET_RELEASE_OPCODE :: 11
 Surface_Get_Release_Request :: struct {
 	surface : Surface,  // the object this event/request concerns
 }
-surface_get_release_encode :: proc(req: Surface_Get_Release_Request, new_id: u32, allocator: mem.Allocator) -> (encoded: []byte, err: mem.Allocator_Error) {
+surface_get_release_write :: proc(buf: ^[dynamic]byte, req: Surface_Get_Release_Request, new_id: u32) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
 	object := u32(req.surface)
 	opcode := u16(SURFACE_GET_RELEASE_OPCODE)
 	size := u16(8 + size_of(new_id))
-	msg := make([dynamic]byte, 0, size, allocator) or_return
-	util.write(&msg, object, opcode, size)
-	util.write(&msg, new_id)
-	encoded = msg[:]
+	num_appended = util.write(buf, object, opcode, size) or_return
+	num_appended += util.write(buf, new_id) or_return
 	return
 }
 
@@ -2488,13 +2383,13 @@ Surface_Enter_Event :: struct {
 	surface : Surface,  // the object this event/request concerns
 	output  : Output,  // output entered by the surface
 }
-surface_enter_decode :: proc(data: []byte) -> Surface_Enter_Event {
+surface_enter_read :: proc(data: []byte) -> (Surface_Enter_Event, int) {
 	e: Surface_Enter_Event
 	r: int
 	n := r
 	val_output, _ := util.read_u32(data[n:]); n += 4
 	e.output = Output(val_output)
-	return e
+	return e, n
 }
 
 SURFACE_LEAVE_OPCODE :: 1
@@ -2511,13 +2406,13 @@ Surface_Leave_Event :: struct {
 	surface : Surface,  // the object this event/request concerns
 	output  : Output,  // output left by the surface
 }
-surface_leave_decode :: proc(data: []byte) -> Surface_Leave_Event {
+surface_leave_read :: proc(data: []byte) -> (Surface_Leave_Event, int) {
 	e: Surface_Leave_Event
 	r: int
 	n := r
 	val_output, _ := util.read_u32(data[n:]); n += 4
 	e.output = Output(val_output)
-	return e
+	return e, n
 }
 
 SURFACE_PREFERRED_BUFFER_SCALE_OPCODE :: 2
@@ -2535,12 +2430,12 @@ Surface_Preferred_Buffer_Scale_Event :: struct {
 	surface : Surface,  // the object this event/request concerns
 	factor  : i32,  // preferred scaling factor
 }
-surface_preferred_buffer_scale_decode :: proc(data: []byte) -> Surface_Preferred_Buffer_Scale_Event {
+surface_preferred_buffer_scale_read :: proc(data: []byte) -> (Surface_Preferred_Buffer_Scale_Event, int) {
 	e: Surface_Preferred_Buffer_Scale_Event
 	r: int
 	n := r
 	e.factor, r = util.read_i32(data[n:]); n += r
-	return e
+	return e, n
 }
 
 SURFACE_PREFERRED_BUFFER_TRANSFORM_OPCODE :: 3
@@ -2556,13 +2451,13 @@ Surface_Preferred_Buffer_Transform_Event :: struct {
 	surface   : Surface,  // the object this event/request concerns
 	transform : Output_Transform,  // preferred transform
 }
-surface_preferred_buffer_transform_decode :: proc(data: []byte) -> Surface_Preferred_Buffer_Transform_Event {
+surface_preferred_buffer_transform_read :: proc(data: []byte) -> (Surface_Preferred_Buffer_Transform_Event, int) {
 	e: Surface_Preferred_Buffer_Transform_Event
 	r: int
 	n := r
 	val_transform, _ := util.read_u32(data[n:]); n += 4
 	e.transform = transmute(Output_Transform)val_transform
-	return e
+	return e, n
 }
 
 // wl_surface error values
@@ -2596,14 +2491,12 @@ SEAT_GET_POINTER_OPCODE :: 0
 Seat_Get_Pointer_Request :: struct {
 	seat : Seat,  // the object this event/request concerns
 }
-seat_get_pointer_encode :: proc(req: Seat_Get_Pointer_Request, new_id: u32, allocator: mem.Allocator) -> (encoded: []byte, err: mem.Allocator_Error) {
+seat_get_pointer_write :: proc(buf: ^[dynamic]byte, req: Seat_Get_Pointer_Request, new_id: u32) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
 	object := u32(req.seat)
 	opcode := u16(SEAT_GET_POINTER_OPCODE)
 	size := u16(8 + size_of(new_id))
-	msg := make([dynamic]byte, 0, size, allocator) or_return
-	util.write(&msg, object, opcode, size)
-	util.write(&msg, new_id)
-	encoded = msg[:]
+	num_appended = util.write(buf, object, opcode, size) or_return
+	num_appended += util.write(buf, new_id) or_return
 	return
 }
 
@@ -2619,14 +2512,12 @@ SEAT_GET_KEYBOARD_OPCODE :: 1
 Seat_Get_Keyboard_Request :: struct {
 	seat : Seat,  // the object this event/request concerns
 }
-seat_get_keyboard_encode :: proc(req: Seat_Get_Keyboard_Request, new_id: u32, allocator: mem.Allocator) -> (encoded: []byte, err: mem.Allocator_Error) {
+seat_get_keyboard_write :: proc(buf: ^[dynamic]byte, req: Seat_Get_Keyboard_Request, new_id: u32) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
 	object := u32(req.seat)
 	opcode := u16(SEAT_GET_KEYBOARD_OPCODE)
 	size := u16(8 + size_of(new_id))
-	msg := make([dynamic]byte, 0, size, allocator) or_return
-	util.write(&msg, object, opcode, size)
-	util.write(&msg, new_id)
-	encoded = msg[:]
+	num_appended = util.write(buf, object, opcode, size) or_return
+	num_appended += util.write(buf, new_id) or_return
 	return
 }
 
@@ -2642,14 +2533,12 @@ SEAT_GET_TOUCH_OPCODE :: 2
 Seat_Get_Touch_Request :: struct {
 	seat : Seat,  // the object this event/request concerns
 }
-seat_get_touch_encode :: proc(req: Seat_Get_Touch_Request, new_id: u32, allocator: mem.Allocator) -> (encoded: []byte, err: mem.Allocator_Error) {
+seat_get_touch_write :: proc(buf: ^[dynamic]byte, req: Seat_Get_Touch_Request, new_id: u32) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
 	object := u32(req.seat)
 	opcode := u16(SEAT_GET_TOUCH_OPCODE)
 	size := u16(8 + size_of(new_id))
-	msg := make([dynamic]byte, 0, size, allocator) or_return
-	util.write(&msg, object, opcode, size)
-	util.write(&msg, new_id)
-	encoded = msg[:]
+	num_appended = util.write(buf, object, opcode, size) or_return
+	num_appended += util.write(buf, new_id) or_return
 	return
 }
 
@@ -2660,13 +2549,11 @@ SEAT_RELEASE_OPCODE :: 3
 Seat_Release_Request :: struct {
 	seat : Seat,  // the object this event/request concerns
 }
-seat_release_encode :: proc(req: Seat_Release_Request, allocator: mem.Allocator) -> (encoded: []byte, err: mem.Allocator_Error) {
+seat_release_write :: proc(buf: ^[dynamic]byte, req: Seat_Release_Request) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
 	object := u32(req.seat)
 	opcode := u16(SEAT_RELEASE_OPCODE)
 	size := u16(8)
-	msg := make([dynamic]byte, 0, size, allocator) or_return
-	util.write(&msg, object, opcode, size)
-	encoded = msg[:]
+	num_appended = util.write(buf, object, opcode, size) or_return
 	return
 }
 
@@ -2697,13 +2584,13 @@ Seat_Capabilities_Event :: struct {
 	seat         : Seat,  // the object this event/request concerns
 	capabilities : Seat_Capability_Set,  // capabilities of the seat
 }
-seat_capabilities_decode :: proc(data: []byte) -> Seat_Capabilities_Event {
+seat_capabilities_read :: proc(data: []byte) -> (Seat_Capabilities_Event, int) {
 	e: Seat_Capabilities_Event
 	r: int
 	n := r
 	val_capabilities, _ := util.read_u32(data[n:]); n += 4
 	e.capabilities = transmute(Seat_Capability_Set)val_capabilities
-	return e
+	return e, n
 }
 
 SEAT_NAME_OPCODE :: 1
@@ -2724,13 +2611,12 @@ Seat_Name_Event :: struct {
 	seat : Seat,  // the object this event/request concerns
 	name : string,  // seat identifier
 }
-seat_name_decode :: proc(data: []byte, allocator: mem.Allocator) -> Seat_Name_Event {
+seat_name_read :: proc(data: []byte) -> (Seat_Name_Event, int) {
 	e: Seat_Name_Event
 	r: int
 	n := r
 	e.name, r = util.read_string(data[n:]); n += r
-	e.name = strings.clone(e.name, allocator)
-	return e
+	return e, n
 }
 
 // seat capability bitmask
@@ -2796,17 +2682,15 @@ Pointer_Set_Cursor_Request :: struct {
 	hotspot_x : i32,  // surface-local x coordinate
 	hotspot_y : i32,  // surface-local y coordinate
 }
-pointer_set_cursor_encode :: proc(req: Pointer_Set_Cursor_Request, allocator: mem.Allocator) -> (encoded: []byte, err: mem.Allocator_Error) {
+pointer_set_cursor_write :: proc(buf: ^[dynamic]byte, req: Pointer_Set_Cursor_Request) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
 	object := u32(req.pointer)
 	opcode := u16(POINTER_SET_CURSOR_OPCODE)
 	size := u16(8 + size_of(req.serial) + size_of(req.surface) + size_of(req.hotspot_x) + size_of(req.hotspot_y))
-	msg := make([dynamic]byte, 0, size, allocator) or_return
-	util.write(&msg, object, opcode, size)
-	util.write(&msg, req.serial)
-	util.write(&msg, u32(req.surface))
-	util.write(&msg, req.hotspot_x)
-	util.write(&msg, req.hotspot_y)
-	encoded = msg[:]
+	num_appended = util.write(buf, object, opcode, size) or_return
+	num_appended += util.write(buf, req.serial) or_return
+	num_appended += util.write(buf, u32(req.surface)) or_return
+	num_appended += util.write(buf, req.hotspot_x) or_return
+	num_appended += util.write(buf, req.hotspot_y) or_return
 	return
 }
 
@@ -2819,13 +2703,11 @@ POINTER_RELEASE_OPCODE :: 1
 Pointer_Release_Request :: struct {
 	pointer : Pointer,  // the object this event/request concerns
 }
-pointer_release_encode :: proc(req: Pointer_Release_Request, allocator: mem.Allocator) -> (encoded: []byte, err: mem.Allocator_Error) {
+pointer_release_write :: proc(buf: ^[dynamic]byte, req: Pointer_Release_Request) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
 	object := u32(req.pointer)
 	opcode := u16(POINTER_RELEASE_OPCODE)
 	size := u16(8)
-	msg := make([dynamic]byte, 0, size, allocator) or_return
-	util.write(&msg, object, opcode, size)
-	encoded = msg[:]
+	num_appended = util.write(buf, object, opcode, size) or_return
 	return
 }
 
@@ -2843,7 +2725,7 @@ Pointer_Enter_Event :: struct {
 	surface_x : util.Fixed,  // surface-local x coordinate
 	surface_y : util.Fixed,  // surface-local y coordinate
 }
-pointer_enter_decode :: proc(data: []byte) -> Pointer_Enter_Event {
+pointer_enter_read :: proc(data: []byte) -> (Pointer_Enter_Event, int) {
 	e: Pointer_Enter_Event
 	r: int
 	n := r
@@ -2852,7 +2734,7 @@ pointer_enter_decode :: proc(data: []byte) -> Pointer_Enter_Event {
 	e.surface = Surface(val_surface)
 	e.surface_x, r = util.read_fixed(data[n:]); n += r
 	e.surface_y, r = util.read_fixed(data[n:]); n += r
-	return e
+	return e, n
 }
 
 POINTER_LEAVE_OPCODE :: 1
@@ -2866,14 +2748,14 @@ Pointer_Leave_Event :: struct {
 	serial  : u32,  // serial number of the leave event
 	surface : Surface,  // surface left by the pointer
 }
-pointer_leave_decode :: proc(data: []byte) -> Pointer_Leave_Event {
+pointer_leave_read :: proc(data: []byte) -> (Pointer_Leave_Event, int) {
 	e: Pointer_Leave_Event
 	r: int
 	n := r
 	e.serial, r = util.read_u32(data[n:]); n += r
 	val_surface, _ := util.read_u32(data[n:]); n += 4
 	e.surface = Surface(val_surface)
-	return e
+	return e, n
 }
 
 POINTER_MOTION_OPCODE :: 2
@@ -2887,14 +2769,14 @@ Pointer_Motion_Event :: struct {
 	surface_x : util.Fixed,  // surface-local x coordinate
 	surface_y : util.Fixed,  // surface-local y coordinate
 }
-pointer_motion_decode :: proc(data: []byte) -> Pointer_Motion_Event {
+pointer_motion_read :: proc(data: []byte) -> (Pointer_Motion_Event, int) {
 	e: Pointer_Motion_Event
 	r: int
 	n := r
 	e.time, r = util.read_u32(data[n:]); n += r
 	e.surface_x, r = util.read_fixed(data[n:]); n += r
 	e.surface_y, r = util.read_fixed(data[n:]); n += r
-	return e
+	return e, n
 }
 
 POINTER_BUTTON_OPCODE :: 3
@@ -2917,7 +2799,7 @@ Pointer_Button_Event :: struct {
 	button  : u32,  // button that produced the event
 	state   : Pointer_Button_State,  // physical state of the button
 }
-pointer_button_decode :: proc(data: []byte) -> Pointer_Button_Event {
+pointer_button_read :: proc(data: []byte) -> (Pointer_Button_Event, int) {
 	e: Pointer_Button_Event
 	r: int
 	n := r
@@ -2926,7 +2808,7 @@ pointer_button_decode :: proc(data: []byte) -> Pointer_Button_Event {
 	e.button, r = util.read_u32(data[n:]); n += r
 	val_state, _ := util.read_u32(data[n:]); n += 4
 	e.state = transmute(Pointer_Button_State)val_state
-	return e
+	return e, n
 }
 
 POINTER_AXIS_OPCODE :: 4
@@ -2949,7 +2831,7 @@ Pointer_Axis_Event :: struct {
 	axis    : Pointer_Axis,  // axis type
 	value   : util.Fixed,  // length of vector in surface-local coordinate space
 }
-pointer_axis_decode :: proc(data: []byte) -> Pointer_Axis_Event {
+pointer_axis_read :: proc(data: []byte) -> (Pointer_Axis_Event, int) {
 	e: Pointer_Axis_Event
 	r: int
 	n := r
@@ -2957,7 +2839,7 @@ pointer_axis_decode :: proc(data: []byte) -> Pointer_Axis_Event {
 	val_axis, _ := util.read_u32(data[n:]); n += 4
 	e.axis = transmute(Pointer_Axis)val_axis
 	e.value, r = util.read_fixed(data[n:]); n += r
-	return e
+	return e, n
 }
 
 POINTER_FRAME_OPCODE :: 5
@@ -2995,11 +2877,11 @@ POINTER_FRAME_OPCODE :: 5
 Pointer_Frame_Event :: struct {
 	pointer : Pointer,  // the object this event/request concerns
 }
-pointer_frame_decode :: proc(data: []byte) -> Pointer_Frame_Event {
+pointer_frame_read :: proc(data: []byte) -> (Pointer_Frame_Event, int) {
 	e: Pointer_Frame_Event
 	r: int
 	n := r
-	return e
+	return e, n
 }
 
 POINTER_AXIS_SOURCE_OPCODE :: 6
@@ -3028,13 +2910,13 @@ Pointer_Axis_Source_Event :: struct {
 	pointer     : Pointer,  // the object this event/request concerns
 	axis_source : Pointer_Axis_Source,  // source of the axis event
 }
-pointer_axis_source_decode :: proc(data: []byte) -> Pointer_Axis_Source_Event {
+pointer_axis_source_read :: proc(data: []byte) -> (Pointer_Axis_Source_Event, int) {
 	e: Pointer_Axis_Source_Event
 	r: int
 	n := r
 	val_axis_source, _ := util.read_u32(data[n:]); n += 4
 	e.axis_source = transmute(Pointer_Axis_Source)val_axis_source
-	return e
+	return e, n
 }
 
 POINTER_AXIS_STOP_OPCODE :: 7
@@ -3055,14 +2937,14 @@ Pointer_Axis_Stop_Event :: struct {
 	time    : u32,  // timestamp with millisecond granularity
 	axis    : Pointer_Axis,  // the axis stopped with this event
 }
-pointer_axis_stop_decode :: proc(data: []byte) -> Pointer_Axis_Stop_Event {
+pointer_axis_stop_read :: proc(data: []byte) -> (Pointer_Axis_Stop_Event, int) {
 	e: Pointer_Axis_Stop_Event
 	r: int
 	n := r
 	e.time, r = util.read_u32(data[n:]); n += r
 	val_axis, _ := util.read_u32(data[n:]); n += 4
 	e.axis = transmute(Pointer_Axis)val_axis
-	return e
+	return e, n
 }
 
 POINTER_AXIS_DISCRETE_OPCODE :: 8
@@ -3095,14 +2977,14 @@ Pointer_Axis_Discrete_Event :: struct {
 	axis     : Pointer_Axis,  // axis type
 	discrete : i32,  // number of steps
 }
-pointer_axis_discrete_decode :: proc(data: []byte) -> Pointer_Axis_Discrete_Event {
+pointer_axis_discrete_read :: proc(data: []byte) -> (Pointer_Axis_Discrete_Event, int) {
 	e: Pointer_Axis_Discrete_Event
 	r: int
 	n := r
 	val_axis, _ := util.read_u32(data[n:]); n += 4
 	e.axis = transmute(Pointer_Axis)val_axis
 	e.discrete, r = util.read_i32(data[n:]); n += r
-	return e
+	return e, n
 }
 
 POINTER_AXIS_VALUE120_OPCODE :: 9
@@ -3128,14 +3010,14 @@ Pointer_Axis_Value120_Event :: struct {
 	axis     : Pointer_Axis,  // axis type
 	value120 : i32,  // scroll distance as fraction of 120
 }
-pointer_axis_value120_decode :: proc(data: []byte) -> Pointer_Axis_Value120_Event {
+pointer_axis_value120_read :: proc(data: []byte) -> (Pointer_Axis_Value120_Event, int) {
 	e: Pointer_Axis_Value120_Event
 	r: int
 	n := r
 	val_axis, _ := util.read_u32(data[n:]); n += 4
 	e.axis = transmute(Pointer_Axis)val_axis
 	e.value120, r = util.read_i32(data[n:]); n += r
-	return e
+	return e, n
 }
 
 POINTER_AXIS_RELATIVE_DIRECTION_OPCODE :: 10
@@ -3175,7 +3057,7 @@ Pointer_Axis_Relative_Direction_Event :: struct {
 	axis      : Pointer_Axis,  // axis type
 	direction : Pointer_Axis_Relative_Direction,  // physical direction relative to axis motion
 }
-pointer_axis_relative_direction_decode :: proc(data: []byte) -> Pointer_Axis_Relative_Direction_Event {
+pointer_axis_relative_direction_read :: proc(data: []byte) -> (Pointer_Axis_Relative_Direction_Event, int) {
 	e: Pointer_Axis_Relative_Direction_Event
 	r: int
 	n := r
@@ -3183,7 +3065,7 @@ pointer_axis_relative_direction_decode :: proc(data: []byte) -> Pointer_Axis_Rel
 	e.axis = transmute(Pointer_Axis)val_axis
 	val_direction, _ := util.read_u32(data[n:]); n += 4
 	e.direction = transmute(Pointer_Axis_Relative_Direction)val_direction
-	return e
+	return e, n
 }
 
 POINTER_WARP_OPCODE :: 11
@@ -3203,13 +3085,13 @@ Pointer_Warp_Event :: struct {
 	surface_x : util.Fixed,  // surface-local x coordinate
 	surface_y : util.Fixed,  // surface-local y coordinate
 }
-pointer_warp_decode :: proc(data: []byte) -> Pointer_Warp_Event {
+pointer_warp_read :: proc(data: []byte) -> (Pointer_Warp_Event, int) {
 	e: Pointer_Warp_Event
 	r: int
 	n := r
 	e.surface_x, r = util.read_fixed(data[n:]); n += r
 	e.surface_y, r = util.read_fixed(data[n:]); n += r
-	return e
+	return e, n
 }
 
 Pointer_Error :: enum u32 {
@@ -3279,13 +3161,11 @@ KEYBOARD_RELEASE_OPCODE :: 0
 Keyboard_Release_Request :: struct {
 	keyboard : Keyboard,  // the object this event/request concerns
 }
-keyboard_release_encode :: proc(req: Keyboard_Release_Request, allocator: mem.Allocator) -> (encoded: []byte, err: mem.Allocator_Error) {
+keyboard_release_write :: proc(buf: ^[dynamic]byte, req: Keyboard_Release_Request) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
 	object := u32(req.keyboard)
 	opcode := u16(KEYBOARD_RELEASE_OPCODE)
 	size := u16(8)
-	msg := make([dynamic]byte, 0, size, allocator) or_return
-	util.write(&msg, object, opcode, size)
-	encoded = msg[:]
+	num_appended = util.write(buf, object, opcode, size) or_return
 	return
 }
 
@@ -3302,7 +3182,7 @@ Keyboard_Keymap_Event :: struct {
 	fd       : linux.Fd,  // keymap file descriptor
 	size     : u32,  // keymap size, in bytes
 }
-keyboard_keymap_decode :: proc(data: []byte, fds: ^[dynamic; 28]linux.Fd) -> Keyboard_Keymap_Event {
+keyboard_keymap_read :: proc(data: []byte, fds: ^[dynamic; 28]linux.Fd) -> (Keyboard_Keymap_Event, int) {
 	e: Keyboard_Keymap_Event
 	r: int
 	n := r
@@ -3310,7 +3190,7 @@ keyboard_keymap_decode :: proc(data: []byte, fds: ^[dynamic; 28]linux.Fd) -> Key
 	e.format = transmute(Keyboard_Keymap_Format)val_format
 	e.fd = pop_front(fds)
 	e.size, r = util.read_u32(data[n:]); n += r
-	return e
+	return e, n
 }
 
 KEYBOARD_ENTER_OPCODE :: 1
@@ -3331,7 +3211,7 @@ Keyboard_Enter_Event :: struct {
 	surface  : Surface,  // surface gaining keyboard focus
 	keys     : []u8,  // the keys currently logically down
 }
-keyboard_enter_decode :: proc(data: []byte, allocator: mem.Allocator) -> Keyboard_Enter_Event {
+keyboard_enter_read :: proc(data: []byte) -> (Keyboard_Enter_Event, int) {
 	e: Keyboard_Enter_Event
 	r: int
 	n := r
@@ -3339,8 +3219,7 @@ keyboard_enter_decode :: proc(data: []byte, allocator: mem.Allocator) -> Keyboar
 	val_surface, _ := util.read_u32(data[n:]); n += 4
 	e.surface = Surface(val_surface)
 	e.keys, r = util.read_array(data[n:]); n += r
-	e.keys = bytes.clone(e.keys, allocator)
-	return e
+	return e, n
 }
 
 KEYBOARD_LEAVE_OPCODE :: 2
@@ -3358,14 +3237,14 @@ Keyboard_Leave_Event :: struct {
 	serial   : u32,  // serial number of the leave event
 	surface  : Surface,  // surface that lost keyboard focus
 }
-keyboard_leave_decode :: proc(data: []byte) -> Keyboard_Leave_Event {
+keyboard_leave_read :: proc(data: []byte) -> (Keyboard_Leave_Event, int) {
 	e: Keyboard_Leave_Event
 	r: int
 	n := r
 	e.serial, r = util.read_u32(data[n:]); n += r
 	val_surface, _ := util.read_u32(data[n:]); n += 4
 	e.surface = Surface(val_surface)
-	return e
+	return e, n
 }
 
 KEYBOARD_KEY_OPCODE :: 3
@@ -3396,7 +3275,7 @@ Keyboard_Key_Event :: struct {
 	key      : u32,  // key that produced the event
 	state    : Keyboard_Key_State,  // physical state of the key
 }
-keyboard_key_decode :: proc(data: []byte) -> Keyboard_Key_Event {
+keyboard_key_read :: proc(data: []byte) -> (Keyboard_Key_Event, int) {
 	e: Keyboard_Key_Event
 	r: int
 	n := r
@@ -3405,7 +3284,7 @@ keyboard_key_decode :: proc(data: []byte) -> Keyboard_Key_Event {
 	e.key, r = util.read_u32(data[n:]); n += r
 	val_state, _ := util.read_u32(data[n:]); n += 4
 	e.state = transmute(Keyboard_Key_State)val_state
-	return e
+	return e, n
 }
 
 KEYBOARD_MODIFIERS_OPCODE :: 4
@@ -3429,7 +3308,7 @@ Keyboard_Modifiers_Event :: struct {
 	mods_locked    : u32,  // locked modifiers
 	group          : u32,  // keyboard layout
 }
-keyboard_modifiers_decode :: proc(data: []byte) -> Keyboard_Modifiers_Event {
+keyboard_modifiers_read :: proc(data: []byte) -> (Keyboard_Modifiers_Event, int) {
 	e: Keyboard_Modifiers_Event
 	r: int
 	n := r
@@ -3438,7 +3317,7 @@ keyboard_modifiers_decode :: proc(data: []byte) -> Keyboard_Modifiers_Event {
 	e.mods_latched, r = util.read_u32(data[n:]); n += r
 	e.mods_locked, r = util.read_u32(data[n:]); n += r
 	e.group, r = util.read_u32(data[n:]); n += r
-	return e
+	return e, n
 }
 
 KEYBOARD_REPEAT_INFO_OPCODE :: 5
@@ -3457,13 +3336,13 @@ Keyboard_Repeat_Info_Event :: struct {
 	rate     : i32,  // the rate of repeating keys in characters per second
 	delay    : i32,  // delay in milliseconds since key down until repeating starts
 }
-keyboard_repeat_info_decode :: proc(data: []byte) -> Keyboard_Repeat_Info_Event {
+keyboard_repeat_info_read :: proc(data: []byte) -> (Keyboard_Repeat_Info_Event, int) {
 	e: Keyboard_Repeat_Info_Event
 	r: int
 	n := r
 	e.rate, r = util.read_i32(data[n:]); n += r
 	e.delay, r = util.read_i32(data[n:]); n += r
-	return e
+	return e, n
 }
 
 // keyboard mapping format
@@ -3504,13 +3383,11 @@ TOUCH_RELEASE_OPCODE :: 0
 Touch_Release_Request :: struct {
 	touch : Touch,  // the object this event/request concerns
 }
-touch_release_encode :: proc(req: Touch_Release_Request, allocator: mem.Allocator) -> (encoded: []byte, err: mem.Allocator_Error) {
+touch_release_write :: proc(buf: ^[dynamic]byte, req: Touch_Release_Request) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
 	object := u32(req.touch)
 	opcode := u16(TOUCH_RELEASE_OPCODE)
 	size := u16(8)
-	msg := make([dynamic]byte, 0, size, allocator) or_return
-	util.write(&msg, object, opcode, size)
-	encoded = msg[:]
+	num_appended = util.write(buf, object, opcode, size) or_return
 	return
 }
 
@@ -3529,7 +3406,7 @@ Touch_Down_Event :: struct {
 	x       : util.Fixed,  // surface-local x coordinate
 	y       : util.Fixed,  // surface-local y coordinate
 }
-touch_down_decode :: proc(data: []byte) -> Touch_Down_Event {
+touch_down_read :: proc(data: []byte) -> (Touch_Down_Event, int) {
 	e: Touch_Down_Event
 	r: int
 	n := r
@@ -3540,7 +3417,7 @@ touch_down_decode :: proc(data: []byte) -> Touch_Down_Event {
 	e.id, r = util.read_i32(data[n:]); n += r
 	e.x, r = util.read_fixed(data[n:]); n += r
 	e.y, r = util.read_fixed(data[n:]); n += r
-	return e
+	return e, n
 }
 
 TOUCH_UP_OPCODE :: 1
@@ -3554,14 +3431,14 @@ Touch_Up_Event :: struct {
 	time   : u32,  // timestamp with millisecond granularity
 	id     : i32,  // the unique ID of this touch point
 }
-touch_up_decode :: proc(data: []byte) -> Touch_Up_Event {
+touch_up_read :: proc(data: []byte) -> (Touch_Up_Event, int) {
 	e: Touch_Up_Event
 	r: int
 	n := r
 	e.serial, r = util.read_u32(data[n:]); n += r
 	e.time, r = util.read_u32(data[n:]); n += r
 	e.id, r = util.read_i32(data[n:]); n += r
-	return e
+	return e, n
 }
 
 TOUCH_MOTION_OPCODE :: 2
@@ -3574,7 +3451,7 @@ Touch_Motion_Event :: struct {
 	x     : util.Fixed,  // surface-local x coordinate
 	y     : util.Fixed,  // surface-local y coordinate
 }
-touch_motion_decode :: proc(data: []byte) -> Touch_Motion_Event {
+touch_motion_read :: proc(data: []byte) -> (Touch_Motion_Event, int) {
 	e: Touch_Motion_Event
 	r: int
 	n := r
@@ -3582,7 +3459,7 @@ touch_motion_decode :: proc(data: []byte) -> Touch_Motion_Event {
 	e.id, r = util.read_i32(data[n:]); n += r
 	e.x, r = util.read_fixed(data[n:]); n += r
 	e.y, r = util.read_fixed(data[n:]); n += r
-	return e
+	return e, n
 }
 
 TOUCH_FRAME_OPCODE :: 3
@@ -3597,11 +3474,11 @@ TOUCH_FRAME_OPCODE :: 3
 Touch_Frame_Event :: struct {
 	touch : Touch,  // the object this event/request concerns
 }
-touch_frame_decode :: proc(data: []byte) -> Touch_Frame_Event {
+touch_frame_read :: proc(data: []byte) -> (Touch_Frame_Event, int) {
 	e: Touch_Frame_Event
 	r: int
 	n := r
-	return e
+	return e, n
 }
 
 TOUCH_CANCEL_OPCODE :: 4
@@ -3616,11 +3493,11 @@ TOUCH_CANCEL_OPCODE :: 4
 Touch_Cancel_Event :: struct {
 	touch : Touch,  // the object this event/request concerns
 }
-touch_cancel_decode :: proc(data: []byte) -> Touch_Cancel_Event {
+touch_cancel_read :: proc(data: []byte) -> (Touch_Cancel_Event, int) {
 	e: Touch_Cancel_Event
 	r: int
 	n := r
-	return e
+	return e, n
 }
 
 TOUCH_SHAPE_OPCODE :: 5
@@ -3652,14 +3529,14 @@ Touch_Shape_Event :: struct {
 	major : util.Fixed,  // length of the major axis in surface-local coordinates
 	minor : util.Fixed,  // length of the minor axis in surface-local coordinates
 }
-touch_shape_decode :: proc(data: []byte) -> Touch_Shape_Event {
+touch_shape_read :: proc(data: []byte) -> (Touch_Shape_Event, int) {
 	e: Touch_Shape_Event
 	r: int
 	n := r
 	e.id, r = util.read_i32(data[n:]); n += r
 	e.major, r = util.read_fixed(data[n:]); n += r
 	e.minor, r = util.read_fixed(data[n:]); n += r
-	return e
+	return e, n
 }
 
 TOUCH_ORIENTATION_OPCODE :: 6
@@ -3688,13 +3565,13 @@ Touch_Orientation_Event :: struct {
 	id          : i32,  // the unique ID of this touch point
 	orientation : util.Fixed,  // angle between major axis and positive surface y-axis in degrees
 }
-touch_orientation_decode :: proc(data: []byte) -> Touch_Orientation_Event {
+touch_orientation_read :: proc(data: []byte) -> (Touch_Orientation_Event, int) {
 	e: Touch_Orientation_Event
 	r: int
 	n := r
 	e.id, r = util.read_i32(data[n:]); n += r
 	e.orientation, r = util.read_fixed(data[n:]); n += r
-	return e
+	return e, n
 }
 
 // compositor output region
@@ -3714,13 +3591,11 @@ OUTPUT_RELEASE_OPCODE :: 0
 Output_Release_Request :: struct {
 	output : Output,  // the object this event/request concerns
 }
-output_release_encode :: proc(req: Output_Release_Request, allocator: mem.Allocator) -> (encoded: []byte, err: mem.Allocator_Error) {
+output_release_write :: proc(buf: ^[dynamic]byte, req: Output_Release_Request) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
 	object := u32(req.output)
 	opcode := u16(OUTPUT_RELEASE_OPCODE)
 	size := u16(8)
-	msg := make([dynamic]byte, 0, size, allocator) or_return
-	util.write(&msg, object, opcode, size)
-	encoded = msg[:]
+	num_appended = util.write(buf, object, opcode, size) or_return
 	return
 }
 
@@ -3753,7 +3628,7 @@ Output_Geometry_Event :: struct {
 	model           : string,  // textual description of the model
 	transform       : Output_Transform,  // additional transformation applied to buffer contents during presentation
 }
-output_geometry_decode :: proc(data: []byte, allocator: mem.Allocator) -> Output_Geometry_Event {
+output_geometry_read :: proc(data: []byte) -> (Output_Geometry_Event, int) {
 	e: Output_Geometry_Event
 	r: int
 	n := r
@@ -3764,12 +3639,10 @@ output_geometry_decode :: proc(data: []byte, allocator: mem.Allocator) -> Output
 	val_subpixel, _ := util.read_i32(data[n:]); n += 4
 	e.subpixel = transmute(Output_Subpixel)val_subpixel
 	e.make, r = util.read_string(data[n:]); n += r
-	e.make = strings.clone(e.make, allocator)
 	e.model, r = util.read_string(data[n:]); n += r
-	e.model = strings.clone(e.model, allocator)
 	val_transform, _ := util.read_i32(data[n:]); n += 4
 	e.transform = transmute(Output_Transform)val_transform
-	return e
+	return e, n
 }
 
 OUTPUT_MODE_OPCODE :: 1
@@ -3807,7 +3680,7 @@ Output_Mode_Event :: struct {
 	height  : i32,  // height of the mode in hardware units
 	refresh : i32,  // vertical refresh rate in mHz
 }
-output_mode_decode :: proc(data: []byte) -> Output_Mode_Event {
+output_mode_read :: proc(data: []byte) -> (Output_Mode_Event, int) {
 	e: Output_Mode_Event
 	r: int
 	n := r
@@ -3816,7 +3689,7 @@ output_mode_decode :: proc(data: []byte) -> Output_Mode_Event {
 	e.width, r = util.read_i32(data[n:]); n += r
 	e.height, r = util.read_i32(data[n:]); n += r
 	e.refresh, r = util.read_i32(data[n:]); n += r
-	return e
+	return e, n
 }
 
 OUTPUT_DONE_OPCODE :: 2
@@ -3829,11 +3702,11 @@ OUTPUT_DONE_OPCODE :: 2
 Output_Done_Event :: struct {
 	output : Output,  // the object this event/request concerns
 }
-output_done_decode :: proc(data: []byte) -> Output_Done_Event {
+output_done_read :: proc(data: []byte) -> (Output_Done_Event, int) {
 	e: Output_Done_Event
 	r: int
 	n := r
-	return e
+	return e, n
 }
 
 OUTPUT_SCALE_OPCODE :: 3
@@ -3857,12 +3730,12 @@ Output_Scale_Event :: struct {
 	output : Output,  // the object this event/request concerns
 	factor : i32,  // scaling factor of output
 }
-output_scale_decode :: proc(data: []byte) -> Output_Scale_Event {
+output_scale_read :: proc(data: []byte) -> (Output_Scale_Event, int) {
 	e: Output_Scale_Event
 	r: int
 	n := r
 	e.factor, r = util.read_i32(data[n:]); n += r
-	return e
+	return e, n
 }
 
 OUTPUT_NAME_OPCODE :: 4
@@ -3892,13 +3765,12 @@ Output_Name_Event :: struct {
 	output : Output,  // the object this event/request concerns
 	name   : string,  // output name
 }
-output_name_decode :: proc(data: []byte, allocator: mem.Allocator) -> Output_Name_Event {
+output_name_read :: proc(data: []byte) -> (Output_Name_Event, int) {
 	e: Output_Name_Event
 	r: int
 	n := r
 	e.name, r = util.read_string(data[n:]); n += r
-	e.name = strings.clone(e.name, allocator)
-	return e
+	return e, n
 }
 
 OUTPUT_DESCRIPTION_OPCODE :: 5
@@ -3918,13 +3790,12 @@ Output_Description_Event :: struct {
 	output      : Output,  // the object this event/request concerns
 	description : string,  // output description
 }
-output_description_decode :: proc(data: []byte, allocator: mem.Allocator) -> Output_Description_Event {
+output_description_read :: proc(data: []byte) -> (Output_Description_Event, int) {
 	e: Output_Description_Event
 	r: int
 	n := r
 	e.description, r = util.read_string(data[n:]); n += r
-	e.description = strings.clone(e.description, allocator)
-	return e
+	return e, n
 }
 
 // subpixel geometry information
@@ -3981,13 +3852,11 @@ REGION_DESTROY_OPCODE :: 0
 Region_Destroy_Request :: struct {
 	region : Region,  // the object this event/request concerns
 }
-region_destroy_encode :: proc(req: Region_Destroy_Request, allocator: mem.Allocator) -> (encoded: []byte, err: mem.Allocator_Error) {
+region_destroy_write :: proc(buf: ^[dynamic]byte, req: Region_Destroy_Request) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
 	object := u32(req.region)
 	opcode := u16(REGION_DESTROY_OPCODE)
 	size := u16(8)
-	msg := make([dynamic]byte, 0, size, allocator) or_return
-	util.write(&msg, object, opcode, size)
-	encoded = msg[:]
+	num_appended = util.write(buf, object, opcode, size) or_return
 	return
 }
 
@@ -4001,17 +3870,15 @@ Region_Add_Request :: struct {
 	width  : i32,  // rectangle width
 	height : i32,  // rectangle height
 }
-region_add_encode :: proc(req: Region_Add_Request, allocator: mem.Allocator) -> (encoded: []byte, err: mem.Allocator_Error) {
+region_add_write :: proc(buf: ^[dynamic]byte, req: Region_Add_Request) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
 	object := u32(req.region)
 	opcode := u16(REGION_ADD_OPCODE)
 	size := u16(8 + size_of(req.x) + size_of(req.y) + size_of(req.width) + size_of(req.height))
-	msg := make([dynamic]byte, 0, size, allocator) or_return
-	util.write(&msg, object, opcode, size)
-	util.write(&msg, req.x)
-	util.write(&msg, req.y)
-	util.write(&msg, req.width)
-	util.write(&msg, req.height)
-	encoded = msg[:]
+	num_appended = util.write(buf, object, opcode, size) or_return
+	num_appended += util.write(buf, req.x) or_return
+	num_appended += util.write(buf, req.y) or_return
+	num_appended += util.write(buf, req.width) or_return
+	num_appended += util.write(buf, req.height) or_return
 	return
 }
 
@@ -4025,17 +3892,15 @@ Region_Subtract_Request :: struct {
 	width  : i32,  // rectangle width
 	height : i32,  // rectangle height
 }
-region_subtract_encode :: proc(req: Region_Subtract_Request, allocator: mem.Allocator) -> (encoded: []byte, err: mem.Allocator_Error) {
+region_subtract_write :: proc(buf: ^[dynamic]byte, req: Region_Subtract_Request) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
 	object := u32(req.region)
 	opcode := u16(REGION_SUBTRACT_OPCODE)
 	size := u16(8 + size_of(req.x) + size_of(req.y) + size_of(req.width) + size_of(req.height))
-	msg := make([dynamic]byte, 0, size, allocator) or_return
-	util.write(&msg, object, opcode, size)
-	util.write(&msg, req.x)
-	util.write(&msg, req.y)
-	util.write(&msg, req.width)
-	util.write(&msg, req.height)
-	encoded = msg[:]
+	num_appended = util.write(buf, object, opcode, size) or_return
+	num_appended += util.write(buf, req.x) or_return
+	num_appended += util.write(buf, req.y) or_return
+	num_appended += util.write(buf, req.width) or_return
+	num_appended += util.write(buf, req.height) or_return
 	return
 }
 
@@ -4067,13 +3932,11 @@ SUBCOMPOSITOR_DESTROY_OPCODE :: 0
 Subcompositor_Destroy_Request :: struct {
 	subcompositor : Subcompositor,  // the object this event/request concerns
 }
-subcompositor_destroy_encode :: proc(req: Subcompositor_Destroy_Request, allocator: mem.Allocator) -> (encoded: []byte, err: mem.Allocator_Error) {
+subcompositor_destroy_write :: proc(buf: ^[dynamic]byte, req: Subcompositor_Destroy_Request) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
 	object := u32(req.subcompositor)
 	opcode := u16(SUBCOMPOSITOR_DESTROY_OPCODE)
 	size := u16(8)
-	msg := make([dynamic]byte, 0, size, allocator) or_return
-	util.write(&msg, object, opcode, size)
-	encoded = msg[:]
+	num_appended = util.write(buf, object, opcode, size) or_return
 	return
 }
 
@@ -4099,16 +3962,14 @@ Subcompositor_Get_Subsurface_Request :: struct {
 	surface       : Surface,  // the surface to be turned into a sub-surface
 	parent        : Surface,  // the parent surface
 }
-subcompositor_get_subsurface_encode :: proc(req: Subcompositor_Get_Subsurface_Request, new_id: u32, allocator: mem.Allocator) -> (encoded: []byte, err: mem.Allocator_Error) {
+subcompositor_get_subsurface_write :: proc(buf: ^[dynamic]byte, req: Subcompositor_Get_Subsurface_Request, new_id: u32) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
 	object := u32(req.subcompositor)
 	opcode := u16(SUBCOMPOSITOR_GET_SUBSURFACE_OPCODE)
 	size := u16(8 + size_of(new_id) + size_of(req.surface) + size_of(req.parent))
-	msg := make([dynamic]byte, 0, size, allocator) or_return
-	util.write(&msg, object, opcode, size)
-	util.write(&msg, new_id)
-	util.write(&msg, u32(req.surface))
-	util.write(&msg, u32(req.parent))
-	encoded = msg[:]
+	num_appended = util.write(buf, object, opcode, size) or_return
+	num_appended += util.write(buf, new_id) or_return
+	num_appended += util.write(buf, u32(req.surface)) or_return
+	num_appended += util.write(buf, u32(req.parent)) or_return
 	return
 }
 
@@ -4166,13 +4027,11 @@ SUBSURFACE_DESTROY_OPCODE :: 0
 Subsurface_Destroy_Request :: struct {
 	subsurface : Subsurface,  // the object this event/request concerns
 }
-subsurface_destroy_encode :: proc(req: Subsurface_Destroy_Request, allocator: mem.Allocator) -> (encoded: []byte, err: mem.Allocator_Error) {
+subsurface_destroy_write :: proc(buf: ^[dynamic]byte, req: Subsurface_Destroy_Request) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
 	object := u32(req.subsurface)
 	opcode := u16(SUBSURFACE_DESTROY_OPCODE)
 	size := u16(8)
-	msg := make([dynamic]byte, 0, size, allocator) or_return
-	util.write(&msg, object, opcode, size)
-	encoded = msg[:]
+	num_appended = util.write(buf, object, opcode, size) or_return
 	return
 }
 
@@ -4192,15 +4051,13 @@ Subsurface_Set_Position_Request :: struct {
 	x          : i32,  // x coordinate in the parent surface
 	y          : i32,  // y coordinate in the parent surface
 }
-subsurface_set_position_encode :: proc(req: Subsurface_Set_Position_Request, allocator: mem.Allocator) -> (encoded: []byte, err: mem.Allocator_Error) {
+subsurface_set_position_write :: proc(buf: ^[dynamic]byte, req: Subsurface_Set_Position_Request) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
 	object := u32(req.subsurface)
 	opcode := u16(SUBSURFACE_SET_POSITION_OPCODE)
 	size := u16(8 + size_of(req.x) + size_of(req.y))
-	msg := make([dynamic]byte, 0, size, allocator) or_return
-	util.write(&msg, object, opcode, size)
-	util.write(&msg, req.x)
-	util.write(&msg, req.y)
-	encoded = msg[:]
+	num_appended = util.write(buf, object, opcode, size) or_return
+	num_appended += util.write(buf, req.x) or_return
+	num_appended += util.write(buf, req.y) or_return
 	return
 }
 
@@ -4219,14 +4076,12 @@ Subsurface_Place_Above_Request :: struct {
 	subsurface : Subsurface,  // the object this event/request concerns
 	sibling    : Surface,  // the reference surface
 }
-subsurface_place_above_encode :: proc(req: Subsurface_Place_Above_Request, allocator: mem.Allocator) -> (encoded: []byte, err: mem.Allocator_Error) {
+subsurface_place_above_write :: proc(buf: ^[dynamic]byte, req: Subsurface_Place_Above_Request) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
 	object := u32(req.subsurface)
 	opcode := u16(SUBSURFACE_PLACE_ABOVE_OPCODE)
 	size := u16(8 + size_of(req.sibling))
-	msg := make([dynamic]byte, 0, size, allocator) or_return
-	util.write(&msg, object, opcode, size)
-	util.write(&msg, u32(req.sibling))
-	encoded = msg[:]
+	num_appended = util.write(buf, object, opcode, size) or_return
+	num_appended += util.write(buf, u32(req.sibling)) or_return
 	return
 }
 
@@ -4238,14 +4093,12 @@ Subsurface_Place_Below_Request :: struct {
 	subsurface : Subsurface,  // the object this event/request concerns
 	sibling    : Surface,  // the reference surface
 }
-subsurface_place_below_encode :: proc(req: Subsurface_Place_Below_Request, allocator: mem.Allocator) -> (encoded: []byte, err: mem.Allocator_Error) {
+subsurface_place_below_write :: proc(buf: ^[dynamic]byte, req: Subsurface_Place_Below_Request) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
 	object := u32(req.subsurface)
 	opcode := u16(SUBSURFACE_PLACE_BELOW_OPCODE)
 	size := u16(8 + size_of(req.sibling))
-	msg := make([dynamic]byte, 0, size, allocator) or_return
-	util.write(&msg, object, opcode, size)
-	util.write(&msg, u32(req.sibling))
-	encoded = msg[:]
+	num_appended = util.write(buf, object, opcode, size) or_return
+	num_appended += util.write(buf, u32(req.sibling)) or_return
 	return
 }
 
@@ -4257,13 +4110,11 @@ SUBSURFACE_SET_SYNC_OPCODE :: 4
 Subsurface_Set_Sync_Request :: struct {
 	subsurface : Subsurface,  // the object this event/request concerns
 }
-subsurface_set_sync_encode :: proc(req: Subsurface_Set_Sync_Request, allocator: mem.Allocator) -> (encoded: []byte, err: mem.Allocator_Error) {
+subsurface_set_sync_write :: proc(buf: ^[dynamic]byte, req: Subsurface_Set_Sync_Request) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
 	object := u32(req.subsurface)
 	opcode := u16(SUBSURFACE_SET_SYNC_OPCODE)
 	size := u16(8)
-	msg := make([dynamic]byte, 0, size, allocator) or_return
-	util.write(&msg, object, opcode, size)
-	encoded = msg[:]
+	num_appended = util.write(buf, object, opcode, size) or_return
 	return
 }
 
@@ -4275,13 +4126,11 @@ SUBSURFACE_SET_DESYNC_OPCODE :: 5
 Subsurface_Set_Desync_Request :: struct {
 	subsurface : Subsurface,  // the object this event/request concerns
 }
-subsurface_set_desync_encode :: proc(req: Subsurface_Set_Desync_Request, allocator: mem.Allocator) -> (encoded: []byte, err: mem.Allocator_Error) {
+subsurface_set_desync_write :: proc(buf: ^[dynamic]byte, req: Subsurface_Set_Desync_Request) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
 	object := u32(req.subsurface)
 	opcode := u16(SUBSURFACE_SET_DESYNC_OPCODE)
 	size := u16(8)
-	msg := make([dynamic]byte, 0, size, allocator) or_return
-	util.write(&msg, object, opcode, size)
-	encoded = msg[:]
+	num_appended = util.write(buf, object, opcode, size) or_return
 	return
 }
 
@@ -4300,13 +4149,11 @@ FIXES_DESTROY_OPCODE :: 0
 Fixes_Destroy_Request :: struct {
 	fixes : Fixes,  // the object this event/request concerns
 }
-fixes_destroy_encode :: proc(req: Fixes_Destroy_Request, allocator: mem.Allocator) -> (encoded: []byte, err: mem.Allocator_Error) {
+fixes_destroy_write :: proc(buf: ^[dynamic]byte, req: Fixes_Destroy_Request) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
 	object := u32(req.fixes)
 	opcode := u16(FIXES_DESTROY_OPCODE)
 	size := u16(8)
-	msg := make([dynamic]byte, 0, size, allocator) or_return
-	util.write(&msg, object, opcode, size)
-	encoded = msg[:]
+	num_appended = util.write(buf, object, opcode, size) or_return
 	return
 }
 
@@ -4323,14 +4170,12 @@ Fixes_Destroy_Registry_Request :: struct {
 	fixes    : Fixes,  // the object this event/request concerns
 	registry : Registry,  // the registry to destroy
 }
-fixes_destroy_registry_encode :: proc(req: Fixes_Destroy_Registry_Request, allocator: mem.Allocator) -> (encoded: []byte, err: mem.Allocator_Error) {
+fixes_destroy_registry_write :: proc(buf: ^[dynamic]byte, req: Fixes_Destroy_Registry_Request) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
 	object := u32(req.fixes)
 	opcode := u16(FIXES_DESTROY_REGISTRY_OPCODE)
 	size := u16(8 + size_of(req.registry))
-	msg := make([dynamic]byte, 0, size, allocator) or_return
-	util.write(&msg, object, opcode, size)
-	util.write(&msg, u32(req.registry))
-	encoded = msg[:]
+	num_appended = util.write(buf, object, opcode, size) or_return
+	num_appended += util.write(buf, u32(req.registry)) or_return
 	return
 }
 
@@ -4358,15 +4203,13 @@ Fixes_Ack_Global_Remove_Request :: struct {
 	registry : Registry,  // the registry object
 	name     : u32,  // unique name of the global
 }
-fixes_ack_global_remove_encode :: proc(req: Fixes_Ack_Global_Remove_Request, allocator: mem.Allocator) -> (encoded: []byte, err: mem.Allocator_Error) {
+fixes_ack_global_remove_write :: proc(buf: ^[dynamic]byte, req: Fixes_Ack_Global_Remove_Request) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
 	object := u32(req.fixes)
 	opcode := u16(FIXES_ACK_GLOBAL_REMOVE_OPCODE)
 	size := u16(8 + size_of(req.registry) + size_of(req.name))
-	msg := make([dynamic]byte, 0, size, allocator) or_return
-	util.write(&msg, object, opcode, size)
-	util.write(&msg, u32(req.registry))
-	util.write(&msg, req.name)
-	encoded = msg[:]
+	num_appended = util.write(buf, object, opcode, size) or_return
+	num_appended += util.write(buf, u32(req.registry)) or_return
+	num_appended += util.write(buf, req.name) or_return
 	return
 }
 

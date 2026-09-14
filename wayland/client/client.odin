@@ -141,14 +141,17 @@ poll_event :: proc(client: ^Client, allocator := context.temp_allocator) -> (ev:
 			read_pos += int(size)
 			continue
 		}
-		ev, ok = parse_event(client, interface, object_id, opcode, buf[read_pos + WAYLAND_HEADER_SIZE:read_pos + int(size)], &client.incoming_fds, allocator)
+		ev, err := event_read(client, interface, object_id, opcode, buf[read_pos + WAYLAND_HEADER_SIZE:read_pos + int(size)], &client.incoming_fds, allocator)
 		read_pos += int(size)
 		if read_pos > WAYLAND_BUFFER_LEN {
 			remove_range(&client.events_byte_buffer, 0, read_pos)
 			read_pos = 0
 		}
 		client.events_read_pos = read_pos
-		if ok {
+		if err != .None {
+			return {}, false
+		}
+		if ev != nil {
 			return ev, true
 		}
 	}

@@ -27,9 +27,7 @@ package xdg_shell
 // DEALINGS IN THE SOFTWARE.
 
 import util "../util"
-import "core:bytes"
-import "core:mem"
-import "core:strings"
+import "base:runtime"
 import "core:sys/linux"
 import wayland "../wayland"
 
@@ -57,13 +55,11 @@ WM_BASE_DESTROY_OPCODE :: 0
 Wm_Base_Destroy_Request :: struct {
 	wm_base : Wm_Base,  // the object this event/request concerns
 }
-wm_base_destroy_encode :: proc(req: Wm_Base_Destroy_Request, allocator: mem.Allocator) -> (encoded: []byte, err: mem.Allocator_Error) {
+wm_base_destroy_write :: proc(buf: ^[dynamic]byte, req: Wm_Base_Destroy_Request) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
 	object := u32(req.wm_base)
 	opcode := u16(WM_BASE_DESTROY_OPCODE)
 	size := u16(8)
-	msg := make([dynamic]byte, 0, size, allocator) or_return
-	util.write(&msg, object, opcode, size)
-	encoded = msg[:]
+	num_appended = util.write(buf, object, opcode, size) or_return
 	return
 }
 
@@ -75,14 +71,12 @@ WM_BASE_CREATE_POSITIONER_OPCODE :: 1
 Wm_Base_Create_Positioner_Request :: struct {
 	wm_base : Wm_Base,  // the object this event/request concerns
 }
-wm_base_create_positioner_encode :: proc(req: Wm_Base_Create_Positioner_Request, new_id: u32, allocator: mem.Allocator) -> (encoded: []byte, err: mem.Allocator_Error) {
+wm_base_create_positioner_write :: proc(buf: ^[dynamic]byte, req: Wm_Base_Create_Positioner_Request, new_id: u32) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
 	object := u32(req.wm_base)
 	opcode := u16(WM_BASE_CREATE_POSITIONER_OPCODE)
 	size := u16(8 + size_of(new_id))
-	msg := make([dynamic]byte, 0, size, allocator) or_return
-	util.write(&msg, object, opcode, size)
-	util.write(&msg, new_id)
-	encoded = msg[:]
+	num_appended = util.write(buf, object, opcode, size) or_return
+	num_appended += util.write(buf, new_id) or_return
 	return
 }
 
@@ -102,15 +96,13 @@ Wm_Base_Get_Xdg_Surface_Request :: struct {
 	wm_base : Wm_Base,  // the object this event/request concerns
 	surface : wayland.Surface,
 }
-wm_base_get_xdg_surface_encode :: proc(req: Wm_Base_Get_Xdg_Surface_Request, new_id: u32, allocator: mem.Allocator) -> (encoded: []byte, err: mem.Allocator_Error) {
+wm_base_get_xdg_surface_write :: proc(buf: ^[dynamic]byte, req: Wm_Base_Get_Xdg_Surface_Request, new_id: u32) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
 	object := u32(req.wm_base)
 	opcode := u16(WM_BASE_GET_XDG_SURFACE_OPCODE)
 	size := u16(8 + size_of(new_id) + size_of(req.surface))
-	msg := make([dynamic]byte, 0, size, allocator) or_return
-	util.write(&msg, object, opcode, size)
-	util.write(&msg, new_id)
-	util.write(&msg, u32(req.surface))
-	encoded = msg[:]
+	num_appended = util.write(buf, object, opcode, size) or_return
+	num_appended += util.write(buf, new_id) or_return
+	num_appended += util.write(buf, u32(req.surface)) or_return
 	return
 }
 
@@ -123,14 +115,12 @@ Wm_Base_Pong_Request :: struct {
 	wm_base : Wm_Base,  // the object this event/request concerns
 	serial  : u32,  // serial of the ping event
 }
-wm_base_pong_encode :: proc(req: Wm_Base_Pong_Request, allocator: mem.Allocator) -> (encoded: []byte, err: mem.Allocator_Error) {
+wm_base_pong_write :: proc(buf: ^[dynamic]byte, req: Wm_Base_Pong_Request) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
 	object := u32(req.wm_base)
 	opcode := u16(WM_BASE_PONG_OPCODE)
 	size := u16(8 + size_of(req.serial))
-	msg := make([dynamic]byte, 0, size, allocator) or_return
-	util.write(&msg, object, opcode, size)
-	util.write(&msg, req.serial)
-	encoded = msg[:]
+	num_appended = util.write(buf, object, opcode, size) or_return
+	num_appended += util.write(buf, req.serial) or_return
 	return
 }
 
@@ -151,12 +141,12 @@ Wm_Base_Ping_Event :: struct {
 	wm_base : Wm_Base,  // the object this event/request concerns
 	serial  : u32,  // pass this to the pong request
 }
-wm_base_ping_decode :: proc(data: []byte) -> Wm_Base_Ping_Event {
+wm_base_ping_read :: proc(data: []byte) -> (Wm_Base_Ping_Event, int) {
 	e: Wm_Base_Ping_Event
 	r: int
 	n := r
 	e.serial, r = util.read_u32(data[n:]); n += r
-	return e
+	return e, n
 }
 
 Wm_Base_Error :: enum u32 {
@@ -195,13 +185,11 @@ POSITIONER_DESTROY_OPCODE :: 0
 Positioner_Destroy_Request :: struct {
 	positioner : Positioner,  // the object this event/request concerns
 }
-positioner_destroy_encode :: proc(req: Positioner_Destroy_Request, allocator: mem.Allocator) -> (encoded: []byte, err: mem.Allocator_Error) {
+positioner_destroy_write :: proc(buf: ^[dynamic]byte, req: Positioner_Destroy_Request) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
 	object := u32(req.positioner)
 	opcode := u16(POSITIONER_DESTROY_OPCODE)
 	size := u16(8)
-	msg := make([dynamic]byte, 0, size, allocator) or_return
-	util.write(&msg, object, opcode, size)
-	encoded = msg[:]
+	num_appended = util.write(buf, object, opcode, size) or_return
 	return
 }
 
@@ -216,15 +204,13 @@ Positioner_Set_Size_Request :: struct {
 	width      : i32,  // width of positioned rectangle
 	height     : i32,  // height of positioned rectangle
 }
-positioner_set_size_encode :: proc(req: Positioner_Set_Size_Request, allocator: mem.Allocator) -> (encoded: []byte, err: mem.Allocator_Error) {
+positioner_set_size_write :: proc(buf: ^[dynamic]byte, req: Positioner_Set_Size_Request) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
 	object := u32(req.positioner)
 	opcode := u16(POSITIONER_SET_SIZE_OPCODE)
 	size := u16(8 + size_of(req.width) + size_of(req.height))
-	msg := make([dynamic]byte, 0, size, allocator) or_return
-	util.write(&msg, object, opcode, size)
-	util.write(&msg, req.width)
-	util.write(&msg, req.height)
-	encoded = msg[:]
+	num_appended = util.write(buf, object, opcode, size) or_return
+	num_appended += util.write(buf, req.width) or_return
+	num_appended += util.write(buf, req.height) or_return
 	return
 }
 
@@ -245,17 +231,15 @@ Positioner_Set_Anchor_Rect_Request :: struct {
 	width      : i32,  // width of anchor rectangle
 	height     : i32,  // height of anchor rectangle
 }
-positioner_set_anchor_rect_encode :: proc(req: Positioner_Set_Anchor_Rect_Request, allocator: mem.Allocator) -> (encoded: []byte, err: mem.Allocator_Error) {
+positioner_set_anchor_rect_write :: proc(buf: ^[dynamic]byte, req: Positioner_Set_Anchor_Rect_Request) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
 	object := u32(req.positioner)
 	opcode := u16(POSITIONER_SET_ANCHOR_RECT_OPCODE)
 	size := u16(8 + size_of(req.x) + size_of(req.y) + size_of(req.width) + size_of(req.height))
-	msg := make([dynamic]byte, 0, size, allocator) or_return
-	util.write(&msg, object, opcode, size)
-	util.write(&msg, req.x)
-	util.write(&msg, req.y)
-	util.write(&msg, req.width)
-	util.write(&msg, req.height)
-	encoded = msg[:]
+	num_appended = util.write(buf, object, opcode, size) or_return
+	num_appended += util.write(buf, req.x) or_return
+	num_appended += util.write(buf, req.y) or_return
+	num_appended += util.write(buf, req.width) or_return
+	num_appended += util.write(buf, req.height) or_return
 	return
 }
 
@@ -271,14 +255,12 @@ Positioner_Set_Anchor_Request :: struct {
 	positioner : Positioner,  // the object this event/request concerns
 	anchor     : Positioner_Anchor,  // anchor point
 }
-positioner_set_anchor_encode :: proc(req: Positioner_Set_Anchor_Request, allocator: mem.Allocator) -> (encoded: []byte, err: mem.Allocator_Error) {
+positioner_set_anchor_write :: proc(buf: ^[dynamic]byte, req: Positioner_Set_Anchor_Request) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
 	object := u32(req.positioner)
 	opcode := u16(POSITIONER_SET_ANCHOR_OPCODE)
 	size := u16(8 + size_of(req.anchor))
-	msg := make([dynamic]byte, 0, size, allocator) or_return
-	util.write(&msg, object, opcode, size)
-	util.write(&msg, u32(req.anchor))
-	encoded = msg[:]
+	num_appended = util.write(buf, object, opcode, size) or_return
+	num_appended += util.write(buf, u32(req.anchor)) or_return
 	return
 }
 
@@ -295,14 +277,12 @@ Positioner_Set_Gravity_Request :: struct {
 	positioner : Positioner,  // the object this event/request concerns
 	gravity    : Positioner_Gravity,  // gravity direction
 }
-positioner_set_gravity_encode :: proc(req: Positioner_Set_Gravity_Request, allocator: mem.Allocator) -> (encoded: []byte, err: mem.Allocator_Error) {
+positioner_set_gravity_write :: proc(buf: ^[dynamic]byte, req: Positioner_Set_Gravity_Request) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
 	object := u32(req.positioner)
 	opcode := u16(POSITIONER_SET_GRAVITY_OPCODE)
 	size := u16(8 + size_of(req.gravity))
-	msg := make([dynamic]byte, 0, size, allocator) or_return
-	util.write(&msg, object, opcode, size)
-	util.write(&msg, u32(req.gravity))
-	encoded = msg[:]
+	num_appended = util.write(buf, object, opcode, size) or_return
+	num_appended += util.write(buf, u32(req.gravity)) or_return
 	return
 }
 
@@ -322,14 +302,12 @@ Positioner_Set_Constraint_Adjustment_Request :: struct {
 	positioner            : Positioner,  // the object this event/request concerns
 	constraint_adjustment : Positioner_Constraint_Adjustment_Set,  // bit mask of constraint adjustments
 }
-positioner_set_constraint_adjustment_encode :: proc(req: Positioner_Set_Constraint_Adjustment_Request, allocator: mem.Allocator) -> (encoded: []byte, err: mem.Allocator_Error) {
+positioner_set_constraint_adjustment_write :: proc(buf: ^[dynamic]byte, req: Positioner_Set_Constraint_Adjustment_Request) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
 	object := u32(req.positioner)
 	opcode := u16(POSITIONER_SET_CONSTRAINT_ADJUSTMENT_OPCODE)
 	size := u16(8 + size_of(req.constraint_adjustment))
-	msg := make([dynamic]byte, 0, size, allocator) or_return
-	util.write(&msg, object, opcode, size)
-	util.write_u32(&msg, transmute(u32)req.constraint_adjustment)
-	encoded = msg[:]
+	num_appended = util.write(buf, object, opcode, size) or_return
+	num_appended += util.write(buf, transmute(u32)req.constraint_adjustment) or_return
 	return
 }
 
@@ -350,15 +328,13 @@ Positioner_Set_Offset_Request :: struct {
 	x          : i32,  // surface position x offset
 	y          : i32,  // surface position y offset
 }
-positioner_set_offset_encode :: proc(req: Positioner_Set_Offset_Request, allocator: mem.Allocator) -> (encoded: []byte, err: mem.Allocator_Error) {
+positioner_set_offset_write :: proc(buf: ^[dynamic]byte, req: Positioner_Set_Offset_Request) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
 	object := u32(req.positioner)
 	opcode := u16(POSITIONER_SET_OFFSET_OPCODE)
 	size := u16(8 + size_of(req.x) + size_of(req.y))
-	msg := make([dynamic]byte, 0, size, allocator) or_return
-	util.write(&msg, object, opcode, size)
-	util.write(&msg, req.x)
-	util.write(&msg, req.y)
-	encoded = msg[:]
+	num_appended = util.write(buf, object, opcode, size) or_return
+	num_appended += util.write(buf, req.x) or_return
+	num_appended += util.write(buf, req.y) or_return
 	return
 }
 
@@ -372,13 +348,11 @@ POSITIONER_SET_REACTIVE_OPCODE :: 7
 Positioner_Set_Reactive_Request :: struct {
 	positioner : Positioner,  // the object this event/request concerns
 }
-positioner_set_reactive_encode :: proc(req: Positioner_Set_Reactive_Request, allocator: mem.Allocator) -> (encoded: []byte, err: mem.Allocator_Error) {
+positioner_set_reactive_write :: proc(buf: ^[dynamic]byte, req: Positioner_Set_Reactive_Request) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
 	object := u32(req.positioner)
 	opcode := u16(POSITIONER_SET_REACTIVE_OPCODE)
 	size := u16(8)
-	msg := make([dynamic]byte, 0, size, allocator) or_return
-	util.write(&msg, object, opcode, size)
-	encoded = msg[:]
+	num_appended = util.write(buf, object, opcode, size) or_return
 	return
 }
 
@@ -395,15 +369,13 @@ Positioner_Set_Parent_Size_Request :: struct {
 	parent_width  : i32,  // future window geometry width of parent
 	parent_height : i32,  // future window geometry height of parent
 }
-positioner_set_parent_size_encode :: proc(req: Positioner_Set_Parent_Size_Request, allocator: mem.Allocator) -> (encoded: []byte, err: mem.Allocator_Error) {
+positioner_set_parent_size_write :: proc(buf: ^[dynamic]byte, req: Positioner_Set_Parent_Size_Request) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
 	object := u32(req.positioner)
 	opcode := u16(POSITIONER_SET_PARENT_SIZE_OPCODE)
 	size := u16(8 + size_of(req.parent_width) + size_of(req.parent_height))
-	msg := make([dynamic]byte, 0, size, allocator) or_return
-	util.write(&msg, object, opcode, size)
-	util.write(&msg, req.parent_width)
-	util.write(&msg, req.parent_height)
-	encoded = msg[:]
+	num_appended = util.write(buf, object, opcode, size) or_return
+	num_appended += util.write(buf, req.parent_width) or_return
+	num_appended += util.write(buf, req.parent_height) or_return
 	return
 }
 
@@ -417,14 +389,12 @@ Positioner_Set_Parent_Configure_Request :: struct {
 	positioner : Positioner,  // the object this event/request concerns
 	serial     : u32,  // serial of parent configure event
 }
-positioner_set_parent_configure_encode :: proc(req: Positioner_Set_Parent_Configure_Request, allocator: mem.Allocator) -> (encoded: []byte, err: mem.Allocator_Error) {
+positioner_set_parent_configure_write :: proc(buf: ^[dynamic]byte, req: Positioner_Set_Parent_Configure_Request) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
 	object := u32(req.positioner)
 	opcode := u16(POSITIONER_SET_PARENT_CONFIGURE_OPCODE)
 	size := u16(8 + size_of(req.serial))
-	msg := make([dynamic]byte, 0, size, allocator) or_return
-	util.write(&msg, object, opcode, size)
-	util.write(&msg, req.serial)
-	encoded = msg[:]
+	num_appended = util.write(buf, object, opcode, size) or_return
+	num_appended += util.write(buf, req.serial) or_return
 	return
 }
 
@@ -527,13 +497,11 @@ SURFACE_DESTROY_OPCODE :: 0
 Surface_Destroy_Request :: struct {
 	surface : Surface,  // the object this event/request concerns
 }
-surface_destroy_encode :: proc(req: Surface_Destroy_Request, allocator: mem.Allocator) -> (encoded: []byte, err: mem.Allocator_Error) {
+surface_destroy_write :: proc(buf: ^[dynamic]byte, req: Surface_Destroy_Request) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
 	object := u32(req.surface)
 	opcode := u16(SURFACE_DESTROY_OPCODE)
 	size := u16(8)
-	msg := make([dynamic]byte, 0, size, allocator) or_return
-	util.write(&msg, object, opcode, size)
-	encoded = msg[:]
+	num_appended = util.write(buf, object, opcode, size) or_return
 	return
 }
 
@@ -546,14 +514,12 @@ SURFACE_GET_TOPLEVEL_OPCODE :: 1
 Surface_Get_Toplevel_Request :: struct {
 	surface : Surface,  // the object this event/request concerns
 }
-surface_get_toplevel_encode :: proc(req: Surface_Get_Toplevel_Request, new_id: u32, allocator: mem.Allocator) -> (encoded: []byte, err: mem.Allocator_Error) {
+surface_get_toplevel_write :: proc(buf: ^[dynamic]byte, req: Surface_Get_Toplevel_Request, new_id: u32) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
 	object := u32(req.surface)
 	opcode := u16(SURFACE_GET_TOPLEVEL_OPCODE)
 	size := u16(8 + size_of(new_id))
-	msg := make([dynamic]byte, 0, size, allocator) or_return
-	util.write(&msg, object, opcode, size)
-	util.write(&msg, new_id)
-	encoded = msg[:]
+	num_appended = util.write(buf, object, opcode, size) or_return
+	num_appended += util.write(buf, new_id) or_return
 	return
 }
 
@@ -570,16 +536,14 @@ Surface_Get_Popup_Request :: struct {
 	parent     : Surface,  // parent surface for this popup
 	positioner : Positioner,  // positioner for this popup
 }
-surface_get_popup_encode :: proc(req: Surface_Get_Popup_Request, new_id: u32, allocator: mem.Allocator) -> (encoded: []byte, err: mem.Allocator_Error) {
+surface_get_popup_write :: proc(buf: ^[dynamic]byte, req: Surface_Get_Popup_Request, new_id: u32) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
 	object := u32(req.surface)
 	opcode := u16(SURFACE_GET_POPUP_OPCODE)
 	size := u16(8 + size_of(new_id) + size_of(req.parent) + size_of(req.positioner))
-	msg := make([dynamic]byte, 0, size, allocator) or_return
-	util.write(&msg, object, opcode, size)
-	util.write(&msg, new_id)
-	util.write(&msg, u32(req.parent))
-	util.write(&msg, u32(req.positioner))
-	encoded = msg[:]
+	num_appended = util.write(buf, object, opcode, size) or_return
+	num_appended += util.write(buf, new_id) or_return
+	num_appended += util.write(buf, u32(req.parent)) or_return
+	num_appended += util.write(buf, u32(req.positioner)) or_return
 	return
 }
 
@@ -624,17 +588,15 @@ Surface_Set_Window_Geometry_Request :: struct {
 	width   : i32,  // width of the window
 	height  : i32,  // height of the window
 }
-surface_set_window_geometry_encode :: proc(req: Surface_Set_Window_Geometry_Request, allocator: mem.Allocator) -> (encoded: []byte, err: mem.Allocator_Error) {
+surface_set_window_geometry_write :: proc(buf: ^[dynamic]byte, req: Surface_Set_Window_Geometry_Request) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
 	object := u32(req.surface)
 	opcode := u16(SURFACE_SET_WINDOW_GEOMETRY_OPCODE)
 	size := u16(8 + size_of(req.x) + size_of(req.y) + size_of(req.width) + size_of(req.height))
-	msg := make([dynamic]byte, 0, size, allocator) or_return
-	util.write(&msg, object, opcode, size)
-	util.write(&msg, req.x)
-	util.write(&msg, req.y)
-	util.write(&msg, req.width)
-	util.write(&msg, req.height)
-	encoded = msg[:]
+	num_appended = util.write(buf, object, opcode, size) or_return
+	num_appended += util.write(buf, req.x) or_return
+	num_appended += util.write(buf, req.y) or_return
+	num_appended += util.write(buf, req.width) or_return
+	num_appended += util.write(buf, req.height) or_return
 	return
 }
 
@@ -670,14 +632,12 @@ Surface_Ack_Configure_Request :: struct {
 	surface : Surface,  // the object this event/request concerns
 	serial  : u32,  // the serial from the configure event
 }
-surface_ack_configure_encode :: proc(req: Surface_Ack_Configure_Request, allocator: mem.Allocator) -> (encoded: []byte, err: mem.Allocator_Error) {
+surface_ack_configure_write :: proc(buf: ^[dynamic]byte, req: Surface_Ack_Configure_Request) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
 	object := u32(req.surface)
 	opcode := u16(SURFACE_ACK_CONFIGURE_OPCODE)
 	size := u16(8 + size_of(req.serial))
-	msg := make([dynamic]byte, 0, size, allocator) or_return
-	util.write(&msg, object, opcode, size)
-	util.write(&msg, req.serial)
-	encoded = msg[:]
+	num_appended = util.write(buf, object, opcode, size) or_return
+	num_appended += util.write(buf, req.serial) or_return
 	return
 }
 
@@ -700,12 +660,12 @@ Surface_Configure_Event :: struct {
 	surface : Surface,  // the object this event/request concerns
 	serial  : u32,  // serial of the configure event
 }
-surface_configure_decode :: proc(data: []byte) -> Surface_Configure_Event {
+surface_configure_read :: proc(data: []byte) -> (Surface_Configure_Event, int) {
 	e: Surface_Configure_Event
 	r: int
 	n := r
 	e.serial, r = util.read_u32(data[n:]); n += r
-	return e
+	return e, n
 }
 
 Surface_Error :: enum u32 {
@@ -746,13 +706,11 @@ TOPLEVEL_DESTROY_OPCODE :: 0
 Toplevel_Destroy_Request :: struct {
 	toplevel : Toplevel,  // the object this event/request concerns
 }
-toplevel_destroy_encode :: proc(req: Toplevel_Destroy_Request, allocator: mem.Allocator) -> (encoded: []byte, err: mem.Allocator_Error) {
+toplevel_destroy_write :: proc(buf: ^[dynamic]byte, req: Toplevel_Destroy_Request) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
 	object := u32(req.toplevel)
 	opcode := u16(TOPLEVEL_DESTROY_OPCODE)
 	size := u16(8)
-	msg := make([dynamic]byte, 0, size, allocator) or_return
-	util.write(&msg, object, opcode, size)
-	encoded = msg[:]
+	num_appended = util.write(buf, object, opcode, size) or_return
 	return
 }
 
@@ -778,14 +736,12 @@ Toplevel_Set_Parent_Request :: struct {
 	toplevel : Toplevel,  // the object this event/request concerns
 	parent   : Toplevel,  // parent surface for this surface
 }
-toplevel_set_parent_encode :: proc(req: Toplevel_Set_Parent_Request, allocator: mem.Allocator) -> (encoded: []byte, err: mem.Allocator_Error) {
+toplevel_set_parent_write :: proc(buf: ^[dynamic]byte, req: Toplevel_Set_Parent_Request) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
 	object := u32(req.toplevel)
 	opcode := u16(TOPLEVEL_SET_PARENT_OPCODE)
 	size := u16(8 + size_of(req.parent))
-	msg := make([dynamic]byte, 0, size, allocator) or_return
-	util.write(&msg, object, opcode, size)
-	util.write(&msg, u32(req.parent))
-	encoded = msg[:]
+	num_appended = util.write(buf, object, opcode, size) or_return
+	num_appended += util.write(buf, u32(req.parent)) or_return
 	return
 }
 
@@ -800,14 +756,12 @@ Toplevel_Set_Title_Request :: struct {
 	toplevel : Toplevel,  // the object this event/request concerns
 	title    : string,  // title of the surface
 }
-toplevel_set_title_encode :: proc(req: Toplevel_Set_Title_Request, allocator: mem.Allocator) -> (encoded: []byte, err: mem.Allocator_Error) {
+toplevel_set_title_write :: proc(buf: ^[dynamic]byte, req: Toplevel_Set_Title_Request) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
 	object := u32(req.toplevel)
 	opcode := u16(TOPLEVEL_SET_TITLE_OPCODE)
 	size := u16(8 + util.compute_string_size(req.title))
-	msg := make([dynamic]byte, 0, size, allocator) or_return
-	util.write(&msg, object, opcode, size)
-	util.write(&msg, req.title)
-	encoded = msg[:]
+	num_appended = util.write(buf, object, opcode, size) or_return
+	num_appended += util.write(buf, req.title) or_return
 	return
 }
 
@@ -834,14 +788,12 @@ Toplevel_Set_App_Id_Request :: struct {
 	toplevel : Toplevel,  // the object this event/request concerns
 	app_id   : string,  // application identifier surface belongs to
 }
-toplevel_set_app_id_encode :: proc(req: Toplevel_Set_App_Id_Request, allocator: mem.Allocator) -> (encoded: []byte, err: mem.Allocator_Error) {
+toplevel_set_app_id_write :: proc(buf: ^[dynamic]byte, req: Toplevel_Set_App_Id_Request) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
 	object := u32(req.toplevel)
 	opcode := u16(TOPLEVEL_SET_APP_ID_OPCODE)
 	size := u16(8 + util.compute_string_size(req.app_id))
-	msg := make([dynamic]byte, 0, size, allocator) or_return
-	util.write(&msg, object, opcode, size)
-	util.write(&msg, req.app_id)
-	encoded = msg[:]
+	num_appended = util.write(buf, object, opcode, size) or_return
+	num_appended += util.write(buf, req.app_id) or_return
 	return
 }
 
@@ -864,17 +816,15 @@ Toplevel_Show_Window_Menu_Request :: struct {
 	x        : i32,  // the x position to pop up the window menu at
 	y        : i32,  // the y position to pop up the window menu at
 }
-toplevel_show_window_menu_encode :: proc(req: Toplevel_Show_Window_Menu_Request, allocator: mem.Allocator) -> (encoded: []byte, err: mem.Allocator_Error) {
+toplevel_show_window_menu_write :: proc(buf: ^[dynamic]byte, req: Toplevel_Show_Window_Menu_Request) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
 	object := u32(req.toplevel)
 	opcode := u16(TOPLEVEL_SHOW_WINDOW_MENU_OPCODE)
 	size := u16(8 + size_of(req.seat) + size_of(req.serial) + size_of(req.x) + size_of(req.y))
-	msg := make([dynamic]byte, 0, size, allocator) or_return
-	util.write(&msg, object, opcode, size)
-	util.write(&msg, u32(req.seat))
-	util.write(&msg, req.serial)
-	util.write(&msg, req.x)
-	util.write(&msg, req.y)
-	encoded = msg[:]
+	num_appended = util.write(buf, object, opcode, size) or_return
+	num_appended += util.write(buf, u32(req.seat)) or_return
+	num_appended += util.write(buf, req.serial) or_return
+	num_appended += util.write(buf, req.x) or_return
+	num_appended += util.write(buf, req.y) or_return
 	return
 }
 
@@ -898,15 +848,13 @@ Toplevel_Move_Request :: struct {
 	seat     : wayland.Seat,  // the wl_seat of the user event
 	serial   : u32,  // the serial of the user event
 }
-toplevel_move_encode :: proc(req: Toplevel_Move_Request, allocator: mem.Allocator) -> (encoded: []byte, err: mem.Allocator_Error) {
+toplevel_move_write :: proc(buf: ^[dynamic]byte, req: Toplevel_Move_Request) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
 	object := u32(req.toplevel)
 	opcode := u16(TOPLEVEL_MOVE_OPCODE)
 	size := u16(8 + size_of(req.seat) + size_of(req.serial))
-	msg := make([dynamic]byte, 0, size, allocator) or_return
-	util.write(&msg, object, opcode, size)
-	util.write(&msg, u32(req.seat))
-	util.write(&msg, req.serial)
-	encoded = msg[:]
+	num_appended = util.write(buf, object, opcode, size) or_return
+	num_appended += util.write(buf, u32(req.seat)) or_return
+	num_appended += util.write(buf, req.serial) or_return
 	return
 }
 
@@ -944,16 +892,14 @@ Toplevel_Resize_Request :: struct {
 	serial   : u32,  // the serial of the user event
 	edges    : Toplevel_Resize_Edge,  // which edge or corner is being dragged
 }
-toplevel_resize_encode :: proc(req: Toplevel_Resize_Request, allocator: mem.Allocator) -> (encoded: []byte, err: mem.Allocator_Error) {
+toplevel_resize_write :: proc(buf: ^[dynamic]byte, req: Toplevel_Resize_Request) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
 	object := u32(req.toplevel)
 	opcode := u16(TOPLEVEL_RESIZE_OPCODE)
 	size := u16(8 + size_of(req.seat) + size_of(req.serial) + size_of(req.edges))
-	msg := make([dynamic]byte, 0, size, allocator) or_return
-	util.write(&msg, object, opcode, size)
-	util.write(&msg, u32(req.seat))
-	util.write(&msg, req.serial)
-	util.write(&msg, u32(req.edges))
-	encoded = msg[:]
+	num_appended = util.write(buf, object, opcode, size) or_return
+	num_appended += util.write(buf, u32(req.seat)) or_return
+	num_appended += util.write(buf, req.serial) or_return
+	num_appended += util.write(buf, u32(req.edges)) or_return
 	return
 }
 
@@ -988,15 +934,13 @@ Toplevel_Set_Max_Size_Request :: struct {
 	width    : i32,  // maximum width of the window
 	height   : i32,  // maximum height of the window
 }
-toplevel_set_max_size_encode :: proc(req: Toplevel_Set_Max_Size_Request, allocator: mem.Allocator) -> (encoded: []byte, err: mem.Allocator_Error) {
+toplevel_set_max_size_write :: proc(buf: ^[dynamic]byte, req: Toplevel_Set_Max_Size_Request) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
 	object := u32(req.toplevel)
 	opcode := u16(TOPLEVEL_SET_MAX_SIZE_OPCODE)
 	size := u16(8 + size_of(req.width) + size_of(req.height))
-	msg := make([dynamic]byte, 0, size, allocator) or_return
-	util.write(&msg, object, opcode, size)
-	util.write(&msg, req.width)
-	util.write(&msg, req.height)
-	encoded = msg[:]
+	num_appended = util.write(buf, object, opcode, size) or_return
+	num_appended += util.write(buf, req.width) or_return
+	num_appended += util.write(buf, req.height) or_return
 	return
 }
 
@@ -1031,15 +975,13 @@ Toplevel_Set_Min_Size_Request :: struct {
 	width    : i32,  // minimum width of the window
 	height   : i32,  // minimum height of the window
 }
-toplevel_set_min_size_encode :: proc(req: Toplevel_Set_Min_Size_Request, allocator: mem.Allocator) -> (encoded: []byte, err: mem.Allocator_Error) {
+toplevel_set_min_size_write :: proc(buf: ^[dynamic]byte, req: Toplevel_Set_Min_Size_Request) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
 	object := u32(req.toplevel)
 	opcode := u16(TOPLEVEL_SET_MIN_SIZE_OPCODE)
 	size := u16(8 + size_of(req.width) + size_of(req.height))
-	msg := make([dynamic]byte, 0, size, allocator) or_return
-	util.write(&msg, object, opcode, size)
-	util.write(&msg, req.width)
-	util.write(&msg, req.height)
-	encoded = msg[:]
+	num_appended = util.write(buf, object, opcode, size) or_return
+	num_appended += util.write(buf, req.width) or_return
+	num_appended += util.write(buf, req.height) or_return
 	return
 }
 
@@ -1063,13 +1005,11 @@ TOPLEVEL_SET_MAXIMIZED_OPCODE :: 9
 Toplevel_Set_Maximized_Request :: struct {
 	toplevel : Toplevel,  // the object this event/request concerns
 }
-toplevel_set_maximized_encode :: proc(req: Toplevel_Set_Maximized_Request, allocator: mem.Allocator) -> (encoded: []byte, err: mem.Allocator_Error) {
+toplevel_set_maximized_write :: proc(buf: ^[dynamic]byte, req: Toplevel_Set_Maximized_Request) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
 	object := u32(req.toplevel)
 	opcode := u16(TOPLEVEL_SET_MAXIMIZED_OPCODE)
 	size := u16(8)
-	msg := make([dynamic]byte, 0, size, allocator) or_return
-	util.write(&msg, object, opcode, size)
-	encoded = msg[:]
+	num_appended = util.write(buf, object, opcode, size) or_return
 	return
 }
 
@@ -1095,13 +1035,11 @@ TOPLEVEL_UNSET_MAXIMIZED_OPCODE :: 10
 Toplevel_Unset_Maximized_Request :: struct {
 	toplevel : Toplevel,  // the object this event/request concerns
 }
-toplevel_unset_maximized_encode :: proc(req: Toplevel_Unset_Maximized_Request, allocator: mem.Allocator) -> (encoded: []byte, err: mem.Allocator_Error) {
+toplevel_unset_maximized_write :: proc(buf: ^[dynamic]byte, req: Toplevel_Unset_Maximized_Request) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
 	object := u32(req.toplevel)
 	opcode := u16(TOPLEVEL_UNSET_MAXIMIZED_OPCODE)
 	size := u16(8)
-	msg := make([dynamic]byte, 0, size, allocator) or_return
-	util.write(&msg, object, opcode, size)
-	encoded = msg[:]
+	num_appended = util.write(buf, object, opcode, size) or_return
 	return
 }
 
@@ -1130,14 +1068,12 @@ Toplevel_Set_Fullscreen_Request :: struct {
 	toplevel : Toplevel,  // the object this event/request concerns
 	output   : wayland.Output,  // preferred output to place surface on
 }
-toplevel_set_fullscreen_encode :: proc(req: Toplevel_Set_Fullscreen_Request, allocator: mem.Allocator) -> (encoded: []byte, err: mem.Allocator_Error) {
+toplevel_set_fullscreen_write :: proc(buf: ^[dynamic]byte, req: Toplevel_Set_Fullscreen_Request) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
 	object := u32(req.toplevel)
 	opcode := u16(TOPLEVEL_SET_FULLSCREEN_OPCODE)
 	size := u16(8 + size_of(req.output))
-	msg := make([dynamic]byte, 0, size, allocator) or_return
-	util.write(&msg, object, opcode, size)
-	util.write(&msg, u32(req.output))
-	encoded = msg[:]
+	num_appended = util.write(buf, object, opcode, size) or_return
+	num_appended += util.write(buf, u32(req.output)) or_return
 	return
 }
 
@@ -1159,13 +1095,11 @@ TOPLEVEL_UNSET_FULLSCREEN_OPCODE :: 12
 Toplevel_Unset_Fullscreen_Request :: struct {
 	toplevel : Toplevel,  // the object this event/request concerns
 }
-toplevel_unset_fullscreen_encode :: proc(req: Toplevel_Unset_Fullscreen_Request, allocator: mem.Allocator) -> (encoded: []byte, err: mem.Allocator_Error) {
+toplevel_unset_fullscreen_write :: proc(buf: ^[dynamic]byte, req: Toplevel_Unset_Fullscreen_Request) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
 	object := u32(req.toplevel)
 	opcode := u16(TOPLEVEL_UNSET_FULLSCREEN_OPCODE)
 	size := u16(8)
-	msg := make([dynamic]byte, 0, size, allocator) or_return
-	util.write(&msg, object, opcode, size)
-	encoded = msg[:]
+	num_appended = util.write(buf, object, opcode, size) or_return
 	return
 }
 
@@ -1181,13 +1115,11 @@ TOPLEVEL_SET_MINIMIZED_OPCODE :: 13
 Toplevel_Set_Minimized_Request :: struct {
 	toplevel : Toplevel,  // the object this event/request concerns
 }
-toplevel_set_minimized_encode :: proc(req: Toplevel_Set_Minimized_Request, allocator: mem.Allocator) -> (encoded: []byte, err: mem.Allocator_Error) {
+toplevel_set_minimized_write :: proc(buf: ^[dynamic]byte, req: Toplevel_Set_Minimized_Request) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
 	object := u32(req.toplevel)
 	opcode := u16(TOPLEVEL_SET_MINIMIZED_OPCODE)
 	size := u16(8)
-	msg := make([dynamic]byte, 0, size, allocator) or_return
-	util.write(&msg, object, opcode, size)
-	encoded = msg[:]
+	num_appended = util.write(buf, object, opcode, size) or_return
 	return
 }
 
@@ -1216,15 +1148,14 @@ Toplevel_Configure_Event :: struct {
 	height   : i32,  // suggested height of window
 	states   : []u8,  // suggested states of the window
 }
-toplevel_configure_decode :: proc(data: []byte, allocator: mem.Allocator) -> Toplevel_Configure_Event {
+toplevel_configure_read :: proc(data: []byte) -> (Toplevel_Configure_Event, int) {
 	e: Toplevel_Configure_Event
 	r: int
 	n := r
 	e.width, r = util.read_i32(data[n:]); n += r
 	e.height, r = util.read_i32(data[n:]); n += r
 	e.states, r = util.read_array(data[n:]); n += r
-	e.states = bytes.clone(e.states, allocator)
-	return e
+	return e, n
 }
 
 TOPLEVEL_CLOSE_OPCODE :: 1
@@ -1239,11 +1170,11 @@ TOPLEVEL_CLOSE_OPCODE :: 1
 Toplevel_Close_Event :: struct {
 	toplevel : Toplevel,  // the object this event/request concerns
 }
-toplevel_close_decode :: proc(data: []byte) -> Toplevel_Close_Event {
+toplevel_close_read :: proc(data: []byte) -> (Toplevel_Close_Event, int) {
 	e: Toplevel_Close_Event
 	r: int
 	n := r
-	return e
+	return e, n
 }
 
 TOPLEVEL_CONFIGURE_BOUNDS_OPCODE :: 2
@@ -1265,13 +1196,13 @@ Toplevel_Configure_Bounds_Event :: struct {
 	width    : i32,  // suggested maximum width of surface
 	height   : i32,  // suggested maximum height of surface
 }
-toplevel_configure_bounds_decode :: proc(data: []byte) -> Toplevel_Configure_Bounds_Event {
+toplevel_configure_bounds_read :: proc(data: []byte) -> (Toplevel_Configure_Bounds_Event, int) {
 	e: Toplevel_Configure_Bounds_Event
 	r: int
 	n := r
 	e.width, r = util.read_i32(data[n:]); n += r
 	e.height, r = util.read_i32(data[n:]); n += r
-	return e
+	return e, n
 }
 
 TOPLEVEL_WM_CAPABILITIES_OPCODE :: 3
@@ -1296,13 +1227,12 @@ Toplevel_Wm_Capabilities_Event :: struct {
 	toplevel     : Toplevel,  // the object this event/request concerns
 	capabilities : []u8,  // array of 32-bit capabilities
 }
-toplevel_wm_capabilities_decode :: proc(data: []byte, allocator: mem.Allocator) -> Toplevel_Wm_Capabilities_Event {
+toplevel_wm_capabilities_read :: proc(data: []byte) -> (Toplevel_Wm_Capabilities_Event, int) {
 	e: Toplevel_Wm_Capabilities_Event
 	r: int
 	n := r
 	e.capabilities, r = util.read_array(data[n:]); n += r
-	e.capabilities = bytes.clone(e.capabilities, allocator)
-	return e
+	return e, n
 }
 
 Toplevel_Error :: enum u32 {
@@ -1386,13 +1316,11 @@ POPUP_DESTROY_OPCODE :: 0
 Popup_Destroy_Request :: struct {
 	popup : Popup,  // the object this event/request concerns
 }
-popup_destroy_encode :: proc(req: Popup_Destroy_Request, allocator: mem.Allocator) -> (encoded: []byte, err: mem.Allocator_Error) {
+popup_destroy_write :: proc(buf: ^[dynamic]byte, req: Popup_Destroy_Request) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
 	object := u32(req.popup)
 	opcode := u16(POPUP_DESTROY_OPCODE)
 	size := u16(8)
-	msg := make([dynamic]byte, 0, size, allocator) or_return
-	util.write(&msg, object, opcode, size)
-	encoded = msg[:]
+	num_appended = util.write(buf, object, opcode, size) or_return
 	return
 }
 
@@ -1432,15 +1360,13 @@ Popup_Grab_Request :: struct {
 	seat   : wayland.Seat,  // the wl_seat of the user event
 	serial : u32,  // the serial of the user event
 }
-popup_grab_encode :: proc(req: Popup_Grab_Request, allocator: mem.Allocator) -> (encoded: []byte, err: mem.Allocator_Error) {
+popup_grab_write :: proc(buf: ^[dynamic]byte, req: Popup_Grab_Request) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
 	object := u32(req.popup)
 	opcode := u16(POPUP_GRAB_OPCODE)
 	size := u16(8 + size_of(req.seat) + size_of(req.serial))
-	msg := make([dynamic]byte, 0, size, allocator) or_return
-	util.write(&msg, object, opcode, size)
-	util.write(&msg, u32(req.seat))
-	util.write(&msg, req.serial)
-	encoded = msg[:]
+	num_appended = util.write(buf, object, opcode, size) or_return
+	num_appended += util.write(buf, u32(req.seat)) or_return
+	num_appended += util.write(buf, req.serial) or_return
 	return
 }
 
@@ -1470,15 +1396,13 @@ Popup_Reposition_Request :: struct {
 	positioner : Positioner,
 	token      : u32,  // reposition request token
 }
-popup_reposition_encode :: proc(req: Popup_Reposition_Request, allocator: mem.Allocator) -> (encoded: []byte, err: mem.Allocator_Error) {
+popup_reposition_write :: proc(buf: ^[dynamic]byte, req: Popup_Reposition_Request) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
 	object := u32(req.popup)
 	opcode := u16(POPUP_REPOSITION_OPCODE)
 	size := u16(8 + size_of(req.positioner) + size_of(req.token))
-	msg := make([dynamic]byte, 0, size, allocator) or_return
-	util.write(&msg, object, opcode, size)
-	util.write(&msg, u32(req.positioner))
-	util.write(&msg, req.token)
-	encoded = msg[:]
+	num_appended = util.write(buf, object, opcode, size) or_return
+	num_appended += util.write(buf, u32(req.positioner)) or_return
+	num_appended += util.write(buf, req.token) or_return
 	return
 }
 
@@ -1501,7 +1425,7 @@ Popup_Configure_Event :: struct {
 	width  : i32,  // window geometry width
 	height : i32,  // window geometry height
 }
-popup_configure_decode :: proc(data: []byte) -> Popup_Configure_Event {
+popup_configure_read :: proc(data: []byte) -> (Popup_Configure_Event, int) {
 	e: Popup_Configure_Event
 	r: int
 	n := r
@@ -1509,7 +1433,7 @@ popup_configure_decode :: proc(data: []byte) -> Popup_Configure_Event {
 	e.y, r = util.read_i32(data[n:]); n += r
 	e.width, r = util.read_i32(data[n:]); n += r
 	e.height, r = util.read_i32(data[n:]); n += r
-	return e
+	return e, n
 }
 
 POPUP_POPUP_DONE_OPCODE :: 1
@@ -1520,11 +1444,11 @@ POPUP_POPUP_DONE_OPCODE :: 1
 Popup_Popup_Done_Event :: struct {
 	popup : Popup,  // the object this event/request concerns
 }
-popup_popup_done_decode :: proc(data: []byte) -> Popup_Popup_Done_Event {
+popup_popup_done_read :: proc(data: []byte) -> (Popup_Popup_Done_Event, int) {
 	e: Popup_Popup_Done_Event
 	r: int
 	n := r
-	return e
+	return e, n
 }
 
 POPUP_REPOSITIONED_OPCODE :: 2
@@ -1545,12 +1469,12 @@ Popup_Repositioned_Event :: struct {
 	popup : Popup,  // the object this event/request concerns
 	token : u32,  // reposition request token
 }
-popup_repositioned_decode :: proc(data: []byte) -> Popup_Repositioned_Event {
+popup_repositioned_read :: proc(data: []byte) -> (Popup_Repositioned_Event, int) {
 	e: Popup_Repositioned_Event
 	r: int
 	n := r
 	e.token, r = util.read_u32(data[n:]); n += r
-	return e
+	return e, n
 }
 
 Popup_Error :: enum u32 {

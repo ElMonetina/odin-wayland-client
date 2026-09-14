@@ -22,9 +22,7 @@ package linux_dmabuf_v1
 // DEALINGS IN THE SOFTWARE.
 
 import util "../util"
-import "core:bytes"
-import "core:mem"
-import "core:strings"
+import "base:runtime"
 import "core:sys/linux"
 import wayland "../wayland"
 
@@ -92,13 +90,11 @@ DMABUF_DESTROY_OPCODE :: 0
 Dmabuf_Destroy_Request :: struct {
 	dmabuf : Dmabuf,  // the object this event/request concerns
 }
-dmabuf_destroy_encode :: proc(req: Dmabuf_Destroy_Request, allocator: mem.Allocator) -> (encoded: []byte, err: mem.Allocator_Error) {
+dmabuf_destroy_write :: proc(buf: ^[dynamic]byte, req: Dmabuf_Destroy_Request) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
 	object := u32(req.dmabuf)
 	opcode := u16(DMABUF_DESTROY_OPCODE)
 	size := u16(8)
-	msg := make([dynamic]byte, 0, size, allocator) or_return
-	util.write(&msg, object, opcode, size)
-	encoded = msg[:]
+	num_appended = util.write(buf, object, opcode, size) or_return
 	return
 }
 
@@ -111,14 +107,12 @@ DMABUF_CREATE_PARAMS_OPCODE :: 1
 Dmabuf_Create_Params_Request :: struct {
 	dmabuf : Dmabuf,  // the object this event/request concerns
 }
-dmabuf_create_params_encode :: proc(req: Dmabuf_Create_Params_Request, new_id: u32, allocator: mem.Allocator) -> (encoded: []byte, err: mem.Allocator_Error) {
+dmabuf_create_params_write :: proc(buf: ^[dynamic]byte, req: Dmabuf_Create_Params_Request, new_id: u32) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
 	object := u32(req.dmabuf)
 	opcode := u16(DMABUF_CREATE_PARAMS_OPCODE)
 	size := u16(8 + size_of(new_id))
-	msg := make([dynamic]byte, 0, size, allocator) or_return
-	util.write(&msg, object, opcode, size)
-	util.write(&msg, new_id)
-	encoded = msg[:]
+	num_appended = util.write(buf, object, opcode, size) or_return
+	num_appended += util.write(buf, new_id) or_return
 	return
 }
 
@@ -131,14 +125,12 @@ DMABUF_GET_DEFAULT_FEEDBACK_OPCODE :: 2
 Dmabuf_Get_Default_Feedback_Request :: struct {
 	dmabuf : Dmabuf,  // the object this event/request concerns
 }
-dmabuf_get_default_feedback_encode :: proc(req: Dmabuf_Get_Default_Feedback_Request, new_id: u32, allocator: mem.Allocator) -> (encoded: []byte, err: mem.Allocator_Error) {
+dmabuf_get_default_feedback_write :: proc(buf: ^[dynamic]byte, req: Dmabuf_Get_Default_Feedback_Request, new_id: u32) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
 	object := u32(req.dmabuf)
 	opcode := u16(DMABUF_GET_DEFAULT_FEEDBACK_OPCODE)
 	size := u16(8 + size_of(new_id))
-	msg := make([dynamic]byte, 0, size, allocator) or_return
-	util.write(&msg, object, opcode, size)
-	util.write(&msg, new_id)
-	encoded = msg[:]
+	num_appended = util.write(buf, object, opcode, size) or_return
+	num_appended += util.write(buf, new_id) or_return
 	return
 }
 
@@ -153,15 +145,13 @@ Dmabuf_Get_Surface_Feedback_Request :: struct {
 	dmabuf  : Dmabuf,  // the object this event/request concerns
 	surface : wayland.Surface,
 }
-dmabuf_get_surface_feedback_encode :: proc(req: Dmabuf_Get_Surface_Feedback_Request, new_id: u32, allocator: mem.Allocator) -> (encoded: []byte, err: mem.Allocator_Error) {
+dmabuf_get_surface_feedback_write :: proc(buf: ^[dynamic]byte, req: Dmabuf_Get_Surface_Feedback_Request, new_id: u32) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
 	object := u32(req.dmabuf)
 	opcode := u16(DMABUF_GET_SURFACE_FEEDBACK_OPCODE)
 	size := u16(8 + size_of(new_id) + size_of(req.surface))
-	msg := make([dynamic]byte, 0, size, allocator) or_return
-	util.write(&msg, object, opcode, size)
-	util.write(&msg, new_id)
-	util.write(&msg, u32(req.surface))
-	encoded = msg[:]
+	num_appended = util.write(buf, object, opcode, size) or_return
+	num_appended += util.write(buf, new_id) or_return
+	num_appended += util.write(buf, u32(req.surface)) or_return
 	return
 }
 
@@ -180,12 +170,12 @@ Dmabuf_Format_Event :: struct {
 	dmabuf : Dmabuf,  // the object this event/request concerns
 	format : u32,  // DRM_FORMAT code
 }
-dmabuf_format_decode :: proc(data: []byte) -> Dmabuf_Format_Event {
+dmabuf_format_read :: proc(data: []byte) -> (Dmabuf_Format_Event, int) {
 	e: Dmabuf_Format_Event
 	r: int
 	n := r
 	e.format, r = util.read_u32(data[n:]); n += r
-	return e
+	return e, n
 }
 
 DMABUF_MODIFIER_OPCODE :: 1
@@ -215,14 +205,14 @@ Dmabuf_Modifier_Event :: struct {
 	modifier_hi : u32,  // high 32 bits of layout modifier
 	modifier_lo : u32,  // low 32 bits of layout modifier
 }
-dmabuf_modifier_decode :: proc(data: []byte) -> Dmabuf_Modifier_Event {
+dmabuf_modifier_read :: proc(data: []byte) -> (Dmabuf_Modifier_Event, int) {
 	e: Dmabuf_Modifier_Event
 	r: int
 	n := r
 	e.format, r = util.read_u32(data[n:]); n += r
 	e.modifier_hi, r = util.read_u32(data[n:]); n += r
 	e.modifier_lo, r = util.read_u32(data[n:]); n += r
-	return e
+	return e, n
 }
 
 // parameters for creating a dmabuf-based wl_buffer
@@ -250,13 +240,11 @@ BUFFER_PARAMS_DESTROY_OPCODE :: 0
 Buffer_Params_Destroy_Request :: struct {
 	buffer_params : Buffer_Params,  // the object this event/request concerns
 }
-buffer_params_destroy_encode :: proc(req: Buffer_Params_Destroy_Request, allocator: mem.Allocator) -> (encoded: []byte, err: mem.Allocator_Error) {
+buffer_params_destroy_write :: proc(buf: ^[dynamic]byte, req: Buffer_Params_Destroy_Request) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
 	object := u32(req.buffer_params)
 	opcode := u16(BUFFER_PARAMS_DESTROY_OPCODE)
 	size := u16(8)
-	msg := make([dynamic]byte, 0, size, allocator) or_return
-	util.write(&msg, object, opcode, size)
-	encoded = msg[:]
+	num_appended = util.write(buf, object, opcode, size) or_return
 	return
 }
 
@@ -286,19 +274,17 @@ Buffer_Params_Add_Request :: struct {
 	modifier_hi   : u32,  // high 32 bits of layout modifier
 	modifier_lo   : u32,  // low 32 bits of layout modifier
 }
-buffer_params_add_encode :: proc(req: Buffer_Params_Add_Request, allocator: mem.Allocator) -> (encoded: []byte, err: mem.Allocator_Error) {
+buffer_params_add_write :: proc(buf: ^[dynamic]byte, req: Buffer_Params_Add_Request) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
 	object := u32(req.buffer_params)
 	opcode := u16(BUFFER_PARAMS_ADD_OPCODE)
 	size := u16(8 + size_of(req.plane_idx) + size_of(req.offset) + size_of(req.stride) + size_of(req.modifier_hi) + size_of(req.modifier_lo))
-	msg := make([dynamic]byte, 0, size, allocator) or_return
-	util.write(&msg, object, opcode, size)
+	num_appended = util.write(buf, object, opcode, size) or_return
 	// fd: fd — sent via SCM_RIGHTS, not in the body
-	util.write(&msg, req.plane_idx)
-	util.write(&msg, req.offset)
-	util.write(&msg, req.stride)
-	util.write(&msg, req.modifier_hi)
-	util.write(&msg, req.modifier_lo)
-	encoded = msg[:]
+	num_appended += util.write(buf, req.plane_idx) or_return
+	num_appended += util.write(buf, req.offset) or_return
+	num_appended += util.write(buf, req.stride) or_return
+	num_appended += util.write(buf, req.modifier_hi) or_return
+	num_appended += util.write(buf, req.modifier_lo) or_return
 	return
 }
 
@@ -361,17 +347,15 @@ Buffer_Params_Create_Request :: struct {
 	format        : u32,  // DRM_FORMAT code
 	flags         : Buffer_Params_Flags_Set,  // see enum flags
 }
-buffer_params_create_encode :: proc(req: Buffer_Params_Create_Request, allocator: mem.Allocator) -> (encoded: []byte, err: mem.Allocator_Error) {
+buffer_params_create_write :: proc(buf: ^[dynamic]byte, req: Buffer_Params_Create_Request) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
 	object := u32(req.buffer_params)
 	opcode := u16(BUFFER_PARAMS_CREATE_OPCODE)
 	size := u16(8 + size_of(req.width) + size_of(req.height) + size_of(req.format) + size_of(req.flags))
-	msg := make([dynamic]byte, 0, size, allocator) or_return
-	util.write(&msg, object, opcode, size)
-	util.write(&msg, req.width)
-	util.write(&msg, req.height)
-	util.write(&msg, req.format)
-	util.write_u32(&msg, transmute(u32)req.flags)
-	encoded = msg[:]
+	num_appended = util.write(buf, object, opcode, size) or_return
+	num_appended += util.write(buf, req.width) or_return
+	num_appended += util.write(buf, req.height) or_return
+	num_appended += util.write(buf, req.format) or_return
+	num_appended += util.write(buf, transmute(u32)req.flags) or_return
 	return
 }
 
@@ -404,18 +388,16 @@ Buffer_Params_Create_Immed_Request :: struct {
 	format        : u32,  // DRM_FORMAT code
 	flags         : Buffer_Params_Flags_Set,  // see enum flags
 }
-buffer_params_create_immed_encode :: proc(req: Buffer_Params_Create_Immed_Request, new_id: u32, allocator: mem.Allocator) -> (encoded: []byte, err: mem.Allocator_Error) {
+buffer_params_create_immed_write :: proc(buf: ^[dynamic]byte, req: Buffer_Params_Create_Immed_Request, new_id: u32) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
 	object := u32(req.buffer_params)
 	opcode := u16(BUFFER_PARAMS_CREATE_IMMED_OPCODE)
 	size := u16(8 + size_of(new_id) + size_of(req.width) + size_of(req.height) + size_of(req.format) + size_of(req.flags))
-	msg := make([dynamic]byte, 0, size, allocator) or_return
-	util.write(&msg, object, opcode, size)
-	util.write(&msg, new_id)
-	util.write(&msg, req.width)
-	util.write(&msg, req.height)
-	util.write(&msg, req.format)
-	util.write_u32(&msg, transmute(u32)req.flags)
-	encoded = msg[:]
+	num_appended = util.write(buf, object, opcode, size) or_return
+	num_appended += util.write(buf, new_id) or_return
+	num_appended += util.write(buf, req.width) or_return
+	num_appended += util.write(buf, req.height) or_return
+	num_appended += util.write(buf, req.format) or_return
+	num_appended += util.write(buf, transmute(u32)req.flags) or_return
 	return
 }
 
@@ -435,14 +417,12 @@ Buffer_Params_Set_Sampling_Device_Request :: struct {
 	buffer_params : Buffer_Params,  // the object this event/request concerns
 	device        : []u8,  // device dev_t value
 }
-buffer_params_set_sampling_device_encode :: proc(req: Buffer_Params_Set_Sampling_Device_Request, allocator: mem.Allocator) -> (encoded: []byte, err: mem.Allocator_Error) {
+buffer_params_set_sampling_device_write :: proc(buf: ^[dynamic]byte, req: Buffer_Params_Set_Sampling_Device_Request) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
 	object := u32(req.buffer_params)
 	opcode := u16(BUFFER_PARAMS_SET_SAMPLING_DEVICE_OPCODE)
 	size := u16(8 + util.compute_array_size(req.device))
-	msg := make([dynamic]byte, 0, size, allocator) or_return
-	util.write(&msg, object, opcode, size)
-	util.write(&msg, req.device)
-	encoded = msg[:]
+	num_appended = util.write(buf, object, opcode, size) or_return
+	num_appended += util.write(buf, req.device) or_return
 	return
 }
 
@@ -456,13 +436,13 @@ Buffer_Params_Created_Event :: struct {
 	buffer_params : Buffer_Params,  // the object this event/request concerns
 	buffer        : wayland.Buffer,  // id for the the newly created wl_buffer
 }
-buffer_params_created_decode :: proc(data: []byte) -> Buffer_Params_Created_Event {
+buffer_params_created_read :: proc(data: []byte) -> (Buffer_Params_Created_Event, int) {
 	e: Buffer_Params_Created_Event
 	r: int
 	n := r
 	val_buffer, _ := util.read_u32(data[n:]); n += 4
 	e.buffer = wayland.Buffer(val_buffer)
-	return e
+	return e, n
 }
 
 BUFFER_PARAMS_FAILED_OPCODE :: 1
@@ -475,11 +455,11 @@ BUFFER_PARAMS_FAILED_OPCODE :: 1
 Buffer_Params_Failed_Event :: struct {
 	buffer_params : Buffer_Params,  // the object this event/request concerns
 }
-buffer_params_failed_decode :: proc(data: []byte) -> Buffer_Params_Failed_Event {
+buffer_params_failed_read :: proc(data: []byte) -> (Buffer_Params_Failed_Event, int) {
 	e: Buffer_Params_Failed_Event
 	r: int
 	n := r
-	return e
+	return e, n
 }
 
 Buffer_Params_Error :: enum u32 {
@@ -539,13 +519,11 @@ DMABUF_FEEDBACK_DESTROY_OPCODE :: 0
 Dmabuf_Feedback_Destroy_Request :: struct {
 	dmabuf_feedback : Dmabuf_Feedback,  // the object this event/request concerns
 }
-dmabuf_feedback_destroy_encode :: proc(req: Dmabuf_Feedback_Destroy_Request, allocator: mem.Allocator) -> (encoded: []byte, err: mem.Allocator_Error) {
+dmabuf_feedback_destroy_write :: proc(buf: ^[dynamic]byte, req: Dmabuf_Feedback_Destroy_Request) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
 	object := u32(req.dmabuf_feedback)
 	opcode := u16(DMABUF_FEEDBACK_DESTROY_OPCODE)
 	size := u16(8)
-	msg := make([dynamic]byte, 0, size, allocator) or_return
-	util.write(&msg, object, opcode, size)
-	encoded = msg[:]
+	num_appended = util.write(buf, object, opcode, size) or_return
 	return
 }
 
@@ -558,11 +536,11 @@ DMABUF_FEEDBACK_DONE_OPCODE :: 0
 Dmabuf_Feedback_Done_Event :: struct {
 	dmabuf_feedback : Dmabuf_Feedback,  // the object this event/request concerns
 }
-dmabuf_feedback_done_decode :: proc(data: []byte) -> Dmabuf_Feedback_Done_Event {
+dmabuf_feedback_done_read :: proc(data: []byte) -> (Dmabuf_Feedback_Done_Event, int) {
 	e: Dmabuf_Feedback_Done_Event
 	r: int
 	n := r
-	return e
+	return e, n
 }
 
 DMABUF_FEEDBACK_FORMAT_TABLE_OPCODE :: 1
@@ -583,13 +561,13 @@ Dmabuf_Feedback_Format_Table_Event :: struct {
 	fd              : linux.Fd,  // table file descriptor
 	size            : u32,  // table size, in bytes
 }
-dmabuf_feedback_format_table_decode :: proc(data: []byte, fds: ^[dynamic; 28]linux.Fd) -> Dmabuf_Feedback_Format_Table_Event {
+dmabuf_feedback_format_table_read :: proc(data: []byte, fds: ^[dynamic; 28]linux.Fd) -> (Dmabuf_Feedback_Format_Table_Event, int) {
 	e: Dmabuf_Feedback_Format_Table_Event
 	r: int
 	n := r
 	e.fd = pop_front(fds)
 	e.size, r = util.read_u32(data[n:]); n += r
-	return e
+	return e, n
 }
 
 DMABUF_FEEDBACK_MAIN_DEVICE_OPCODE :: 2
@@ -619,13 +597,12 @@ Dmabuf_Feedback_Main_Device_Event :: struct {
 	dmabuf_feedback : Dmabuf_Feedback,  // the object this event/request concerns
 	device          : []u8,  // device dev_t value
 }
-dmabuf_feedback_main_device_decode :: proc(data: []byte, allocator: mem.Allocator) -> Dmabuf_Feedback_Main_Device_Event {
+dmabuf_feedback_main_device_read :: proc(data: []byte) -> (Dmabuf_Feedback_Main_Device_Event, int) {
 	e: Dmabuf_Feedback_Main_Device_Event
 	r: int
 	n := r
 	e.device, r = util.read_array(data[n:]); n += r
-	e.device = bytes.clone(e.device, allocator)
-	return e
+	return e, n
 }
 
 DMABUF_FEEDBACK_TRANCHE_DONE_OPCODE :: 3
@@ -637,11 +614,11 @@ DMABUF_FEEDBACK_TRANCHE_DONE_OPCODE :: 3
 Dmabuf_Feedback_Tranche_Done_Event :: struct {
 	dmabuf_feedback : Dmabuf_Feedback,  // the object this event/request concerns
 }
-dmabuf_feedback_tranche_done_decode :: proc(data: []byte) -> Dmabuf_Feedback_Tranche_Done_Event {
+dmabuf_feedback_tranche_done_read :: proc(data: []byte) -> (Dmabuf_Feedback_Tranche_Done_Event, int) {
 	e: Dmabuf_Feedback_Tranche_Done_Event
 	r: int
 	n := r
-	return e
+	return e, n
 }
 
 DMABUF_FEEDBACK_TRANCHE_TARGET_DEVICE_OPCODE :: 4
@@ -671,13 +648,12 @@ Dmabuf_Feedback_Tranche_Target_Device_Event :: struct {
 	dmabuf_feedback : Dmabuf_Feedback,  // the object this event/request concerns
 	device          : []u8,  // device dev_t value
 }
-dmabuf_feedback_tranche_target_device_decode :: proc(data: []byte, allocator: mem.Allocator) -> Dmabuf_Feedback_Tranche_Target_Device_Event {
+dmabuf_feedback_tranche_target_device_read :: proc(data: []byte) -> (Dmabuf_Feedback_Tranche_Target_Device_Event, int) {
 	e: Dmabuf_Feedback_Tranche_Target_Device_Event
 	r: int
 	n := r
 	e.device, r = util.read_array(data[n:]); n += r
-	e.device = bytes.clone(e.device, allocator)
-	return e
+	return e, n
 }
 
 DMABUF_FEEDBACK_TRANCHE_FORMATS_OPCODE :: 5
@@ -704,13 +680,12 @@ Dmabuf_Feedback_Tranche_Formats_Event :: struct {
 	dmabuf_feedback : Dmabuf_Feedback,  // the object this event/request concerns
 	indices         : []u8,  // array of 16-bit indexes
 }
-dmabuf_feedback_tranche_formats_decode :: proc(data: []byte, allocator: mem.Allocator) -> Dmabuf_Feedback_Tranche_Formats_Event {
+dmabuf_feedback_tranche_formats_read :: proc(data: []byte) -> (Dmabuf_Feedback_Tranche_Formats_Event, int) {
 	e: Dmabuf_Feedback_Tranche_Formats_Event
 	r: int
 	n := r
 	e.indices, r = util.read_array(data[n:]); n += r
-	e.indices = bytes.clone(e.indices, allocator)
-	return e
+	return e, n
 }
 
 DMABUF_FEEDBACK_TRANCHE_FLAGS_OPCODE :: 6
@@ -723,13 +698,13 @@ Dmabuf_Feedback_Tranche_Flags_Event :: struct {
 	dmabuf_feedback : Dmabuf_Feedback,  // the object this event/request concerns
 	flags           : Dmabuf_Feedback_Tranche_Flags_Set,  // tranche flags
 }
-dmabuf_feedback_tranche_flags_decode :: proc(data: []byte) -> Dmabuf_Feedback_Tranche_Flags_Event {
+dmabuf_feedback_tranche_flags_read :: proc(data: []byte) -> (Dmabuf_Feedback_Tranche_Flags_Event, int) {
 	e: Dmabuf_Feedback_Tranche_Flags_Event
 	r: int
 	n := r
 	val_flags, _ := util.read_u32(data[n:]); n += 4
 	e.flags = transmute(Dmabuf_Feedback_Tranche_Flags_Set)val_flags
-	return e
+	return e, n
 }
 
 Dmabuf_Feedback_Tranche_Flags :: enum u32 {

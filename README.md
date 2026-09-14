@@ -19,13 +19,13 @@ import wl "wayland/client/wayland" // The generated protocol code
 import xdg "wayland/client/xdg_shell"
 
 main :: proc() {
-	client := client.create()
+	client, _ := client.create()
 	defer client.destroy(&client)
 
 	get_registry := wl.Display_Get_Registry_Request{
 		display = wl.display // This is a special case, since wl_display is a global object id.
 	}
-	wl_registry := client.queue_request(get_registry)
+	wl_registry := client.request_queue(&client, get_registry)
 
 	free_all(context.temp_allocator) // Very important!!! Always call before roundtrip()
 	client.roundtrip(&client)
@@ -47,7 +47,7 @@ main :: proc() {
 
 - `create()`: Creates a connection with the running wayland server as well as initializing
  a state that is returned top the user.
-- `queue_request(req)`: Queues the request data into an internal buffer, the procedure is 
+- `request_queue(client, req)`: Queues the request data straight into the client's internal buffer, the procedure is 
 essentially a big type switcher on `req`. This allows for a very straight forward surface API, 
 initialize a `*_Request` struct and pass it to the proc.
 - `roundtrip()`: Sends all buffered request data and reads all incoming event data.
