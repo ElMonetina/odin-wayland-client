@@ -16,7 +16,7 @@ Client :: struct {
 	incoming_fds:         [dynamic; 28]linux.Fd,
 	id_to_interface:      map[u32]string,
 	next_id:              u32,
-	last_error:           Error,
+	polling_error:           Error,
 }
 
 WAYLAND_HEADER_SIZE :: 8
@@ -74,12 +74,26 @@ disconnect :: proc(socket: linux.Fd) -> linux.Errno {
 	return .NONE
 }
 
-// TODO(gabri): remove the panic
-roundtrip :: proc(client: ^Client) -> Error {
-	send(client) or_return
-	err := read(client)
-	if err == .Closed || err == .ECONNRESET {
-		panic("Server closed connection.")
+roundtrip :: proc(client: ^Client, block_on_read := true) -> Error {
+	for {
+		send_err := send(client)
+		if send_err != .NONE {
+			return send_err
+		}
+		if send_err == .EINTR {
+			continue
+		}
+		break
+	}
+	for {
+		read_err := read(client) if block_on_read else read_pending(client)
+		if read_err != nil && read_err != .EINTR {
+			return read_err
+		}
+		if read_err == .EINTR {
+			continue
+		}
+		break
 	}
 	return nil
 }
@@ -129,10 +143,11 @@ read :: proc(client: ^Client) -> Error {
 	control_start := uintptr(raw_data(hdr.control))
 	control_end   := control_start + uintptr(len(hdr.control))
 	recv_control_fds(control_start, control_end, &client.incoming_fds)
+	client.polling_error = nil
 	return nil
 }
 
-refill :: proc(client: ^Client) -> Error {
+read_pending :: proc(client: ^Client) -> Error {
 	if event_pending(client) {
 		read(client) or_return
 	}
@@ -152,15 +167,18 @@ recv_control_fds :: proc(control_start, control_end: uintptr, fds: ^[dynamic; 28
 	}
 }
 
-// TODO(gabri): remove the panic
 poll_event :: proc(client: ^Client, allocator := context.temp_allocator) -> (ev: Event, present: bool) {
 	read_pos := client.events_read_pos
 	for {
 		buf := client.events_byte_buffer
 		if read_pos + WAYLAND_HEADER_SIZE > len(buf) {
-			err := refill(client)
-			if err == .Closed || err == .ECONNRESET {
-				panic("Server closed connection.")
+			err := read_pending(client)
+			if polling_error_occured(err) {
+				client.polling_error = err
+				return
+			}
+			if err == .EINTR {
+				continue
 			}
 			buf = client.events_byte_buffer // update the re-read buffer
 			if read_pos + WAYLAND_HEADER_SIZE > len(buf) {
@@ -169,9 +187,13 @@ poll_event :: proc(client: ^Client, allocator := context.temp_allocator) -> (ev:
 		}
 		object_id, opcode, size, _ := util.read_header(buf[read_pos:])
 		if read_pos + int(size) > len(buf) {
-			err := refill(client)
-			if err == .Closed || err == .ECONNRESET {
-				panic("Server closed connection.")
+			err := read_pending(client)
+			if polling_error_occured(err) {
+				client.polling_error = err
+				return
+			}
+			if err == .EINTR {
+				continue
 			}
 			buf = client.events_byte_buffer
 			if read_pos + int(size) > len(buf) {
@@ -184,15 +206,16 @@ poll_event :: proc(client: ^Client, allocator := context.temp_allocator) -> (ev:
 			continue // skip to next if object hasn't been bound
 		}
 		ev, err  := event_read(client, interface, object_id, opcode, buf[read_pos + WAYLAND_HEADER_SIZE:read_pos + int(size)], &client.incoming_fds, allocator)
+		if err != .None {
+			client.polling_error = err
+			return
+		}
 		read_pos += int(size)
 		if read_pos > WAYLAND_BUFFER_LEN {
 			remove_range(&client.events_byte_buffer, 0, read_pos)
 			read_pos = 0
 		}
 		client.events_read_pos = read_pos
-		if err != .None {
-			return {}, false
-		}
 		if ev != nil {
 			return ev, true
 		}
@@ -212,8 +235,6 @@ register_object :: proc(client: ^Client, id: u32, interface: string) {
 	client.id_to_interface[id] = interface
 }
 
-submit :: proc(client: ^Client, data: []byte, fds: []linux.Fd) -> runtime.Allocator_Error {
-	append(&client.outgoing_fds, ..fds)
-	append(&client.requests_byte_buffer, ..data) or_return
-	return nil
+polling_error_occured :: proc(err: Error) -> bool {
+	return (err == .Closed || err == .ECONNRESET || err == .ENOBUFS || err != runtime.Allocator_Error.None) && err != .EINTR
 }
