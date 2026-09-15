@@ -27,8 +27,8 @@ main :: proc() {
 	}
 	wl_registry := client.request_queue(&client, get_registry)
 
-	free_all(context.temp_allocator) // Very important!!! Always call before roundtrip()
 	client.roundtrip(&client)
+	free_all(context.temp_allocator) // Very important!!! Always call before poll_event()
 	for ev in client.poll_event(&client) {
 		#partial switch ev {
 		case wl.Registry_Global:
