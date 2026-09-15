@@ -1,6 +1,6 @@
 package client
 
-import "core:mem"
+import "base:runtime"
 import "core:os"
 import "core:strings"
 import "core:sys/linux"
@@ -23,14 +23,14 @@ WAYLAND_BUFFER_LEN :: 4096
 
 Error :: union #shared_nil {
 	linux.Errno,
-	mem.Allocator_Error,
+	runtime.Allocator_Error,
 }
 
 create :: proc(allocator := context.allocator, temp_allocator := context.temp_allocator) -> (client: Client, err: Error) {
 	client.requests_byte_buffer = make([dynamic]byte, 0, WAYLAND_BUFFER_LEN, allocator) or_return
-	client.events_byte_buffer = make([dynamic]byte, 0, WAYLAND_BUFFER_LEN, allocator) or_return
-	client.id_to_interface = make(map[u32]string, allocator)
-	client.wayland_socket = connect(temp_allocator) or_return
+	client.events_byte_buffer   = make([dynamic]byte, 0, WAYLAND_BUFFER_LEN, allocator) or_return
+	client.id_to_interface      = make(map[u32]string, allocator)
+	client.wayland_socket       = connect(temp_allocator) or_return
 	client.id_to_interface[u32(wl.display)] = wl.DISPLAY_INTERFACE
 	client.next_id = 1
 	return
@@ -44,7 +44,7 @@ connect :: proc(allocator := context.temp_allocator) -> (wayland_socket: linux.F
 	xdg_runtime_dir := os.get_env("XDG_RUNTIME_DIR", allocator)
 	wayland_display := os.get_env("WAYLAND_DISPLAY", allocator)
 
-	socket_path := strings.concatenate({xdg_runtime_dir, "/", wayland_display}, allocator) or_return
+	socket_path       := strings.concatenate({xdg_runtime_dir, "/", wayland_display}, allocator) or_return
 	socket_path_bytes := transmute([]u8)socket_path
 	copy(addr.sun_path[:], socket_path_bytes)
 	linux.connect(wayland_socket, &addr) or_return
@@ -56,15 +56,15 @@ destroy :: proc(client: ^Client) -> Error {
 		linux.close(fd) or_return
 	}
 	delete(client.requests_byte_buffer) or_return
-	delete(client.events_byte_buffer) or_return
-	delete(client.id_to_interface) or_return
-	disconnect(client.wayland_socket) or_return
+	delete(client.events_byte_buffer)   or_return
+	delete(client.id_to_interface)      or_return
+	disconnect(client.wayland_socket)   or_return
 	return nil
 }
 
-disconnect :: proc(socket: linux.Fd) -> Error {
+disconnect :: proc(socket: linux.Fd) -> linux.Errno {
 	linux.close(socket) or_return
-	return nil
+	return .NONE
 }
 
 roundtrip :: proc(client: ^Client) -> Error {
@@ -73,22 +73,22 @@ roundtrip :: proc(client: ^Client) -> Error {
 	return nil
 }
 
-send :: proc(client: ^Client) -> Error {
+send :: proc(client: ^Client) -> linux.Errno {
 	hdr: linux.Msg_Hdr
 	control: [128]byte
 	hdr.iov = {{base = raw_data(client.requests_byte_buffer), len = len(client.requests_byte_buffer)}}
 	if len(client.outgoing_fds) > 0 {
 		hdr.control = control[:util.CMSG_SPACE(uint(len(client.outgoing_fds) * size_of(linux.Fd)))]
-		cmsg := (^util.Cmsghdr)(&control[0])
-		cmsg.len = util.CMSG_LEN(uint(len(client.outgoing_fds) * size_of(linux.Fd)))
+		cmsg      := (^util.Cmsghdr)(&control[0])
+		cmsg.len   = util.CMSG_LEN(uint(len(client.outgoing_fds) * size_of(linux.Fd)))
 		cmsg.level = i32(linux.SOL_SOCKET)
-		cmsg.type = util.SCM_RIGHTS
+		cmsg.type  = util.SCM_RIGHTS
 		copy(([^]linux.Fd)(&control[size_of(util.Cmsghdr)])[:len(client.outgoing_fds)], client.outgoing_fds[:])
 		clear(&client.outgoing_fds)
 	}
 	linux.sendmsg(client.wayland_socket, &hdr, {.NOSIGNAL}) or_return
 	clear(&client.requests_byte_buffer)
-	return nil
+	return .NONE
 }
 
 wait :: proc(client: ^Client) -> Error {
@@ -107,7 +107,7 @@ wait :: proc(client: ^Client) -> Error {
 	}
 	append(&client.events_byte_buffer, ..staging[:n]) or_return
 	control_start := uintptr(raw_data(hdr.control))
-	control_end := control_start + uintptr(len(hdr.control))
+	control_end   := control_start + uintptr(len(hdr.control))
 	recv_control_fds(control_start, control_end, &client.incoming_fds)
 	return nil
 }
@@ -118,14 +118,14 @@ recv_control_fds :: proc(control_start, control_end: uintptr, fds: ^[dynamic; 28
 		cmsg := (^util.Cmsghdr)(ptr)
 		if cmsg.level == i32(linux.SOL_SOCKET) && cmsg.type == util.SCM_RIGHTS {
 			n_fds := (cmsg.len - util.CMSG_ALIGN(size_of(util.Cmsghdr))) / size_of(linux.Fd)
-			src := ([^]linux.Fd)(ptr + size_of(util.Cmsghdr))
+			src   := ([^]linux.Fd)(ptr + size_of(util.Cmsghdr))
 			append(fds, ..src[:n_fds])
 		}
 		ptr += uintptr(util.CMSG_ALIGN(cmsg.len))
 	}
 }
 
-poll_event :: proc(client: ^Client, allocator := context.temp_allocator) -> (ev: Event, ok: bool) {
+poll_event :: proc(client: ^Client, allocator := context.temp_allocator) -> (ev: Event, present: bool) {
 	read_pos := client.events_read_pos
 	for {
 		buf := client.events_byte_buffer
@@ -141,7 +141,7 @@ poll_event :: proc(client: ^Client, allocator := context.temp_allocator) -> (ev:
 			read_pos += int(size)
 			continue
 		}
-		ev, err := event_read(client, interface, object_id, opcode, buf[read_pos + WAYLAND_HEADER_SIZE:read_pos + int(size)], &client.incoming_fds, allocator)
+		ev, err  := event_read(client, interface, object_id, opcode, buf[read_pos + WAYLAND_HEADER_SIZE:read_pos + int(size)], &client.incoming_fds, allocator)
 		read_pos += int(size)
 		if read_pos > WAYLAND_BUFFER_LEN {
 			remove_range(&client.events_byte_buffer, 0, read_pos)
@@ -158,7 +158,7 @@ poll_event :: proc(client: ^Client, allocator := context.temp_allocator) -> (ev:
 	return {}, false
 }
 
-create_shm_file :: proc(size: i32) -> (shm: linux.Fd, data: []byte, err: Error) {
+create_shm_file :: proc(size: i32) -> (shm: linux.Fd, data: []byte, err: linux.Errno) {
 	shm = linux.memfd_create("wayland-shm", {.CLOEXEC, .ALLOW_SEALING}) or_return
 	linux.ftruncate(shm, i64(size)) or_return
 	ptr := linux.mmap(0, uint(size), {.READ, .WRITE}, {.SHARED}, shm) or_return
@@ -170,7 +170,7 @@ register_object :: proc(client: ^Client, id: u32, interface: string) {
 	client.id_to_interface[id] = interface
 }
 
-submit :: proc(client: ^Client, data: []byte, fds: []linux.Fd) -> Error {
+submit :: proc(client: ^Client, data: []byte, fds: []linux.Fd) -> runtime.Allocator_Error {
 	append(&client.outgoing_fds, ..fds)
 	append(&client.requests_byte_buffer, ..data) or_return
 	return nil
