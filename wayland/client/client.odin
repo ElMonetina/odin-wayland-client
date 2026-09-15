@@ -14,13 +14,13 @@ Client :: struct {
 	events_byte_buffer:   [dynamic]byte,
 	events_read_pos:      int,
 	incoming_fds:         [dynamic; 28]linux.Fd,
-	id_to_interface:      map[u32]string,
-	next_id:              u32,
-	polling_error:           Error,
+	id_to_interface:      map[u32]string, // needs sync for threading
+	next_id:              u32, // needs atomic add
+	polling_error:        Error,
 }
 
 WAYLAND_HEADER_SIZE :: 8
-WAYLAND_BUFFER_LEN :: 4096
+WAYLAND_BUFFER_LEN  :: 4096
 
 Error :: union #shared_nil {
 	linux.Errno,
