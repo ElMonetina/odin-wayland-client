@@ -64,5 +64,5 @@ argument and generates the protocols in their own directory. It is important to 
 ### The **interesting** problem
 
 Using vulkan without libwayland is a pain, the Swapchain extension expects the use of 
-libwayland's wl_surface, which I don't have. So TL:DR I need to implement my own swapchain, this 
-is hard but I will try and **succed**.
+libwayland's wl_surface, which I don't have. So TL:DR I had to implement my own swapchain, the initial
+support is there, but it's still WIP and needs a lot of testing.
