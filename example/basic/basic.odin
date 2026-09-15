@@ -43,34 +43,34 @@ main :: proc() {
 	free_all(context.temp_allocator)
 
 	registry := wl.Display_Get_Registry_Request { display = wl.display }
-	app.wl_registry, client_err = client.queue_request(&app.wayland, registry)
+	app.wl_registry, client_err = client.request_queue(&app.wayland, registry)
 	ensure(client_err == nil)
 	err := register_globals(&app)
 	ensure(err == nil)
 
 	create_surface := wl.Compositor_Create_Surface_Request { compositor = app.wl_compositor }
-	app.wl_surface, client_err = client.queue_request(&app.wayland, create_surface)
+	app.wl_surface, client_err = client.request_queue(&app.wayland, create_surface)
 	ensure(client_err == nil)
 
 	get_xdg := xdg.Wm_Base_Get_Xdg_Surface_Request {
 		wm_base = app.xdg_wm_base,
 		surface = app.wl_surface,
 	}
-	app.xdg_surface, client_err = client.queue_request(&app.wayland, get_xdg)
+	app.xdg_surface, client_err = client.request_queue(&app.wayland, get_xdg)
 	ensure(client_err == nil)
 
 	get_toplevel := xdg.Surface_Get_Toplevel_Request { surface = app.xdg_surface }
-	app.xdg_toplevel, client_err = client.queue_request(&app.wayland, get_toplevel)
+	app.xdg_toplevel, client_err = client.request_queue(&app.wayland, get_toplevel)
 	ensure(client_err == nil)
 
 	set_title := xdg.Toplevel_Set_Title_Request {
 		toplevel = app.xdg_toplevel,
 		title    = "checkerboard",
 	}
-	client.queue_request(&app.wayland, set_title)
+	client.request_queue(&app.wayland, set_title)
 
 	commit := wl.Surface_Commit_Request { surface = app.wl_surface }
-	client.queue_request(&app.wayland, commit)
+	client.request_queue(&app.wayland, commit)
 
 	event_loop(&app)
 }
@@ -117,7 +117,7 @@ handle_events :: proc(app: ^App) {
 				surface = app.xdg_surface,
 				serial  = e.serial,
 			}
-			client.queue_request(&app.wayland, ack)
+			client.request_queue(&app.wayland, ack)
 			if !app.configured {
 				create_shm_buffer(app)
 				draw(app)
@@ -129,7 +129,7 @@ handle_events :: proc(app: ^App) {
 				wm_base = app.xdg_wm_base,
 				serial  = e.serial,
 			}
-			client.queue_request(&app.wayland, pong)
+			client.request_queue(&app.wayland, pong)
 		case xdg.Toplevel_Close_Event:
 			app.quitting = true
 		}
@@ -146,7 +146,7 @@ create_shm_buffer :: proc(app: ^App) {
 		fd   = app.shm_fd,
 		size = pool_size,
 	}
-	app.shm_pool, _ = client.queue_request(&app.wayland, create_pool)
+	app.shm_pool, _ = client.request_queue(&app.wayland, create_pool)
 
 	create_buffer := wl.Shm_Pool_Create_Buffer_Request {
 		shm_pool = app.shm_pool,
@@ -156,7 +156,7 @@ create_shm_buffer :: proc(app: ^App) {
 		stride   = STRIDE,
 		format   = wl.Shm_Format.Xrgb8888,
 	}
-	app.wl_buffer, _ = client.queue_request(&app.wayland, create_buffer)
+	app.wl_buffer, _ = client.request_queue(&app.wayland, create_buffer)
 }
 
 draw :: proc(app: ^App) {
@@ -183,7 +183,7 @@ present :: proc(app: ^App) {
 		x       = 0,
 		y       = 0,
 	}
-	client.queue_request(&app.wayland, attach)
+	client.request_queue(&app.wayland, attach)
 
 	damage := wl.Surface_Damage_Request {
 		surface = app.wl_surface,
@@ -192,8 +192,8 @@ present :: proc(app: ^App) {
 		width   = WIDTH,
 		height  = HEIGHT,
 	}
-	client.queue_request(&app.wayland, damage)
+	client.request_queue(&app.wayland, damage)
 
 	commit := wl.Surface_Commit_Request { surface = app.wl_surface }
-	client.queue_request(&app.wayland, commit)
+	client.request_queue(&app.wayland, commit)
 }
