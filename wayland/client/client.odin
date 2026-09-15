@@ -16,6 +16,7 @@ Client :: struct {
 	incoming_fds:         [dynamic; 28]linux.Fd,
 	id_to_interface:      map[u32]string,
 	next_id:              u32,
+	last_error:           Error,
 }
 
 WAYLAND_HEADER_SIZE :: 8
@@ -24,6 +25,12 @@ WAYLAND_BUFFER_LEN :: 4096
 Error :: union #shared_nil {
 	linux.Errno,
 	runtime.Allocator_Error,
+	Connection_Error,
+}
+
+Connection_Error :: enum {
+	None,
+	Closed,
 }
 
 create :: proc(allocator := context.allocator, temp_allocator := context.temp_allocator) -> (client: Client, err: Error) {
@@ -67,9 +74,13 @@ disconnect :: proc(socket: linux.Fd) -> linux.Errno {
 	return .NONE
 }
 
+// TODO(gabri): remove the panic
 roundtrip :: proc(client: ^Client) -> Error {
 	send(client) or_return
-	wait(client) or_return
+	err := read(client)
+	if err == .Closed || err == .ECONNRESET {
+		panic("Server closed connection.")
+	}
 	return nil
 }
 
@@ -91,7 +102,16 @@ send :: proc(client: ^Client) -> linux.Errno {
 	return .NONE
 }
 
-wait :: proc(client: ^Client) -> Error {
+event_pending :: proc(client: ^Client) -> bool {
+	pfd := linux.Poll_Fd{
+		fd     = client.wayland_socket,
+		events = {.IN},
+	}
+	linux.poll({pfd}, 0)
+	return .IN in pfd.revents
+}
+
+read :: proc(client: ^Client) -> Error {
 	control: [128]byte
 	staging: [WAYLAND_BUFFER_LEN]byte
 	hdr := linux.Msg_Hdr {
@@ -100,7 +120,7 @@ wait :: proc(client: ^Client) -> Error {
 	}
 	n := linux.recvmsg(client.wayland_socket, &hdr, {.CMSG_CLOEXEC}) or_return
 	if n == 0 {
-		return .EPIPE
+		return .Closed
 	}
 	if .CTRUNC in hdr.flags {
 		return .ENOBUFS
@@ -109,6 +129,13 @@ wait :: proc(client: ^Client) -> Error {
 	control_start := uintptr(raw_data(hdr.control))
 	control_end   := control_start + uintptr(len(hdr.control))
 	recv_control_fds(control_start, control_end, &client.incoming_fds)
+	return nil
+}
+
+refill :: proc(client: ^Client) -> Error {
+	if event_pending(client) {
+		read(client) or_return
+	}
 	return nil
 }
 
@@ -125,21 +152,36 @@ recv_control_fds :: proc(control_start, control_end: uintptr, fds: ^[dynamic; 28
 	}
 }
 
+// TODO(gabri): remove the panic
 poll_event :: proc(client: ^Client, allocator := context.temp_allocator) -> (ev: Event, present: bool) {
 	read_pos := client.events_read_pos
 	for {
 		buf := client.events_byte_buffer
 		if read_pos + WAYLAND_HEADER_SIZE > len(buf) {
-			return {}, false
+			err := refill(client)
+			if err == .Closed || err == .ECONNRESET {
+				panic("Server closed connection.")
+			}
+			buf = client.events_byte_buffer // update the re-read buffer
+			if read_pos + WAYLAND_HEADER_SIZE > len(buf) {
+				return // still incomplete data
+			}
 		}
 		object_id, opcode, size, _ := util.read_header(buf[read_pos:])
 		if read_pos + int(size) > len(buf) {
-			return {}, false
+			err := refill(client)
+			if err == .Closed || err == .ECONNRESET {
+				panic("Server closed connection.")
+			}
+			buf = client.events_byte_buffer
+			if read_pos + int(size) > len(buf) {
+				return
+			}
 		}
 		interface, has := client.id_to_interface[object_id]
 		if !has {
 			read_pos += int(size)
-			continue
+			continue // skip to next if object hasn't been bound
 		}
 		ev, err  := event_read(client, interface, object_id, opcode, buf[read_pos + WAYLAND_HEADER_SIZE:read_pos + int(size)], &client.incoming_fds, allocator)
 		read_pos += int(size)
