@@ -5,7 +5,7 @@ This is a native to Odin implementation of Wayland, an alternative to libwayland
 ## Overview
 
 As of the time of writing, only client side generation is supported. 
-Vulkan integration is also provided, solving an [`interesting`](https://wayland-book.com/surfaces/dmabuf.html) problem.
+Vulkan integration is also provided (WIP), solving an [`interesting`](https://wayland-book.com/surfaces/dmabuf.html) problem.
 
 ### Client API Design
 
