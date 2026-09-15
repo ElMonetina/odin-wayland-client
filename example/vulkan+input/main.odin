@@ -167,9 +167,9 @@ main :: proc() {
 		handleTypes         = {.DMA_BUF_EXT},
 	}
 	swapchain_ci := vki.Swapchain_Create_Info {
-		surface     = app.surface,
-		img_ci      = img_ci,
-		image_count = FRAMES_IN_FLIGHT,
+		surface            = app.surface,
+		image_create_info  = img_ci,
+		image_count        = FRAMES_IN_FLIGHT,
 	}
 	app.swapchain, res = vki.create_swapchain(app.p_device, app.device, app.gfx_queue, swapchain_ci, &vk_allocator)
 	ensure(res == .SUCCESS)
@@ -265,7 +265,7 @@ init_app :: proc(app: ^App, width, height: i32) {
 	get_registry := wl.Display_Get_Registry_Request {
 		display = wl.display,
 	}
-	app.wl_registry, _ = client.queue_request(&app.client_state, get_registry)
+	app.wl_registry, _ = client.request_queue(&app.client_state, get_registry)
 
 	err := register_global_objects(app)
 	ensure(err == nil)
@@ -274,7 +274,7 @@ init_app :: proc(app: ^App, width, height: i32) {
 	create_surface := wl.Compositor_Create_Surface_Request {
 		compositor = app.wl_compositor,
 	}
-	app.wl_surface, _ = client.queue_request(&app.client_state, create_surface)
+	app.wl_surface, _ = client.request_queue(&app.client_state, create_surface)
 	app.surface = {
 		client       = &app.client_state,
 		wl_surface   = app.wl_surface,
@@ -287,22 +287,22 @@ init_app :: proc(app: ^App, width, height: i32) {
 		wm_base = app.xdg_wm_base,
 		surface = app.wl_surface,
 	}
-	app.xdg_surface, _ = client.queue_request(&app.client_state, get_xdg_surface)
+	app.xdg_surface, _ = client.request_queue(&app.client_state, get_xdg_surface)
 
 	get_toplevel := xdg.Surface_Get_Toplevel_Request {
 		surface = app.xdg_surface,
 	}
-	app.xdg_toplevel, _ = client.queue_request(&app.client_state, get_toplevel)
+	app.xdg_toplevel, _ = client.request_queue(&app.client_state, get_toplevel)
 
 	get_keyboard := wl.Seat_Get_Keyboard_Request {
 		seat = app.wl_seat,
 	}
-	app.wl_keyboard, _ = client.queue_request(&app.client_state, get_keyboard)
+	app.wl_keyboard, _ = client.request_queue(&app.client_state, get_keyboard)
 
 	surface_commit := wl.Surface_Commit_Request {
 		surface = app.wl_surface,
 	}
-	client.queue_request(&app.client_state, surface_commit)
+	client.request_queue(&app.client_state, surface_commit)
 
 	app.w, app.h = width, height
 }
@@ -375,13 +375,13 @@ handle_event :: proc(app: ^App) {
 				wm_base = app.xdg_wm_base,
 				serial  = e.serial,
 			}
-			client.queue_request(&app.client_state, pong)
+			client.request_queue(&app.client_state, pong)
 		case xdg.Surface_Configure_Event:
 			ack_configure := xdg.Surface_Ack_Configure_Request {
 				surface = app.xdg_surface,
 				serial  = e.serial,
 			}
-			client.queue_request(&app.client_state, ack_configure)
+			client.request_queue(&app.client_state, ack_configure)
 			app.configured = true
 			app.img_free = true
 
