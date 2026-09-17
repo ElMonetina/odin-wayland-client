@@ -1,5 +1,7 @@
 package client
 
+import "core:strconv"
+import "core:bytes"
 import "base:runtime"
 import "core:os"
 import "core:strings"
@@ -30,6 +32,7 @@ Error :: union #shared_nil {
 
 Connection_Error :: enum {
 	None,
+	Wayland_Not_Present,
 	Closed,
 }
 
@@ -45,11 +48,19 @@ create :: proc(allocator := context.allocator, temp_allocator := context.temp_al
 
 connect :: proc(allocator := context.temp_allocator) -> (wayland_socket: linux.Fd, err: Error) {
 	wayland_socket = linux.socket(.UNIX, .STREAM, {}, .HOPOPT) or_return
+	sock_string := os.get_env("WAYLAND_SOCKET", allocator)
+	if sock_string != "" {
+		fd, _ := strconv.parse_int(sock_string)
+		wayland_socket = linux.Fd(fd)
+		return
+	}
 	addr: linux.Sock_Addr_Un
 	addr.sun_family = .UNIX
-	// TODO(gabri): do proper checking for availability
 	xdg_runtime_dir := os.get_env("XDG_RUNTIME_DIR", allocator)
 	wayland_display := os.get_env("WAYLAND_DISPLAY", allocator)
+	if wayland_display == "" {
+		wayland_display = "wayland-0"
+	}
 
 	socket_path       := strings.concatenate({xdg_runtime_dir, "/", wayland_display}, allocator) or_return
 	socket_path_bytes := transmute([]u8)socket_path
@@ -143,7 +154,6 @@ read :: proc(client: ^Client) -> Error {
 	control_start := uintptr(raw_data(hdr.control))
 	control_end   := control_start + uintptr(len(hdr.control))
 	recv_control_fds(control_start, control_end, &client.incoming_fds)
-	client.polling_error = nil
 	return nil
 }
 
@@ -168,6 +178,7 @@ recv_control_fds :: proc(control_start, control_end: uintptr, fds: ^[dynamic; 28
 }
 
 poll_event :: proc(client: ^Client, allocator := context.temp_allocator) -> (ev: Event, present: bool) {
+	client.polling_error = nil
 	read_pos := client.events_read_pos
 	for {
 		buf := client.events_byte_buffer
