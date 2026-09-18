@@ -9,7 +9,7 @@ DRM_FORMAT_MOD_INVALID :: u64(0x00ffffffffffffff)
 
 // Map a Vulkan format to its DRM fourcc code (little-endian byte order).
 // Returns DRM_FORMAT_INVALID (0) for unsupported formats.
-fourcc_from_vulkan :: proc(format: vk.Format) -> u32 {
+vulkan_to_drm_format :: proc(format: vk.Format) -> u32 {
 	#partial switch format {
 	case .R8_UNORM:             return 0x20203852 // R8
 	case .R8G8_UNORM:           return 0x38385247 // GR88

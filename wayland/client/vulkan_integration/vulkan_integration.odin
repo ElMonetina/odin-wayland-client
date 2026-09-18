@@ -218,7 +218,7 @@ create_swapchain :: proc(client: ^wlc.Client, create_info: Swapchain_Create_Info
 	sc.device = create_info.device
 	sc.surface = create_info.surface
 
-	fourcc := fourcc_from_vulkan(create_info.image_create_info.format)
+	format := vulkan_to_drm_format(create_info.image_create_info.format)
 	stride := u32(create_info.image_create_info.plane_layouts[0].rowPitch)
 	image_count := create_info.image_count
 	if image_count == 0 {
@@ -259,7 +259,7 @@ create_swapchain :: proc(client: ^wlc.Client, create_info: Swapchain_Create_Info
 			buffer_params = params_id,
 			width         = create_info.width,
 			height        = create_info.height,
-			format        = fourcc,
+			format        = format,
 			flags         = create_info.buffer_params_flags,
 		}
 		sc.buffers[i], _ = wlc.request_queue(client, create_immed)
