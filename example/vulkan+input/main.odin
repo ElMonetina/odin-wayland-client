@@ -4,7 +4,7 @@ import "core:log"
 import "core:os"
 import "core:sys/linux"
 import vk "vendor:vulkan"
-import "wayland:client"
+import wlc "wayland:client"
 import dmabuf "wayland:client/linux_dmabuf_v1"
 import vki "wayland:client/vulkan_integration"
 import wl "wayland:client/wayland"
@@ -12,7 +12,7 @@ import xdg "wayland:client/xdg_shell"
 import xkb "./xkb"
 
 App :: struct {
-	client_state:     client.Client,
+	client_state:     wlc.Client,
 	wl_registry:      wl.Registry,
 	wl_compositor:    wl.Compositor,
 	xdg_wm_base:      xdg.Wm_Base,
@@ -36,7 +36,6 @@ App :: struct {
 	color_index:      u32,
 
 	// Vulkan section
-	surface:          vki.Surface,
 	swapchain:        vki.Swapchain,
 	instance:         vk.Instance,
 	p_device:         vk.PhysicalDevice,
@@ -65,10 +64,10 @@ main :: proc() {
 	app := new(App)
 	defer free(app)
 
-	client_err: client.Error
-	app.client_state, client_err = client.create()
+	client_err: wlc.Error
+	app.client_state, client_err = wlc.create()
 	ensure(client_err == nil)
-	defer client.destroy(&app.client_state)
+	defer wlc.destroy(&app.client_state)
 
 	app.xkb_ctx = xkb.context_new({})
 	ensure(app.xkb_ctx != nil)
@@ -167,13 +166,18 @@ main :: proc() {
 		handleTypes         = {.DMA_BUF_EXT},
 	}
 	swapchain_ci := vki.Swapchain_Create_Info {
-		surface            = app.surface,
+		physical_device    = app.p_device,
+		device             = app.device,
+		linux_dmabuf       = app.linux_dmabuf,
+		surface            = app.wl_surface,
 		image_create_info  = img_ci,
 		image_count        = FRAMES_IN_FLIGHT,
+		width              = app.w,
+		height             = app.h,
 	}
-	app.swapchain, res = vki.create_swapchain(app.p_device, app.device, app.gfx_queue, swapchain_ci, &vk_allocator)
+	app.swapchain, res = vki.create_swapchain(&app.client_state, swapchain_ci, &vk_allocator)
 	ensure(res == .SUCCESS)
-	defer vki.destroy_swapchain(&app.swapchain, &vk_allocator)
+	defer vki.destroy_swapchain(&app.client_state, &app.swapchain, &vk_allocator)
 
 	cmd_pool_ci := vk.CommandPoolCreateInfo {
 		sType            = .COMMAND_POOL_CREATE_INFO,
@@ -254,7 +258,12 @@ render :: proc(app: ^App) {
 		commandBufferCount = 1,
 		pCommandBuffers    = &cmd_buf,
 	}
-	res = vki.swapchain_present(&app.swapchain, idx, []vk.SubmitInfo{submit})
+	present_info := vki.Queue_Present_Info {
+		image_index = idx,
+		submit_infos = {submit},
+		swapchain = app.swapchain
+	}
+	res = vki.queue_present(&app.client_state, app.gfx_queue, present_info)
 	ensure(res == .SUCCESS)
 
 	app.frame_rendered[idx] = true
@@ -265,7 +274,7 @@ init_app :: proc(app: ^App, width, height: i32) {
 	get_registry := wl.Display_Get_Registry_Request {
 		display = wl.display,
 	}
-	app.wl_registry, _ = client.request_queue(&app.client_state, get_registry)
+	app.wl_registry, _ = wlc.request_queue(&app.client_state, get_registry)
 
 	err := register_global_objects(app)
 	ensure(err == nil)
@@ -274,55 +283,48 @@ init_app :: proc(app: ^App, width, height: i32) {
 	create_surface := wl.Compositor_Create_Surface_Request {
 		compositor = app.wl_compositor,
 	}
-	app.wl_surface, _ = client.request_queue(&app.client_state, create_surface)
-	app.surface = {
-		client       = &app.client_state,
-		wl_surface   = app.wl_surface,
-		linux_dmabuf = app.linux_dmabuf,
-		w            = width,
-		h            = height,
-	}
+	app.wl_surface, _ = wlc.request_queue(&app.client_state, create_surface)
 
 	get_xdg_surface := xdg.Wm_Base_Get_Xdg_Surface_Request {
 		wm_base = app.xdg_wm_base,
 		surface = app.wl_surface,
 	}
-	app.xdg_surface, _ = client.request_queue(&app.client_state, get_xdg_surface)
+	app.xdg_surface, _ = wlc.request_queue(&app.client_state, get_xdg_surface)
 
 	get_toplevel := xdg.Surface_Get_Toplevel_Request {
 		surface = app.xdg_surface,
 	}
-	app.xdg_toplevel, _ = client.request_queue(&app.client_state, get_toplevel)
+	app.xdg_toplevel, _ = wlc.request_queue(&app.client_state, get_toplevel)
 
 	get_keyboard := wl.Seat_Get_Keyboard_Request {
 		seat = app.wl_seat,
 	}
-	app.wl_keyboard, _ = client.request_queue(&app.client_state, get_keyboard)
+	app.wl_keyboard, _ = wlc.request_queue(&app.client_state, get_keyboard)
 
 	surface_commit := wl.Surface_Commit_Request {
 		surface = app.wl_surface,
 	}
-	client.request_queue(&app.client_state, surface_commit)
+	wlc.request_queue(&app.client_state, surface_commit)
 
 	app.w, app.h = width, height
 }
 
-register_global_objects :: proc(app: ^App) -> client.Error {
-	client.roundtrip(&app.client_state) or_return
-	for ev in client.poll_event(&app.client_state) {
+register_global_objects :: proc(app: ^App) -> wlc.Error {
+	wlc.roundtrip(&app.client_state) or_return
+	for ev in wlc.poll_event(&app.client_state) {
 		#partial switch e in ev {
 		case wl.Display_Error_Event:
 			log.error(e.message)
 		case wl.Registry_Global_Event:
 			switch e.interface {
 			case wl.COMPOSITOR_INTERFACE:
-				app.wl_compositor = client.bind_compositor(&app.client_state, app.wl_registry, e) or_return
+				app.wl_compositor = wlc.bind_compositor(&app.client_state, app.wl_registry, e) or_return
 			case xdg.WM_BASE_INTERFACE:
-				app.xdg_wm_base = client.bind_wm_base(&app.client_state, app.wl_registry, e) or_return
+				app.xdg_wm_base = wlc.bind_wm_base(&app.client_state, app.wl_registry, e) or_return
 			case dmabuf.DMABUF_INTERFACE:
-				app.linux_dmabuf = client.bind_dmabuf(&app.client_state, app.wl_registry, e) or_return
+				app.linux_dmabuf = wlc.bind_dmabuf(&app.client_state, app.wl_registry, e) or_return
 			case wl.SEAT_INTERFACE:
-				app.wl_seat = client.bind_seat(&app.client_state, app.wl_registry, e) or_return
+				app.wl_seat = wlc.bind_seat(&app.client_state, app.wl_registry, e) or_return
 			}
 		}
 	}
@@ -351,15 +353,18 @@ select_physical_device :: proc(p_devices: []vk.PhysicalDevice) -> (vk.PhysicalDe
 }
 
 handle_event :: proc(app: ^App) {
-	err := client.roundtrip(&app.client_state)
+	err := wlc.roundtrip(&app.client_state)
 	if err != nil {
 		log.error(err)
 		os.exit(1)
 	}
-	for ev in client.poll_event(&app.client_state) {
+	for ev in wlc.poll_event(&app.client_state) {
 		#partial switch e in ev {
 		case wl.Display_Error_Event:
-			log.error(e.object_id, e.code, e.message)
+			if e.object_id == u32(wl.display) {
+				code := wl.Display_Error(e.code)
+				log.error("wl_display", code, e.message)
+			}
 		case wl.Buffer_Release_Event:
 			app.img_free = true
 		case wl.Keyboard_Keymap_Event:
@@ -375,13 +380,13 @@ handle_event :: proc(app: ^App) {
 				wm_base = app.xdg_wm_base,
 				serial  = e.serial,
 			}
-			client.request_queue(&app.client_state, pong)
+			wlc.request_queue(&app.client_state, pong)
 		case xdg.Surface_Configure_Event:
 			ack_configure := xdg.Surface_Ack_Configure_Request {
 				surface = app.xdg_surface,
 				serial  = e.serial,
 			}
-			client.request_queue(&app.client_state, ack_configure)
+			wlc.request_queue(&app.client_state, ack_configure)
 			app.configured = true
 			app.img_free = true
 
