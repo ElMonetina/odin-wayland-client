@@ -5,7 +5,7 @@ like image memory allocation and swapchain management.
 */
 package vulkan_integration
 
-import client "../"
+import wlc "../"
 import dmabuf "../linux_dmabuf_v1"
 import wl "../wayland"
 import "base:runtime"
@@ -187,23 +187,15 @@ query_memory_fd :: proc(device: vk.Device, mem: vk.DeviceMemory) -> (fd: linux.F
 	return
 }
 
-Surface :: struct {
-	client:       ^client.Client,
-	wl_surface:   wl.Surface,
-	linux_dmabuf: dmabuf.Dmabuf,
-	w, h:         i32,
-}
-
 destroy_surface :: proc() {}
 
 Swapchain :: struct {
-	surface:       Surface,
 	device:        vk.Device,
-	queue:         vk.Queue,
+	surface:       wl.Surface,
 	images:        []vk.Image,
 	images_mem:    []vk.DeviceMemory,
 	dmabuf_fd:     []linux.Fd,
-	wl_buffers:    []wl.Buffer,
+	buffers:       []wl.Buffer,
 	buffer_params: []dmabuf.Buffer_Params,
 	fences:        []vk.Fence,
 	image_index:   int,
@@ -212,16 +204,19 @@ Swapchain :: struct {
 // TODO: have an image count, allocate slices to that length.<
 // also have a buffer_params config.
 Swapchain_Create_Info :: struct {
-	surface:             Surface,
-	buffer_params_flags: dmabuf.Buffer_Params_Flags_Set,
-	image_create_info:   Image_Create_Info,
-	image_count:         uint,
+	physical_device:           vk.PhysicalDevice,
+	device:                    vk.Device,
+	linux_dmabuf:              dmabuf.Dmabuf,
+	surface:                   wl.Surface,
+	width, height:             i32,
+	buffer_params_flags:       dmabuf.Buffer_Params_Flags_Set,
+	image_create_info:         Image_Create_Info,
+	image_count:               uint,
 }
 
-create_swapchain :: proc(p_device: vk.PhysicalDevice, device: vk.Device, queue: vk.Queue, create_info: Swapchain_Create_Info, allocator: ^vk.AllocationCallbacks = nil) -> (sc: Swapchain, res: vk.Result) {
+create_swapchain :: proc(client: ^wlc.Client, create_info: Swapchain_Create_Info, allocator: ^vk.AllocationCallbacks = nil) -> (sc: Swapchain, res: vk.Result) {
+	sc.device = create_info.device
 	sc.surface = create_info.surface
-	sc.device = device
-	sc.queue = queue
 
 	fourcc := fourcc_from_vulkan(create_info.image_create_info.format)
 	stride := u32(create_info.image_create_info.plane_layouts[0].rowPitch)
@@ -230,24 +225,24 @@ create_swapchain :: proc(p_device: vk.PhysicalDevice, device: vk.Device, queue: 
 		image_count = 2
 	}
 
-	sc.images = make([]vk.Image, image_count)
-	sc.images_mem = make([]vk.DeviceMemory, image_count)
-	sc.dmabuf_fd = make([]linux.Fd, image_count)
-	sc.wl_buffers = make([]wl.Buffer, image_count)
+	sc.images        = make([]vk.Image, image_count)
+	sc.images_mem    = make([]vk.DeviceMemory, image_count)
+	sc.dmabuf_fd     = make([]linux.Fd, image_count)
+	sc.buffers       = make([]wl.Buffer, image_count)
 	sc.buffer_params = make([]dmabuf.Buffer_Params, image_count)
-	sc.fences = make([]vk.Fence, image_count)
+	sc.fences        = make([]vk.Fence, image_count)
 
 
 	for i in 0 ..< image_count {
-		sc.images[i] = create_image(device, create_info.image_create_info, allocator) or_return
-		sc.images_mem[i] = allocate_image_memory(p_device, device, sc.images[i], create_info.image_create_info.format, create_info.image_create_info.type, create_info.image_create_info.usage) or_return
-		vk.BindImageMemory(device, sc.images[i], sc.images_mem[i], 0) or_return
-		sc.dmabuf_fd[i] = query_memory_fd(device, sc.images_mem[i]) or_return
+		sc.images[i] = create_image(create_info.device, create_info.image_create_info, allocator) or_return
+		sc.images_mem[i] = allocate_image_memory(create_info.physical_device, create_info.device, sc.images[i], create_info.image_create_info.format, create_info.image_create_info.type, create_info.image_create_info.usage) or_return
+		vk.BindImageMemory(create_info.device, sc.images[i], sc.images_mem[i], 0) or_return
+		sc.dmabuf_fd[i] = query_memory_fd(create_info.device, sc.images_mem[i]) or_return
 
 		create_params := dmabuf.Dmabuf_Create_Params_Request {
-			dmabuf = create_info.surface.linux_dmabuf,
+			dmabuf = create_info.linux_dmabuf,
 		}
-		params_id, _ := client.request_queue(create_info.surface.client, create_params)
+		params_id, _ := wlc.request_queue(client, create_params)
 		sc.buffer_params[i] = params_id
 
 		params_add := dmabuf.Buffer_Params_Add_Request {
@@ -258,40 +253,40 @@ create_swapchain :: proc(p_device: vk.PhysicalDevice, device: vk.Device, queue: 
 			modifier_lo   = u32(create_info.image_create_info.drm_format_modifier),
 			modifier_hi   = u32(create_info.image_create_info.drm_format_modifier >> 32),
 		}
-		client.request_queue(create_info.surface.client, params_add)
+		wlc.request_queue(client, params_add)
 
 		create_immed := dmabuf.Buffer_Params_Create_Immed_Request {
 			buffer_params = params_id,
-			width         = create_info.surface.w,
-			height        = create_info.surface.h,
+			width         = create_info.width,
+			height        = create_info.height,
 			format        = fourcc,
 			flags         = create_info.buffer_params_flags,
 		}
-		sc.wl_buffers[i], _ = client.request_queue(create_info.surface.client, create_immed)
+		sc.buffers[i], _ = wlc.request_queue(client, create_immed)
 
 		fence_ci := vk.FenceCreateInfo {
 			sType = .FENCE_CREATE_INFO,
 			flags = {.SIGNALED},
 		}
-		vk.CreateFence(device, &fence_ci, allocator, &sc.fences[i]) or_return
+		vk.CreateFence(create_info.device, &fence_ci, allocator, &sc.fences[i]) or_return
 	}
 
 	sc.image_index = 0
 	return
 }
 
-destroy_swapchain :: proc(sc: ^Swapchain, allocator: ^vk.AllocationCallbacks = nil) -> vk.Result {
+destroy_swapchain :: proc(client: ^wlc.Client, sc: ^Swapchain, allocator: ^vk.AllocationCallbacks = nil) -> vk.Result {
 	vk.DeviceWaitIdle(sc.device) or_return
 
 	for i in 0 ..< len(sc.images) {
 		destroy := wl.Buffer_Destroy_Request {
-			buffer = sc.wl_buffers[i],
+			buffer = sc.buffers[i],
 		}
-		client.request_queue(sc.surface.client, destroy)
+		wlc.request_queue(client, destroy)
 		params_destroy := dmabuf.Buffer_Params_Destroy_Request {
 			buffer_params = sc.buffer_params[i],
 		}
-		client.request_queue(sc.surface.client, params_destroy)
+		wlc.request_queue(client, params_destroy)
 		linux.close(sc.dmabuf_fd[i])
 
 		vk.DestroyFence(sc.device, sc.fences[i], allocator)
@@ -301,7 +296,7 @@ destroy_swapchain :: proc(sc: ^Swapchain, allocator: ^vk.AllocationCallbacks = n
 	delete(sc.images)
 	delete(sc.images_mem)
 	delete(sc.dmabuf_fd)
-	delete(sc.wl_buffers)
+	delete(sc.buffers)
 	delete(sc.buffer_params)
 	delete(sc.fences)
 	return .SUCCESS
@@ -317,17 +312,23 @@ swapchain_acquire_next_image :: proc(sc: ^Swapchain) -> (image: vk.Image, idx: i
 	return
 }
 
-swapchain_present :: proc(sc: ^Swapchain, idx: int, submit_info: []vk.SubmitInfo) -> vk.Result {
-	vk.QueueSubmit(sc.queue, u32(len(submit_info)), raw_data(submit_info), sc.fences[idx]) or_return
+Queue_Present_Info :: struct {
+	submit_infos: []vk.SubmitInfo,
+	swapchain:   Swapchain,
+	image_index: int,
+}
+
+queue_present :: proc(client: ^wlc.Client, queue: vk.Queue, info: Queue_Present_Info) -> vk.Result {
+	vk.QueueSubmit(queue, u32(len(info.submit_infos)), raw_data(info.submit_infos), info.swapchain.fences[info.image_index]) or_return
 	attach := wl.Surface_Attach_Request {
-		surface = sc.surface.wl_surface,
-		buffer  = sc.wl_buffers[idx],
+		surface = info.swapchain.surface,
+		buffer  = info.swapchain.buffers[info.image_index],
 	}
-	client.request_queue(sc.surface.client, attach)
+	wlc.request_queue(client, attach)
 	commit := wl.Surface_Commit_Request {
-		surface = sc.surface.wl_surface,
+		surface = info.swapchain.surface,
 	}
-	client.request_queue(sc.surface.client, commit)
+	wlc.request_queue(client, commit)
 	return .SUCCESS
 }
 
