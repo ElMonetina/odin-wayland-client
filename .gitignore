@@ -9,6 +9,8 @@
 !example/
 !example/**/
 !example/**/*.odin
+!scanner/
+!scanner/**
 !vulkan_integration/
 !vulkan_integration/**
 !README.md
