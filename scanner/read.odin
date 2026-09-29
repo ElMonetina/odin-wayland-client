@@ -1,10 +1,63 @@
 package scanner
 
+import "core:log"
+import "core:rexcode/isa/ppc_vle/tablegen/generated"
 import "core:unicode/utf8"
+import "core:os"
+import "core:strings"
 import "core:encoding/xml"
 
-create_protocol :: proc(elements: []xml.Element, allocator := context.temp_allocator) -> Protocol {
+TEMP_PATH :: "protocols"
+
+Protocol :: struct {
+	name:                    string,
+	pkg:                     string,
+	copyright:               string,
+	interfaces:              [dynamic]Interface,
+	current_interface_index: int,
+	current_request_index  : int,
+	current_event_index    : int,
+	current_enum_index     : int,
+}
+
+Interface :: struct {
+	name:        string,
+	version:     string,
+	description: string,
+	prexif:      string,
+	requests:    [dynamic]Message,
+	events:      [dynamic]Message,
+	enums:       [dynamic]Enum,
+}
+
+Message :: struct {
+	name:        string,
+	description: string,
+	args:        [dynamic]Arg,
+}
+
+Arg :: struct {
+	name:      string,
+	type:      string,
+	interface: string,
+}
+
+Enum :: struct {
+	name:        string,
+	description: string,
+	entries:     [dynamic]Entry,
+	is_bit_set:  bool,
+}
+
+Entry :: struct {
+	name: string,
+	value: string,
+}
+
+create_protocol :: proc(elements: []xml.Element, file_name: string, allocator := context.temp_allocator) -> Protocol {
 	p: Protocol
+	p.pkg = package_name_from_file_name(file_name, allocator)
+	log.debug(p.pkg)
 	p.interfaces = make([dynamic]Interface, allocator)
 	p.current_interface_index = -1
 	p.current_request_index   = -1
@@ -12,6 +65,8 @@ create_protocol :: proc(elements: []xml.Element, allocator := context.temp_alloc
 	p.current_enum_index      = -1
 	for elem in elements {
 		switch elem.ident {
+		case "protocol":
+			p.name = elem.attribs[0].val
 		case "interface":
 			interface := create_interface(elem, &p)
 			append(&p.interfaces, interface)
@@ -56,6 +111,8 @@ create_interface :: proc(e: xml.Element, p: ^Protocol, allocator := context.temp
 	i.events   = make([dynamic]Message, allocator)
 	i.enums    = make([dynamic]Enum, allocator)
 	i.name     = e.attribs[0].val
+	i.prexif   = find_prefix(i.name)
+	i.version  = e.attribs[1].val
 	p.current_interface_index += 1
 	p.current_request_index   = -1
 	p.current_event_index     = -1
@@ -87,19 +144,31 @@ create_entry := proc(e: xml.Element) -> Entry {
 	return entry
 }
 
-find_protocol_prefix :: proc(name: string) -> string {
-	prefix := make([dynamic]rune, context.temp_allocator)
-	for r in name {
-		append(&prefix, r)
-		if r == '_' {
-			return utf8.runes_to_string(prefix[:], context.temp_allocator)
-		}
-	}
-	return ""
-}
-
 create_arg :: proc(e: xml.Element) -> Arg {
 	name := e.attribs[0].val
 	type := e.attribs[1].val
-	return {name, type}
+	interface: string
+	if len(e.attribs) > 2 {
+		interface = e.attribs[2].val if e.attribs[2].key == "interface" else ""
+	}
+	return {name, type, interface}
+}
+
+package_name_from_file_name :: proc(name: string, allocator := context.temp_allocator) -> string {
+	pkg_runes := make([dynamic]rune, allocator)
+	for r in name {
+		if strings.is_separator(r) {
+			break
+		}
+		append(&pkg_runes, r)
+	}
+	candidate_prefix := utf8.runes_to_string(pkg_runes[:])
+	if candidate_prefix == "xdg" {
+		return candidate_prefix
+	} else if candidate_prefix == "ext" {
+		return candidate_prefix
+	} else if name == "wayland.xml" {
+		return os.stem(name)
+	}
+	return "wp"
 }

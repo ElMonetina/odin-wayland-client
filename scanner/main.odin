@@ -16,55 +16,13 @@
 //  .../
 package scanner
 
+import "vendor:darwin/CoreVideo"
 import "core:unicode/utf8"
 import "core:strings"
 import "core:log"
 import "core:os"
 
 import "core:encoding/xml"
-
-TEMP_PATH :: "protocols"
-
-Protocol :: struct {
-	copyright:               string,
-	interfaces:              [dynamic]Interface,
-	current_interface_index: int,
-	current_request_index  : int,
-	current_event_index    : int,
-	current_enum_index     : int,
-
-}
-
-Interface :: struct {
-	name:        string,
-	description: string,
-	requests:    [dynamic]Message,
-	events:      [dynamic]Message,
-	enums:       [dynamic]Enum,
-}
-
-Message :: struct {
-	name:        string,
-	description: string,
-	args:        [dynamic]Arg,
-}
-
-Arg :: struct {
-	name: string,
-	type: string,
-}
-
-Enum :: struct {
-	name:        string,
-	description: string,
-	entries:     [dynamic]Entry,
-	is_bit_set:  bool,
-}
-
-Entry :: struct {
-	name: string,
-	value: string,
-}
 
 main :: proc() {
 	defer free_all(context.temp_allocator)
@@ -92,7 +50,7 @@ main :: proc() {
 			log.error(err)
 			return
 		}
-		p := create_protocol(doc.elements[:])
+		p := create_protocol(doc.elements[:], protocol_file.name)
 		append(&protocols, p)
 	}
 	sb: strings.Builder
@@ -103,6 +61,25 @@ main :: proc() {
 			write_client_protocol(&sb, protocol)
 		case "server":
 		}
+		dir: string
+		if protocol.pkg == "wayland" {
+			dir = strings.concatenate({target, "/"}, context.temp_allocator)
+		} else {
+			dir = strings.concatenate({target, "/", protocol.pkg, "/"}, context.temp_allocator)
+		}
+		file: string
+		file = strings.concatenate({dir, "/", protocol.name, ".odin"})
+		_ = os.remove_all(dir)
+		dir_err := os.make_directory_all(dir)
+		if dir_err != nil {
+			log.error(dir_err)
+			return
+		}
+		write_err := os.write_entire_file(file, sb.buf[:])
+		if write_err != nil {
+			log.error(write_err)
+			return
+		}
+		strings.builder_reset(&sb)
 	}
-	log.debug(protocols[0])
 }

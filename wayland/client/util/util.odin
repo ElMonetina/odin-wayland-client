@@ -50,9 +50,9 @@ write_string :: proc(msg: ^[dynamic]byte, str: string) -> (num_appended: int, er
 	num_appended  = write_u32(msg, u32(str.len + 1))or_return
 	num_appended += append(msg, ..str.data[:str.len])or_return
 	num_appended += append(msg, 0)or_return
-	n_pad := round_up_word(str.len + 1)
+	n_pad        := round_up_word(str.len + 1)
 	num_appended += write_padding(msg, n_pad)or_return
-	return 
+	return
 }
 
 write_fixed :: proc(msg: ^[dynamic]byte, f: Fixed) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {

@@ -1,6 +1,9 @@
 *
 !.gitignore
 !build.sh
+!client/
+!client/**/
+!client/**/*.odin
 !wayland/
 !wayland/**/
 !wayland/**/*.odin
