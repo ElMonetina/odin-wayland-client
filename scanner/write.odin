@@ -12,7 +12,7 @@ write_client_protocol :: proc(sb: ^strings.Builder, p: Protocol, allocator := co
 	}
 	fmt.sbprintf(sb, "import \"core:sys/linux\"\n")
 	fmt.sbprintf(sb, "import \"base:runtime\"\n\n")
-	fmt.sbprintf(sb, "/*%v\n*/\n\n", p.copyright)
+	fmt.sbprintf(sb, "/*\n\t%v\n*/\n\n", p.copyright)
 	for interface in p.interfaces {
 		write_client_interface(sb, interface, p.pkg, allocator)
 	}

@@ -5,7 +5,8 @@ import "../wayland"
 import "core:sys/linux"
 import "base:runtime"
 
-/*Copyright © 2014, 2015 Collabora, Ltd.
+/*
+	Copyright © 2014, 2015 Collabora, Ltd.
 
     Permission is hereby granted, free of charge, to any person obtaining a
     copy of this software and associated documentation files (the "Software"),
@@ -795,3 +796,4 @@ Linux_Dmabuf_Feedback_V1_Tranche_Flags :: enum u32 {
 	Sampling = 1,
 }
 Linux_Dmabuf_Feedback_V1_Tranche_Flags_Set :: bit_set[Linux_Dmabuf_Feedback_V1_Tranche_Flags; u32]
+

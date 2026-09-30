@@ -4,7 +4,8 @@ import "../../util"
 import "core:sys/linux"
 import "base:runtime"
 
-/*Copyright © 2008-2011 Kristian Høgsberg
+/*
+	Copyright © 2008-2011 Kristian Høgsberg
     Copyright © 2010-2011 Intel Corporation
     Copyright © 2012-2013 Collabora, Ltd.
 

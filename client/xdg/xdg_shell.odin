@@ -5,7 +5,8 @@ import "../wayland"
 import "core:sys/linux"
 import "base:runtime"
 
-/*Copyright © 2008-2013 Kristian Høgsberg
+/*
+	Copyright © 2008-2013 Kristian Høgsberg
     Copyright © 2013      Rafael Antognolli
     Copyright © 2013      Jasper St. Pierre
     Copyright © 2010-2013 Intel Corporation
