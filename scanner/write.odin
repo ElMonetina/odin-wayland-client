@@ -3,18 +3,16 @@ package scanner
 import "core:log"
 import "core:fmt"
 import "core:strings"
-import "core:strconv"
 
 write_client_protocol :: proc(sb: ^strings.Builder, p: Protocol, allocator := context.temp_allocator) {
 	fmt.sbprintf(sb, "package %v\n\n", p.pkg)
-	if p.pkg == "wayland" {
-		fmt.sbprintf(sb, "import \"../util\"\n")
-	} else {
-		fmt.sbprintf(sb, "import \"../../util\"\n")
-		fmt.sbprintf(sb, "import wayland \"../\"\n")
+	fmt.sbprintf(sb, "import \"../../util\"\n")
+	if p.pkg != "wayland" {
+		fmt.sbprintf(sb, "import wayland \"../wayland\"\n")
 	}
 	fmt.sbprintf(sb, "import \"core:sys/linux\"\n")
 	fmt.sbprintf(sb, "import \"base:runtime\"\n\n")
+	fmt.sbprintf(sb, "/*%v\n*/\n\n", p.copyright)
 	for interface in p.interfaces {
 		write_client_interface(sb, interface, p.pkg, allocator)
 	}
@@ -26,15 +24,17 @@ write_client_interface :: proc(sb: ^strings.Builder, interface: Interface, pkg_n
 	stripped_name = strings.to_upper(stripped_name, allocator)
 	fmt.sbprintf(sb, "%v_INTERFACE :: \"%v\"\n", stripped_name, name)
 	fmt.sbprintf(sb, "%v_VERSION   :: %v\n\n", stripped_name, interface.version)
+	write_description(sb, interface.description)
 	stripped_name = strings.to_ada_case(stripped_name, allocator)
 	fmt.sbprintf(sb, "%v :: distinct u32\n", stripped_name)
 	fmt.sbprintf(sb, "\n")
 	for req, i in interface.requests {
 		stripped_name = strings.to_ada_case(stripped_name, allocator)
-		req_name := req.name
+		req_name := fmt.tprintf("%v_Request", req.name)
 		req_name = strings.to_ada_case(req_name, allocator)
 		opcode := fmt.tprintf("%v_%v_OPCODE", strings.to_upper(stripped_name, allocator), strings.to_upper(req_name, allocator))
 		fmt.sbprintf(sb, "%v :: %v\n", opcode, i)
+		write_description(sb, req.description)
 		fmt.sbprintf(sb, "%v_%v :: struct {{\n", stripped_name, req_name)
 		fmt.sbprintf(sb, "\t%v: %v,\n", strings.to_lower(stripped_name, allocator), strings.to_ada_case(stripped_name, allocator))
 		returns_new_id: bool
@@ -96,8 +96,9 @@ write_client_interface :: proc(sb: ^strings.Builder, interface: Interface, pkg_n
 	}
 	for ev in interface.events {
 		stripped_name = strings.to_ada_case(stripped_name, allocator)
-		ev_name := ev.name
+		ev_name := fmt.tprintf("%v_Event", ev.name)
 		event := fmt.tprintf("%v_%v", strings.to_lower(stripped_name, allocator), strings.to_lower(ev_name, allocator))
+		write_description(sb, ev.description)
 		fmt.sbprintf(sb, "%v :: struct {{\n", strings.to_ada_case(event, allocator))
 		fmt.sbprintf(sb, "\t%v: %v,\n", strings.to_lower(stripped_name, allocator), strings.to_ada_case(stripped_name, allocator))
 		returns_new_id: bool
@@ -147,6 +148,28 @@ write_client_interface :: proc(sb: ^strings.Builder, interface: Interface, pkg_n
 		fmt.sbprintf(sb, "}\n")
 		fmt.sbprintf(sb, "\n")
 	}
+	for e in interface.enums {
+		write_description(sb, e.description)
+		enum_name := fmt.tprintf("%v_%v", strings.to_ada_case(stripped_name, allocator), strings.to_ada_case(e.name, allocator))
+		fmt.sbprintf(sb, "%v :: enum u32 {{\n", enum_name)
+		for entry in e.entries {
+			value := parse_enum_value(entry.value)
+			if e.is_bit_set {
+				index := bit_index(value)
+				if index < 0 {
+					continue
+				}
+				value = index
+			}
+			fmt.sbprintf(sb, "\t%v = %v,\n", ident(strings.to_ada_case(entry.name, allocator)), value)
+		}
+		fmt.sbprintf(sb, "}\n")
+		if e.is_bit_set {
+			fmt.sbprintf(sb, "%v_Set :: bit_set[%v; u32]\n\n", enum_name, enum_name)
+		} else {
+			fmt.sbprintf(sb, "\n")
+		}
+	}
 }
 
 write_arg :: proc(sb: ^strings.Builder, arg: Arg, pkg_name: string, allocator := context.temp_allocator) {
@@ -155,14 +178,56 @@ write_arg :: proc(sb: ^strings.Builder, arg: Arg, pkg_name: string, allocator :=
 		fmt.sbprintf(sb, "\t%v: u32,\n", arg.name)
 	} else if arg.interface != "" {
 		prefix := find_prefix(arg.interface)
+		object := strings.to_ada_case(strings.trim_prefix(arg.interface, prefix), allocator)
 		if prefix == "wl_" && pkg_name != "wayland" {
-			fmt.sbprintf(sb, "\t%v: wayland.%v,\n", arg.name, strings.to_ada_case(arg.name, allocator))
+			fmt.sbprintf(sb, "\t%v: wayland.%v,\n", arg.name, object)
 		} else {
-			type_prefix := find_prefix(arg.interface)
-			interface   := strings.trim_prefix(arg.interface, type_prefix)
-			fmt.sbprintf(sb, "\t%v: %v,\n", arg.name, strings.to_ada_case(interface, allocator))
+			fmt.sbprintf(sb, "\t%v: %v,\n", arg.name, object)
 		}
 	} else {
 		fmt.sbprintf(sb, "\t%v: %v,\n", arg.name, odin_type)
 	}
+}
+
+write_description :: proc(sb: ^strings.Builder, desc: string) {
+	if desc == "" {
+		return
+	}
+	fmt.sbprintf(sb, "/*\n\t%v\n*/\n", desc)
+}
+
+write_client_glue_code :: proc(sb: ^strings.Builder, protocols: []Protocol, allocator := context.temp_allocator) {
+	fmt.sbprintf(sb, "package client\n\n")
+	fmt.sbprintf(sb, "import \"wayland\"\n")
+	for p in protocols {
+		if p.pkg != "wayland" {
+			fmt.sbprintf(sb, "import \"%v\"\n", p.pkg)
+		}
+	}
+	fmt.sbprintf(sb, "\n")
+	fmt.sbprintf(sb, "Request :: union {{\n")
+	for p in protocols {
+		for i in p.interfaces {
+			prefix := find_prefix(i.name)
+			stripped_name := strings.trim_prefix(i.name, prefix)
+			for req in i.requests {
+				name := fmt.tprintf("%v.%v_%v_Request", p.pkg, strings.to_ada_case(stripped_name, allocator), strings.to_ada_case(req.name, allocator))
+				fmt.sbprintf(sb, "\t%v,\n", name)
+			}
+		}
+	}
+	fmt.sbprintf(sb, "}\n\n")
+	fmt.sbprintf(sb, "Event :: union {{\n")
+	for p in protocols {
+		for i in p.interfaces {
+			prefix := find_prefix(i.name)
+			stripped_name := strings.trim_prefix(i.name, prefix)
+			for ev in i.events {
+				name := fmt.tprintf("%v.%v_%v_Event", p.pkg, strings.to_ada_case(stripped_name, allocator), strings.to_ada_case(ev.name, allocator))
+				fmt.sbprintf(sb, "\t%v,\n", name)
+			}
+		}
+	}
+	fmt.sbprintf(sb, "}\n\n")
+
 }

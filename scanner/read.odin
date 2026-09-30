@@ -1,7 +1,6 @@
 package scanner
 
 import "core:log"
-import "core:rexcode/isa/ppc_vle/tablegen/generated"
 import "core:unicode/utf8"
 import "core:os"
 import "core:strings"
@@ -57,7 +56,6 @@ Entry :: struct {
 create_protocol :: proc(elements: []xml.Element, file_name: string, allocator := context.temp_allocator) -> Protocol {
 	p: Protocol
 	p.pkg = package_name_from_file_name(file_name, allocator)
-	log.debug(p.pkg)
 	p.interfaces = make([dynamic]Interface, allocator)
 	p.current_interface_index = -1
 	p.current_request_index   = -1
@@ -67,6 +65,32 @@ create_protocol :: proc(elements: []xml.Element, file_name: string, allocator :=
 		switch elem.ident {
 		case "protocol":
 			p.name = elem.attribs[0].val
+		case "copyright":
+			p.copyright = elem.value[0].(string)
+			parent := elem.parent
+			parent_kind := elements[parent].ident
+			switch parent_kind {
+			case "protocol":
+			}
+		case "description":
+			parent := elem.parent
+			parent_kind := elements[parent].ident
+			switch parent_kind {
+			case "interface":
+				interface := &p.interfaces[p.current_interface_index]
+				interface.description = elem.value[0].(string)
+			case "request":
+				msg := &p.interfaces[p.current_interface_index].requests[p.current_request_index]
+				if len(elem.value) > 0 {
+					msg.description = elem.value[0].(string)
+				}
+			case "event":
+				msg := &p.interfaces[p.current_interface_index].events[p.current_event_index]
+				msg.description = elem.value[0].(string)
+			case "enum":
+				e := &p.interfaces[p.current_interface_index].enums[p.current_enum_index]
+				e.description = elem.value[0].(string)
+			}
 		case "interface":
 			interface := create_interface(elem, &p)
 			append(&p.interfaces, interface)
@@ -129,19 +153,29 @@ create_message :: proc(e: xml.Element, allocator := context.temp_allocator) -> M
 
 create_enum :: proc(e: xml.Element, allocator := context.temp_allocator) -> Enum {
 	enumeration: Enum
-	enumeration.name = e.attribs[0].val
+	enumeration.name, _ = attrib_value(e, "name")
 	enumeration.entries = make([dynamic]Entry, allocator)
-	if len(e.attribs) > 1 {
-		enumeration.is_bit_set = e.attribs[1].key == "bitfield"
+	enumeration.is_bit_set = false
+	if bitfield, found := attrib_value(e, "bitfield"); found {
+		enumeration.is_bit_set = bitfield == "true"
 	}
 	return enumeration
 }
 
 create_entry := proc(e: xml.Element) -> Entry {
 	entry: Entry
-	entry.name  = e.attribs[0].val
-	entry.value = e.attribs[1].val
+	entry.name, _  = attrib_value(e, "name")
+	entry.value, _ = attrib_value(e, "value")
 	return entry
+}
+
+attrib_value :: proc(e: xml.Element, key: string) -> (value: string, found: bool) {
+	for attrib in e.attribs {
+		if attrib.key == key {
+			return attrib.val, true
+		}
+	}
+	return "", false
 }
 
 create_arg :: proc(e: xml.Element) -> Arg {

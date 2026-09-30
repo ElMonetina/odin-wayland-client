@@ -4,9 +4,9 @@
 // It outputs them in a wayland/client or wayland/server folder.
 // These folders have the following structure:
 // wayland_client/: # or wayland server
-// 	wayland.odin
-// 	client.odin
 // 	glue.odin
+// 	wayland/
+// 		wayland.odin
 //	wp/
 // 		linux_dmabuf.odin
 // 		...
@@ -21,7 +21,7 @@ import "core:unicode/utf8"
 import "core:strings"
 import "core:log"
 import "core:os"
-
+import "core:fmt"
 import "core:encoding/xml"
 
 main :: proc() {
@@ -44,7 +44,7 @@ main :: proc() {
 	defer delete(protocols)
 
 	for protocol_file in protocols_dir {
-		file_name := strings.concatenate({TEMP_PATH, "/", protocol_file.name}, context.temp_allocator)
+		file_name := fmt.tprintf("%v/%v", TEMP_PATH, protocol_file.name)
 		doc, err := xml.load_from_file(file_name, options = xml.DEFAULT_OPTIONS, error_handler = xml.default_error_handler, allocator = context.temp_allocator)
 		if err != nil {
 			log.error(err)
@@ -61,14 +61,8 @@ main :: proc() {
 			write_client_protocol(&sb, protocol)
 		case "server":
 		}
-		dir: string
-		if protocol.pkg == "wayland" {
-			dir = strings.concatenate({target, "/"}, context.temp_allocator)
-		} else {
-			dir = strings.concatenate({target, "/", protocol.pkg, "/"}, context.temp_allocator)
-		}
-		file: string
-		file = strings.concatenate({dir, "/", protocol.name, ".odin"})
+		dir := fmt.tprintf("%v/%v/", target, protocol.pkg)
+		file := fmt.tprintf("%v/%v.odin", dir, protocol.name)
 		_ = os.remove_all(dir)
 		dir_err := os.make_directory_all(dir)
 		if dir_err != nil {
@@ -82,4 +76,12 @@ main :: proc() {
 		}
 		strings.builder_reset(&sb)
 	}
+	write_client_glue_code(&sb, protocols[:])
+	file_name := fmt.tprintf("client/glue.odin")
+	write_err := os.write_entire_file(file_name, sb.buf[:])
+	if write_err != nil {
+		log.error(write_err)
+		return
+	}
+	_ = os.remove(fmt.tprintf("%v/wayland.odin", target))
 }
