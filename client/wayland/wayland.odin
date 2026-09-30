@@ -1,0 +1,4674 @@
+package wayland
+
+import "../../util"
+import "core:sys/linux"
+import "base:runtime"
+
+/*Copyright © 2008-2011 Kristian Høgsberg
+    Copyright © 2010-2011 Intel Corporation
+    Copyright © 2012-2013 Collabora, Ltd.
+
+    Permission is hereby granted, free of charge, to any person
+    obtaining a copy of this software and associated documentation files
+    (the "Software"), to deal in the Software without restriction,
+    including without limitation the rights to use, copy, modify, merge,
+    publish, distribute, sublicense, and/or sell copies of the Software,
+    and to permit persons to whom the Software is furnished to do so,
+    subject to the following conditions:
+
+    The above copyright notice and this permission notice (including the
+    next paragraph) shall be included in all copies or substantial
+    portions of the Software.
+
+    THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+    EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+    MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+    NONINFRINGEMENT.  IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS
+    BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN
+    ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
+    CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+    SOFTWARE.
+*/
+
+DISPLAY_INTERFACE :: "wl_display"
+DISPLAY_VERSION   :: 1
+
+/*
+	The core global object.  This is a special singleton object.  It
+      is used for internal Wayland protocol features.
+*/
+Display :: distinct u32
+
+DISPLAY_SYNC_REQUEST_OPCODE :: 0
+/*
+	The sync request asks the server to emit the 'done' event
+        on the returned wl_callback object.  Since requests are
+        handled in-order and events are delivered in-order, this can
+        be used as a barrier to ensure all previous requests and the
+        resulting events have been handled.
+
+        The object returned by this request will be destroyed by the
+        compositor after the callback is fired and as such the client must not
+        attempt to use it after that point.
+
+        The callback_data passed in the callback is undefined and should be ignored.
+*/
+Display_Sync_Request :: struct {
+	display: Display,
+	callback: Callback,
+}
+display_sync_request_write :: proc(buf: ^[dynamic]byte, req: Display_Sync_Request, new_id: u32) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
+	object := u32(req.display)
+	opcode := u16(DISPLAY_SYNC_REQUEST_OPCODE)
+	size   := u16(8 + size_of(new_id))
+	num_appended += util.write(buf, object, opcode, size) or_return
+	num_appended += util.write(buf, new_id) or_return
+	return
+}
+
+DISPLAY_GET_REGISTRY_REQUEST_OPCODE :: 1
+/*
+	This request creates a registry object that allows the client
+        to list and bind the global objects available from the
+        compositor.
+
+        It should be noted that the server side resources consumed in
+        response to a get_registry request can only be released when the
+        client disconnects, not when the client side proxy is destroyed.
+        Therefore, clients should invoke get_registry as infrequently as
+        possible to avoid wasting memory.
+*/
+Display_Get_Registry_Request :: struct {
+	display: Display,
+	registry: Registry,
+}
+display_get_registry_request_write :: proc(buf: ^[dynamic]byte, req: Display_Get_Registry_Request, new_id: u32) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
+	object := u32(req.display)
+	opcode := u16(DISPLAY_GET_REGISTRY_REQUEST_OPCODE)
+	size   := u16(8 + size_of(new_id))
+	num_appended += util.write(buf, object, opcode, size) or_return
+	num_appended += util.write(buf, new_id) or_return
+	return
+}
+
+/*
+	The error event is sent out when a fatal (non-recoverable)
+        error has occurred.  The object_id argument is the object
+        where the error occurred, most often in response to a request
+        to that object.  The code identifies the error and is defined
+        by the object interface.  As such, each interface defines its
+        own set of error codes.  The message is a brief description
+        of the error, for (debugging) convenience.
+*/
+Display_Error_Event :: struct {
+	display: Display,
+	object_id: u32,
+	code: u32,
+	message: string,
+}
+display_error_event_read :: proc(buf: []byte) -> (Display_Error_Event, int) {
+	e: Display_Error_Event
+	r: int
+	n := r
+	object_id: u32
+	object_id, r = util.read_u32(buf[n:]); n += r
+	e.object_id = (object_id)
+	e.code, r = util.read_u32(buf[n:]); n += r
+	e.message, r = util.read_string(buf[n:]); n += r
+	return e, n
+}
+
+/*
+	This event is used internally by the object ID management logic.
+
+        When the server stops using an object created by the client, the server
+        sends this event. In particular, after sending this event, the server
+        will no longer send any events that contain the object as the receiver
+        or as an argument.
+
+        When the client receives this event, it knows that it can reuse the
+        object ID.
+*/
+Display_Delete_Id_Event :: struct {
+	display: Display,
+	id: u32,
+}
+display_delete_id_event_read :: proc(buf: []byte) -> (Display_Delete_Id_Event, int) {
+	e: Display_Delete_Id_Event
+	r: int
+	n := r
+	e.id, r = util.read_u32(buf[n:]); n += r
+	return e, n
+}
+
+/*
+	These errors are global and can be emitted in response to any
+        server request.
+*/
+Display_Error :: enum u32 {
+	Invalid_Object = 0,
+	Invalid_Method = 1,
+	No_Memory = 2,
+	Implementation = 3,
+}
+
+REGISTRY_INTERFACE :: "wl_registry"
+REGISTRY_VERSION   :: 1
+
+/*
+	The singleton global registry object.  The server has a number of
+      global objects that are available to all clients.  These objects
+      typically represent an actual object in the server (for example,
+      an input device) or they are singleton objects that provide
+      extension functionality.
+
+      When a client creates a registry object, the registry object
+      will emit a global event for each global currently in the
+      registry.  Globals come and go as a result of device or
+      monitor hotplugs, reconfiguration or other events, and the
+      registry will send out global and global_remove events to
+      keep the client up to date with the changes.  To mark the end
+      of the initial burst of events, the client can use the
+      wl_display.sync request immediately after calling
+      wl_display.get_registry.
+
+      A client can bind to a global object by using the bind
+      request.  This creates a client-side handle that lets the object
+      emit events to the client and lets the client invoke requests on
+      the object.
+*/
+Registry :: distinct u32
+
+REGISTRY_BIND_REQUEST_OPCODE :: 0
+/*
+	Binds a new, client-created object to the server using the
+        specified name as the identifier.
+*/
+Registry_Bind_Request :: struct {
+	registry: Registry,
+	name: u32,
+	id: u32,
+}
+registry_bind_request_write :: proc(buf: ^[dynamic]byte, req: Registry_Bind_Request, new_id: u32) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
+	object := u32(req.registry)
+	opcode := u16(REGISTRY_BIND_REQUEST_OPCODE)
+	size   := u16(8 + size_of(req.name) + size_of(new_id))
+	num_appended += util.write(buf, object, opcode, size) or_return
+	num_appended += util.write(buf, req.name) or_return
+	num_appended += util.write(buf, new_id) or_return
+	return
+}
+
+/*
+	Notify the client of global objects.
+
+        The event notifies the client that a global object with
+        the given name is now available, and it implements the
+        given version of the given interface.
+*/
+Registry_Global_Event :: struct {
+	registry: Registry,
+	name: u32,
+	interface: string,
+	version: u32,
+}
+registry_global_event_read :: proc(buf: []byte) -> (Registry_Global_Event, int) {
+	e: Registry_Global_Event
+	r: int
+	n := r
+	e.name, r = util.read_u32(buf[n:]); n += r
+	e.interface, r = util.read_string(buf[n:]); n += r
+	e.version, r = util.read_u32(buf[n:]); n += r
+	return e, n
+}
+
+/*
+	Notify the client of removed global objects.
+
+        This event notifies the client that the global identified
+        by name is no longer available.  If the client bound to
+        the global using the bind request, the client should now
+        destroy that object.
+
+        The object remains valid and requests to the object will be
+        ignored until the client destroys it, to avoid races between
+        the global going away and a client sending a request to it.
+*/
+Registry_Global_Remove_Event :: struct {
+	registry: Registry,
+	name: u32,
+}
+registry_global_remove_event_read :: proc(buf: []byte) -> (Registry_Global_Remove_Event, int) {
+	e: Registry_Global_Remove_Event
+	r: int
+	n := r
+	e.name, r = util.read_u32(buf[n:]); n += r
+	return e, n
+}
+
+CALLBACK_INTERFACE :: "wl_callback"
+CALLBACK_VERSION   :: 1
+
+/*
+	Clients can handle the 'done' event to get notified when
+      the related request is done.
+
+      Note, because wl_callback objects are created from multiple independent
+      factory interfaces, the wl_callback interface is frozen at version 1.
+*/
+Callback :: distinct u32
+
+/*
+	Notify the client when the related request is done.
+*/
+Callback_Done_Event :: struct {
+	callback: Callback,
+	callback_data: u32,
+}
+callback_done_event_read :: proc(buf: []byte) -> (Callback_Done_Event, int) {
+	e: Callback_Done_Event
+	r: int
+	n := r
+	e.callback_data, r = util.read_u32(buf[n:]); n += r
+	return e, n
+}
+
+COMPOSITOR_INTERFACE :: "wl_compositor"
+COMPOSITOR_VERSION   :: 7
+
+/*
+	A compositor.  This object is a singleton global.  The
+      compositor is in charge of combining the contents of multiple
+      surfaces into one displayable output.
+*/
+Compositor :: distinct u32
+
+COMPOSITOR_CREATE_SURFACE_REQUEST_OPCODE :: 0
+/*
+	Ask the compositor to create a new surface.
+*/
+Compositor_Create_Surface_Request :: struct {
+	compositor: Compositor,
+	id: Surface,
+}
+compositor_create_surface_request_write :: proc(buf: ^[dynamic]byte, req: Compositor_Create_Surface_Request, new_id: u32) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
+	object := u32(req.compositor)
+	opcode := u16(COMPOSITOR_CREATE_SURFACE_REQUEST_OPCODE)
+	size   := u16(8 + size_of(new_id))
+	num_appended += util.write(buf, object, opcode, size) or_return
+	num_appended += util.write(buf, new_id) or_return
+	return
+}
+
+COMPOSITOR_CREATE_REGION_REQUEST_OPCODE :: 1
+/*
+	Ask the compositor to create a new region.
+*/
+Compositor_Create_Region_Request :: struct {
+	compositor: Compositor,
+	id: Region,
+}
+compositor_create_region_request_write :: proc(buf: ^[dynamic]byte, req: Compositor_Create_Region_Request, new_id: u32) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
+	object := u32(req.compositor)
+	opcode := u16(COMPOSITOR_CREATE_REGION_REQUEST_OPCODE)
+	size   := u16(8 + size_of(new_id))
+	num_appended += util.write(buf, object, opcode, size) or_return
+	num_appended += util.write(buf, new_id) or_return
+	return
+}
+
+COMPOSITOR_RELEASE_REQUEST_OPCODE :: 2
+/*
+	This request destroys the wl_compositor. This has no effect on any other objects.
+*/
+Compositor_Release_Request :: struct {
+	compositor: Compositor,
+}
+compositor_release_request_write :: proc(buf: ^[dynamic]byte, req: Compositor_Release_Request) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
+	object := u32(req.compositor)
+	opcode := u16(COMPOSITOR_RELEASE_REQUEST_OPCODE)
+	size   := u16(8)
+	num_appended += util.write(buf, object, opcode, size) or_return
+	return
+}
+
+SHM_POOL_INTERFACE :: "wl_shm_pool"
+SHM_POOL_VERSION   :: 3
+
+/*
+	The wl_shm_pool object encapsulates a piece of memory shared
+      between the compositor and client.  Through the wl_shm_pool
+      object, the client can allocate shared memory wl_buffer objects.
+      All objects created through the same pool share the same
+      underlying mapped memory. Reusing the mapped memory avoids the
+      setup/teardown overhead and is useful when interactively resizing
+      a surface or for many small buffers.
+*/
+Shm_Pool :: distinct u32
+
+SHM_POOL_CREATE_BUFFER_REQUEST_OPCODE :: 0
+/*
+	Create a wl_buffer object from the pool.
+
+        The buffer is created offset bytes into the pool and has
+        width and height as specified.  The stride argument specifies
+        the number of bytes from the beginning of one row to the beginning
+        of the next.  The format is the pixel format of the buffer and
+        must be one of those advertised through the wl_shm.format event.
+
+        A buffer will keep a reference to the pool it was created from
+        so it is valid to destroy the pool immediately after creating
+        a buffer from it.
+*/
+Shm_Pool_Create_Buffer_Request :: struct {
+	shm_pool: Shm_Pool,
+	id: Buffer,
+	offset: i32,
+	width: i32,
+	height: i32,
+	stride: i32,
+	format: u32,
+}
+shm_pool_create_buffer_request_write :: proc(buf: ^[dynamic]byte, req: Shm_Pool_Create_Buffer_Request, new_id: u32) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
+	object := u32(req.shm_pool)
+	opcode := u16(SHM_POOL_CREATE_BUFFER_REQUEST_OPCODE)
+	size   := u16(8 + size_of(req.offset) + size_of(req.width) + size_of(req.height) + size_of(req.stride) + size_of(req.format) + size_of(new_id))
+	num_appended += util.write(buf, object, opcode, size) or_return
+	num_appended += util.write(buf, req.offset) or_return
+	num_appended += util.write(buf, req.width) or_return
+	num_appended += util.write(buf, req.height) or_return
+	num_appended += util.write(buf, req.stride) or_return
+	num_appended += util.write(buf, req.format) or_return
+	num_appended += util.write(buf, new_id) or_return
+	return
+}
+
+SHM_POOL_DESTROY_REQUEST_OPCODE :: 1
+/*
+	Destroy the shared memory pool.
+
+        The mmapped memory will be released when all
+        buffers that have been created from this pool
+        are gone.
+*/
+Shm_Pool_Destroy_Request :: struct {
+	shm_pool: Shm_Pool,
+}
+shm_pool_destroy_request_write :: proc(buf: ^[dynamic]byte, req: Shm_Pool_Destroy_Request) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
+	object := u32(req.shm_pool)
+	opcode := u16(SHM_POOL_DESTROY_REQUEST_OPCODE)
+	size   := u16(8)
+	num_appended += util.write(buf, object, opcode, size) or_return
+	return
+}
+
+SHM_POOL_RESIZE_REQUEST_OPCODE :: 2
+/*
+	This request will cause the server to remap the backing memory
+        for the pool from the file descriptor passed when the pool was
+        created, but using the new size.  This request can only be
+        used to make the pool bigger.
+
+        This request only changes the amount of bytes that are mmapped
+        by the server and does not touch the file corresponding to the
+        file descriptor passed at creation time. It is the client's
+        responsibility to ensure that the file is at least as big as
+        the new pool size.
+*/
+Shm_Pool_Resize_Request :: struct {
+	shm_pool: Shm_Pool,
+	size: i32,
+}
+shm_pool_resize_request_write :: proc(buf: ^[dynamic]byte, req: Shm_Pool_Resize_Request) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
+	object := u32(req.shm_pool)
+	opcode := u16(SHM_POOL_RESIZE_REQUEST_OPCODE)
+	size   := u16(8 + size_of(req.size))
+	num_appended += util.write(buf, object, opcode, size) or_return
+	num_appended += util.write(buf, req.size) or_return
+	return
+}
+
+/*
+	These errors can be emitted in response to wl_shm_pool requests.
+*/
+Shm_Pool_Error :: enum u32 {
+	Invalid_Format = 0,
+	Invalid_Stride = 1,
+}
+
+SHM_INTERFACE :: "wl_shm"
+SHM_VERSION   :: 3
+
+/*
+	A singleton global object that provides support for shared
+      memory.
+
+      Clients can create wl_shm_pool objects using the create_pool
+      request.
+
+      On binding the wl_shm object one or more format events
+      are emitted to inform clients about the valid pixel formats
+      that can be used for buffers.
+*/
+Shm :: distinct u32
+
+SHM_CREATE_POOL_REQUEST_OPCODE :: 0
+/*
+	Create a new wl_shm_pool object.
+
+        The pool can be used to create shared memory based buffer
+        objects.  The server will mmap size bytes of the passed file
+        descriptor, to use as backing memory for the pool.
+*/
+Shm_Create_Pool_Request :: struct {
+	shm: Shm,
+	id: Shm_Pool,
+	fd: linux.Fd,
+	size: i32,
+}
+shm_create_pool_request_write :: proc(buf: ^[dynamic]byte, req: Shm_Create_Pool_Request, new_id: u32) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
+	object := u32(req.shm)
+	opcode := u16(SHM_CREATE_POOL_REQUEST_OPCODE)
+	size   := u16(8 + size_of(req.fd) + size_of(req.size) + size_of(new_id))
+	num_appended += util.write(buf, object, opcode, size) or_return
+	num_appended += util.write(buf, req.size) or_return
+	num_appended += util.write(buf, new_id) or_return
+	return
+}
+
+SHM_RELEASE_REQUEST_OPCODE :: 1
+/*
+	Using this request a client can tell the server that it is not going to
+        use the shm object anymore.
+
+        Objects created via this interface remain unaffected.
+*/
+Shm_Release_Request :: struct {
+	shm: Shm,
+}
+shm_release_request_write :: proc(buf: ^[dynamic]byte, req: Shm_Release_Request) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
+	object := u32(req.shm)
+	opcode := u16(SHM_RELEASE_REQUEST_OPCODE)
+	size   := u16(8)
+	num_appended += util.write(buf, object, opcode, size) or_return
+	return
+}
+
+/*
+	Informs the client about a valid pixel format that
+        can be used for buffers. Known formats include
+        argb8888 and xrgb8888.
+
+        Extensions to drm_fourcc.h (or the format enum) do not require
+        increasing the wl_shm version; as a result, clients may receive format
+        codes which were not in the list at the time the client was made.
+*/
+Shm_Format_Event :: struct {
+	shm: Shm,
+	format: u32,
+}
+shm_format_event_read :: proc(buf: []byte) -> (Shm_Format_Event, int) {
+	e: Shm_Format_Event
+	r: int
+	n := r
+	e.format, r = util.read_u32(buf[n:]); n += r
+	return e, n
+}
+
+/*
+	These errors can be emitted in response to wl_shm requests.
+*/
+Shm_Error :: enum u32 {
+	Invalid_Format = 0,
+	Invalid_Stride = 1,
+	Invalid_Fd = 2,
+}
+
+/*
+	This describes the memory layout of an individual pixel.
+
+        All renderers should support argb8888 and xrgb8888 but any other
+        formats are optional and may not be supported by the particular
+        renderer in use.
+
+        The drm format codes match the macros defined in drm_fourcc.h, except
+        argb8888 and xrgb8888. The formats actually supported by the compositor
+        will be reported by the format event. See drm_fourcc.h for more detailed
+        format descriptions.
+
+        For all wl_shm formats and unless specified in another protocol
+        extension, pre-multiplied alpha is used for pixel values.
+*/
+Shm_Format :: enum u32 {
+	Argb8888 = 0,
+	Xrgb8888 = 1,
+	C8 = 538982467,
+	Rgb332 = 943867730,
+	Bgr233 = 944916290,
+	Xrgb4444 = 842093144,
+	Xbgr4444 = 842089048,
+	Rgbx4444 = 842094674,
+	Bgrx4444 = 842094658,
+	Argb4444 = 842093121,
+	Abgr4444 = 842089025,
+	Rgba4444 = 842088786,
+	Bgra4444 = 842088770,
+	Xrgb1555 = 892424792,
+	Xbgr1555 = 892420696,
+	Rgbx5551 = 892426322,
+	Bgrx5551 = 892426306,
+	Argb1555 = 892424769,
+	Abgr1555 = 892420673,
+	Rgba5551 = 892420434,
+	Bgra5551 = 892420418,
+	Rgb565 = 909199186,
+	Bgr565 = 909199170,
+	Rgb888 = 875710290,
+	Bgr888 = 875710274,
+	Xbgr8888 = 875709016,
+	Rgbx8888 = 875714642,
+	Bgrx8888 = 875714626,
+	Abgr8888 = 875708993,
+	Rgba8888 = 875708754,
+	Bgra8888 = 875708738,
+	Xrgb2101010 = 808669784,
+	Xbgr2101010 = 808665688,
+	Rgbx1010102 = 808671314,
+	Bgrx1010102 = 808671298,
+	Argb2101010 = 808669761,
+	Abgr2101010 = 808665665,
+	Rgba1010102 = 808665426,
+	Bgra1010102 = 808665410,
+	Yuyv = 1448695129,
+	Yvyu = 1431918169,
+	Uyvy = 1498831189,
+	Vyuy = 1498765654,
+	Ayuv = 1448433985,
+	Nv12 = 842094158,
+	Nv21 = 825382478,
+	Nv16 = 909203022,
+	Nv61 = 825644622,
+	Yuv410 = 961959257,
+	Yvu410 = 961893977,
+	Yuv411 = 825316697,
+	Yvu411 = 825316953,
+	Yuv420 = 842093913,
+	Yvu420 = 842094169,
+	Yuv422 = 909202777,
+	Yvu422 = 909203033,
+	Yuv444 = 875713881,
+	Yvu444 = 875714137,
+	R8 = 538982482,
+	R16 = 540422482,
+	Rg88 = 943212370,
+	Gr88 = 943215175,
+	Rg1616 = 842221394,
+	Gr1616 = 842224199,
+	Xrgb16161616f = 1211388504,
+	Xbgr16161616f = 1211384408,
+	Argb16161616f = 1211388481,
+	Abgr16161616f = 1211384385,
+	Xyuv8888 = 1448434008,
+	Vuy888 = 875713878,
+	Vuy101010 = 808670550,
+	Y210 = 808530521,
+	Y212 = 842084953,
+	Y216 = 909193817,
+	Y410 = 808531033,
+	Y412 = 842085465,
+	Y416 = 909194329,
+	Xvyu2101010 = 808670808,
+	Xvyu12_16161616 = 909334104,
+	Xvyu16161616 = 942954072,
+	Y0l0 = 810299481,
+	X0l0 = 810299480,
+	Y0l2 = 843853913,
+	X0l2 = 843853912,
+	Yuv420_8bit = 942691673,
+	Yuv420_10bit = 808539481,
+	Xrgb8888_A8 = 943805016,
+	Xbgr8888_A8 = 943800920,
+	Rgbx8888_A8 = 943806546,
+	Bgrx8888_A8 = 943806530,
+	Rgb888_A8 = 943798354,
+	Bgr888_A8 = 943798338,
+	Rgb565_A8 = 943797586,
+	Bgr565_A8 = 943797570,
+	Nv24 = 875714126,
+	Nv42 = 842290766,
+	P210 = 808530512,
+	P010 = 808530000,
+	P012 = 842084432,
+	P016 = 909193296,
+	Axbxgxrx106106106106 = 808534593,
+	Nv15 = 892425806,
+	Q410 = 808531025,
+	Q401 = 825242705,
+	Xrgb16161616 = 942953048,
+	Xbgr16161616 = 942948952,
+	Argb16161616 = 942953025,
+	Abgr16161616 = 942948929,
+	C1 = 538980675,
+	C2 = 538980931,
+	C4 = 538981443,
+	D1 = 538980676,
+	D2 = 538980932,
+	D4 = 538981444,
+	D8 = 538982468,
+	R1 = 538980690,
+	R2 = 538980946,
+	R4 = 538981458,
+	R10 = 540029266,
+	R12 = 540160338,
+	Avuy8888 = 1498764865,
+	Xvuy8888 = 1498764888,
+	P030 = 808661072,
+	Rgb161616 = 942950226,
+	Bgr161616 = 942950210,
+	R16f = 1210064978,
+	Gr1616f = 1210077767,
+	Bgr161616f = 1213351746,
+	R32f = 1176510546,
+	Gr3232f = 1176523335,
+	Bgr323232f = 1179797314,
+	Abgr32323232f = 1178092097,
+	Nv20 = 808605262,
+	Nv30 = 808670798,
+	S010 = 808530003,
+	S210 = 808530515,
+	S410 = 808531027,
+	S012 = 842084435,
+	S212 = 842084947,
+	S412 = 842085459,
+	S016 = 909193299,
+	S216 = 909193811,
+	S416 = 909194323,
+	Xvuy2101010 = 808671576,
+	P230 = 808661584,
+	T430 = 808662100,
+	Y8 = 1497715271,
+	Xyyy2101010 = 876695641,
+}
+
+BUFFER_INTERFACE :: "wl_buffer"
+BUFFER_VERSION   :: 1
+
+/*
+	A buffer provides the content for a wl_surface. Buffers are
+      created through factory interfaces such as wl_shm, wp_linux_buffer_params
+      (from the linux-dmabuf protocol extension) or similar. It has a width and
+      a height and can be attached to a wl_surface, but the mechanism by which a
+      client provides and updates the contents is defined by the buffer factory
+      interface.
+
+      Color channels are assumed to be electrical rather than optical (in other
+      words, encoded with a transfer function) unless otherwise specified. If
+      the buffer uses a format that has an alpha channel, the alpha channel is
+      assumed to be premultiplied into the electrical color channel values
+      (after transfer function encoding) unless otherwise specified.
+
+      Note, because wl_buffer objects are created from multiple independent
+      factory interfaces, the wl_buffer interface is frozen at version 1.
+*/
+Buffer :: distinct u32
+
+BUFFER_DESTROY_REQUEST_OPCODE :: 0
+/*
+	Destroy a buffer. If and how you need to release the backing
+        storage is defined by the buffer factory interface.
+
+        For possible side-effects to a surface, see wl_surface.attach.
+*/
+Buffer_Destroy_Request :: struct {
+	buffer: Buffer,
+}
+buffer_destroy_request_write :: proc(buf: ^[dynamic]byte, req: Buffer_Destroy_Request) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
+	object := u32(req.buffer)
+	opcode := u16(BUFFER_DESTROY_REQUEST_OPCODE)
+	size   := u16(8)
+	num_appended += util.write(buf, object, opcode, size) or_return
+	return
+}
+
+/*
+	Sent when this wl_buffer is no longer used by the compositor.
+
+        For more information on when release events may or may not be sent,
+        and what consequences it has, please see the description of
+        wl_surface.attach.
+
+        If a client receives a release event before the frame callback
+        requested in the same wl_surface.commit that attaches this
+        wl_buffer to a surface, then the client is immediately free to
+        reuse the buffer and its backing storage, and does not need a
+        second buffer for the next surface content update. Typically
+        this is possible, when the compositor maintains a copy of the
+        wl_surface contents, e.g. as a GL texture. This is an important
+        optimization for GL(ES) compositors with wl_shm clients.
+*/
+Buffer_Release_Event :: struct {
+	buffer: Buffer,
+}
+buffer_release_event_read :: proc(buf: []byte) -> (Buffer_Release_Event, int) {
+	e: Buffer_Release_Event
+	r: int
+	n := r
+	return e, n
+}
+
+DATA_OFFER_INTERFACE :: "wl_data_offer"
+DATA_OFFER_VERSION   :: 4
+
+/*
+	A wl_data_offer represents a piece of data offered for transfer
+      by another client (the source client).  It is used by the
+      copy-and-paste and drag-and-drop mechanisms.  The offer
+      describes the different mime types that the data can be
+      converted to and provides the mechanism for transferring the
+      data directly from the source client.
+*/
+Data_Offer :: distinct u32
+
+DATA_OFFER_ACCEPT_REQUEST_OPCODE :: 0
+/*
+	Indicate that the client can accept the given mime type, or
+        NULL for not accepted.
+
+        For objects of version 2 or older, this request is used by the
+        client to give feedback whether the client can receive the given
+        mime type, or NULL if none is accepted; the feedback does not
+        determine whether the drag-and-drop operation succeeds or not.
+
+        For objects of version 3 or newer, this request determines the
+        final result of the drag-and-drop operation. If the end result
+        is that no mime types were accepted, the drag-and-drop operation
+        will be cancelled and the corresponding drag source will receive
+        wl_data_source.cancelled. Clients may still use this event in
+        conjunction with wl_data_source.action for feedback.
+*/
+Data_Offer_Accept_Request :: struct {
+	data_offer: Data_Offer,
+	serial: u32,
+	mime_type: string,
+}
+data_offer_accept_request_write :: proc(buf: ^[dynamic]byte, req: Data_Offer_Accept_Request) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
+	object := u32(req.data_offer)
+	opcode := u16(DATA_OFFER_ACCEPT_REQUEST_OPCODE)
+	size   := u16(8 + size_of(req.serial) + util.compute_string_size(req.mime_type))
+	num_appended += util.write(buf, object, opcode, size) or_return
+	num_appended += util.write(buf, req.serial) or_return
+	num_appended += util.write(buf, req.mime_type) or_return
+	return
+}
+
+DATA_OFFER_RECEIVE_REQUEST_OPCODE :: 1
+/*
+	To transfer the offered data, the client issues this request
+        and indicates the mime type it wants to receive.  The transfer
+        happens through the passed file descriptor (typically created
+        with the pipe system call).  The source client writes the data
+        in the mime type representation requested and then closes the
+        file descriptor.
+
+        The receiving client reads from the read end of the pipe until
+        EOF and then closes its end, at which point the transfer is
+        complete.
+
+        This request may happen multiple times for different mime types,
+        both before and after wl_data_device.drop. Drag-and-drop destination
+        clients may preemptively fetch data or examine it more closely to
+        determine acceptance.
+*/
+Data_Offer_Receive_Request :: struct {
+	data_offer: Data_Offer,
+	mime_type: string,
+	fd: linux.Fd,
+}
+data_offer_receive_request_write :: proc(buf: ^[dynamic]byte, req: Data_Offer_Receive_Request) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
+	object := u32(req.data_offer)
+	opcode := u16(DATA_OFFER_RECEIVE_REQUEST_OPCODE)
+	size   := u16(8 + util.compute_string_size(req.mime_type) + size_of(req.fd))
+	num_appended += util.write(buf, object, opcode, size) or_return
+	num_appended += util.write(buf, req.mime_type) or_return
+	return
+}
+
+DATA_OFFER_DESTROY_REQUEST_OPCODE :: 2
+/*
+	Destroy the data offer.
+*/
+Data_Offer_Destroy_Request :: struct {
+	data_offer: Data_Offer,
+}
+data_offer_destroy_request_write :: proc(buf: ^[dynamic]byte, req: Data_Offer_Destroy_Request) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
+	object := u32(req.data_offer)
+	opcode := u16(DATA_OFFER_DESTROY_REQUEST_OPCODE)
+	size   := u16(8)
+	num_appended += util.write(buf, object, opcode, size) or_return
+	return
+}
+
+DATA_OFFER_FINISH_REQUEST_OPCODE :: 3
+/*
+	Notifies the compositor that the drag destination successfully
+        finished the drag-and-drop operation.
+
+        Upon receiving this request, the compositor will emit
+        wl_data_source.dnd_finished on the drag source client.
+
+        It is a client error to perform other requests than
+        wl_data_offer.destroy after this one. It is also an error to perform
+        this request after a NULL mime type has been set in
+        wl_data_offer.accept or no action was received through
+        wl_data_offer.action.
+
+        If wl_data_offer.finish request is received for a non drag and drop
+        operation, the invalid_finish protocol error is raised.
+*/
+Data_Offer_Finish_Request :: struct {
+	data_offer: Data_Offer,
+}
+data_offer_finish_request_write :: proc(buf: ^[dynamic]byte, req: Data_Offer_Finish_Request) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
+	object := u32(req.data_offer)
+	opcode := u16(DATA_OFFER_FINISH_REQUEST_OPCODE)
+	size   := u16(8)
+	num_appended += util.write(buf, object, opcode, size) or_return
+	return
+}
+
+DATA_OFFER_SET_ACTIONS_REQUEST_OPCODE :: 4
+/*
+	Sets the actions that the destination side client supports for
+        this operation. This request may trigger the emission of
+        wl_data_source.action and wl_data_offer.action events if the compositor
+        needs to change the selected action.
+
+        This request can be called multiple times throughout the
+        drag-and-drop operation, typically in response to wl_data_device.enter
+        or wl_data_device.motion events.
+
+        This request determines the final result of the drag-and-drop
+        operation. If the end result is that no action is accepted,
+        the drag source will receive wl_data_source.cancelled.
+
+        The dnd_actions argument must contain only values expressed in the
+        wl_data_device_manager.dnd_actions enum, and the preferred_action
+        argument must only contain one of those values set, otherwise it
+        will result in a protocol error.
+
+        While managing an "ask" action, the destination drag-and-drop client
+        may perform further wl_data_offer.receive requests, and is expected
+        to perform one last wl_data_offer.set_actions request with a preferred
+        action other than "ask" (and optionally wl_data_offer.accept) before
+        requesting wl_data_offer.finish, in order to convey the action selected
+        by the user. If the preferred action is not in the
+        wl_data_offer.source_actions mask, an error will be raised.
+
+        If the "ask" action is dismissed (e.g. user cancellation), the client
+        is expected to perform wl_data_offer.destroy right away.
+
+        This request can only be made on drag-and-drop offers, a protocol error
+        will be raised otherwise.
+*/
+Data_Offer_Set_Actions_Request :: struct {
+	data_offer: Data_Offer,
+	dnd_actions: u32,
+	preferred_action: u32,
+}
+data_offer_set_actions_request_write :: proc(buf: ^[dynamic]byte, req: Data_Offer_Set_Actions_Request) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
+	object := u32(req.data_offer)
+	opcode := u16(DATA_OFFER_SET_ACTIONS_REQUEST_OPCODE)
+	size   := u16(8 + size_of(req.dnd_actions) + size_of(req.preferred_action))
+	num_appended += util.write(buf, object, opcode, size) or_return
+	num_appended += util.write(buf, req.dnd_actions) or_return
+	num_appended += util.write(buf, req.preferred_action) or_return
+	return
+}
+
+/*
+	Sent immediately after creating the wl_data_offer object.  One
+        event per offered mime type.
+*/
+Data_Offer_Offer_Event :: struct {
+	data_offer: Data_Offer,
+	mime_type: string,
+}
+data_offer_offer_event_read :: proc(buf: []byte) -> (Data_Offer_Offer_Event, int) {
+	e: Data_Offer_Offer_Event
+	r: int
+	n := r
+	e.mime_type, r = util.read_string(buf[n:]); n += r
+	return e, n
+}
+
+/*
+	This event indicates the actions offered by the data source. It
+        will be sent immediately after creating the wl_data_offer object,
+        or anytime the source side changes its offered actions through
+        wl_data_source.set_actions.
+*/
+Data_Offer_Source_Actions_Event :: struct {
+	data_offer: Data_Offer,
+	source_actions: u32,
+}
+data_offer_source_actions_event_read :: proc(buf: []byte) -> (Data_Offer_Source_Actions_Event, int) {
+	e: Data_Offer_Source_Actions_Event
+	r: int
+	n := r
+	e.source_actions, r = util.read_u32(buf[n:]); n += r
+	return e, n
+}
+
+/*
+	This event indicates the action selected by the compositor after
+        matching the source/destination side actions. Only one action (or
+        none) will be offered here.
+
+        This event can be emitted multiple times during the drag-and-drop
+        operation in response to destination side action changes through
+        wl_data_offer.set_actions.
+
+        This event will no longer be emitted after wl_data_device.drop
+        happened on the drag-and-drop destination, the client must
+        honor the last action received, or the last preferred one set
+        through wl_data_offer.set_actions when handling an "ask" action.
+
+        Compositors may also change the selected action on the fly, mainly
+        in response to keyboard modifier changes during the drag-and-drop
+        operation.
+
+        The most recent action received is always the valid one. Prior to
+        receiving wl_data_device.drop, the chosen action may change (e.g.
+        due to keyboard modifiers being pressed). At the time of receiving
+        wl_data_device.drop the drag-and-drop destination must honor the
+        last action received.
+
+        Action changes may still happen after wl_data_device.drop,
+        especially on "ask" actions, where the drag-and-drop destination
+        may choose another action afterwards. Action changes happening
+        at this stage are always the result of inter-client negotiation, the
+        compositor shall no longer be able to induce a different action.
+
+        Upon "ask" actions, it is expected that the drag-and-drop destination
+        may potentially choose a different action and/or mime type,
+        based on wl_data_offer.source_actions and finally chosen by the
+        user (e.g. popping up a menu with the available options). The
+        final wl_data_offer.set_actions and wl_data_offer.accept requests
+        must happen before the call to wl_data_offer.finish.
+*/
+Data_Offer_Action_Event :: struct {
+	data_offer: Data_Offer,
+	dnd_action: u32,
+}
+data_offer_action_event_read :: proc(buf: []byte) -> (Data_Offer_Action_Event, int) {
+	e: Data_Offer_Action_Event
+	r: int
+	n := r
+	e.dnd_action, r = util.read_u32(buf[n:]); n += r
+	return e, n
+}
+
+Data_Offer_Error :: enum u32 {
+	Invalid_Finish = 0,
+	Invalid_Action_Mask = 1,
+	Invalid_Action = 2,
+	Invalid_Offer = 3,
+}
+
+DATA_SOURCE_INTERFACE :: "wl_data_source"
+DATA_SOURCE_VERSION   :: 4
+
+/*
+	The wl_data_source object is the source side of a wl_data_offer.
+      It is created by the source client in a data transfer and
+      provides a way to describe the offered data and a way to respond
+      to requests to transfer the data.
+*/
+Data_Source :: distinct u32
+
+DATA_SOURCE_OFFER_REQUEST_OPCODE :: 0
+/*
+	This request adds a mime type to the set of mime types
+        advertised to targets.  Can be called several times to offer
+        multiple types.
+*/
+Data_Source_Offer_Request :: struct {
+	data_source: Data_Source,
+	mime_type: string,
+}
+data_source_offer_request_write :: proc(buf: ^[dynamic]byte, req: Data_Source_Offer_Request) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
+	object := u32(req.data_source)
+	opcode := u16(DATA_SOURCE_OFFER_REQUEST_OPCODE)
+	size   := u16(8 + util.compute_string_size(req.mime_type))
+	num_appended += util.write(buf, object, opcode, size) or_return
+	num_appended += util.write(buf, req.mime_type) or_return
+	return
+}
+
+DATA_SOURCE_DESTROY_REQUEST_OPCODE :: 1
+/*
+	Destroy the data source.
+*/
+Data_Source_Destroy_Request :: struct {
+	data_source: Data_Source,
+}
+data_source_destroy_request_write :: proc(buf: ^[dynamic]byte, req: Data_Source_Destroy_Request) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
+	object := u32(req.data_source)
+	opcode := u16(DATA_SOURCE_DESTROY_REQUEST_OPCODE)
+	size   := u16(8)
+	num_appended += util.write(buf, object, opcode, size) or_return
+	return
+}
+
+DATA_SOURCE_SET_ACTIONS_REQUEST_OPCODE :: 2
+/*
+	Sets the actions that the source side client supports for this
+        operation. This request may trigger wl_data_source.action and
+        wl_data_offer.action events if the compositor needs to change the
+        selected action.
+
+        The dnd_actions argument must contain only values expressed in the
+        wl_data_device_manager.dnd_actions enum, otherwise it will result
+        in a protocol error.
+
+        This request must be made once only, and can only be made on sources
+        used in drag-and-drop, so it must be performed before
+        wl_data_device.start_drag. Attempting to use the source other than
+        for drag-and-drop will raise a protocol error.
+*/
+Data_Source_Set_Actions_Request :: struct {
+	data_source: Data_Source,
+	dnd_actions: u32,
+}
+data_source_set_actions_request_write :: proc(buf: ^[dynamic]byte, req: Data_Source_Set_Actions_Request) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
+	object := u32(req.data_source)
+	opcode := u16(DATA_SOURCE_SET_ACTIONS_REQUEST_OPCODE)
+	size   := u16(8 + size_of(req.dnd_actions))
+	num_appended += util.write(buf, object, opcode, size) or_return
+	num_appended += util.write(buf, req.dnd_actions) or_return
+	return
+}
+
+/*
+	Sent when a target accepts pointer_focus or motion events.  If
+        a target does not accept any of the offered types, type is NULL.
+
+        Used for feedback during drag-and-drop.
+*/
+Data_Source_Target_Event :: struct {
+	data_source: Data_Source,
+	mime_type: string,
+}
+data_source_target_event_read :: proc(buf: []byte) -> (Data_Source_Target_Event, int) {
+	e: Data_Source_Target_Event
+	r: int
+	n := r
+	e.mime_type, r = util.read_string(buf[n:]); n += r
+	return e, n
+}
+
+/*
+	Request for data from the client.  Send the data as the
+        specified mime type over the passed file descriptor, then
+        close it.
+*/
+Data_Source_Send_Event :: struct {
+	data_source: Data_Source,
+	mime_type: string,
+	fd: linux.Fd,
+}
+data_source_send_event_read :: proc(buf: []byte) -> (Data_Source_Send_Event, int) {
+	e: Data_Source_Send_Event
+	r: int
+	n := r
+	e.mime_type, r = util.read_string(buf[n:]); n += r
+	return e, n
+}
+
+/*
+	This data source is no longer valid. There are several reasons why
+        this could happen:
+
+        - The data source has been replaced by another data source.
+        - The drag-and-drop operation was performed, but the drop destination
+          did not accept any of the mime types offered through
+          wl_data_source.target.
+        - The drag-and-drop operation was performed, but the drop destination
+          did not select any of the actions present in the mask offered through
+          wl_data_source.action.
+        - The drag-and-drop operation was performed but didn't happen over a
+          surface.
+        - The compositor cancelled the drag-and-drop operation (e.g. compositor
+          dependent timeouts to avoid stale drag-and-drop transfers).
+
+        The client should clean up and destroy this data source.
+
+        For objects of version 2 or older, wl_data_source.cancelled will
+        only be emitted if the data source was replaced by another data
+        source.
+*/
+Data_Source_Cancelled_Event :: struct {
+	data_source: Data_Source,
+}
+data_source_cancelled_event_read :: proc(buf: []byte) -> (Data_Source_Cancelled_Event, int) {
+	e: Data_Source_Cancelled_Event
+	r: int
+	n := r
+	return e, n
+}
+
+/*
+	The user performed the drop action. This event does not indicate
+        acceptance, wl_data_source.cancelled may still be emitted afterwards
+        if the drop destination does not accept any mime type.
+
+        However, this event might not be received if the compositor cancelled
+        the drag-and-drop operation before this event could happen.
+
+        Note that the data_source may still be used in the future and should
+        not be destroyed here.
+*/
+Data_Source_Dnd_Drop_Performed_Event :: struct {
+	data_source: Data_Source,
+}
+data_source_dnd_drop_performed_event_read :: proc(buf: []byte) -> (Data_Source_Dnd_Drop_Performed_Event, int) {
+	e: Data_Source_Dnd_Drop_Performed_Event
+	r: int
+	n := r
+	return e, n
+}
+
+/*
+	The drop destination finished interoperating with this data
+        source, so the client is now free to destroy this data source and
+        free all associated data.
+
+        If the action used to perform the operation was "move", the
+        source can now delete the transferred data.
+*/
+Data_Source_Dnd_Finished_Event :: struct {
+	data_source: Data_Source,
+}
+data_source_dnd_finished_event_read :: proc(buf: []byte) -> (Data_Source_Dnd_Finished_Event, int) {
+	e: Data_Source_Dnd_Finished_Event
+	r: int
+	n := r
+	return e, n
+}
+
+/*
+	This event indicates the action selected by the compositor after
+        matching the source/destination side actions. Only one action (or
+        none) will be offered here.
+
+        This event can be emitted multiple times during the drag-and-drop
+        operation, mainly in response to destination side changes through
+        wl_data_offer.set_actions, and as the data device enters/leaves
+        surfaces.
+
+        It is only possible to receive this event after
+        wl_data_source.dnd_drop_performed if the drag-and-drop operation
+        ended in an "ask" action, in which case the final wl_data_source.action
+        event will happen immediately before wl_data_source.dnd_finished.
+
+        Compositors may also change the selected action on the fly, mainly
+        in response to keyboard modifier changes during the drag-and-drop
+        operation.
+
+        The most recent action received is always the valid one. The chosen
+        action may change alongside negotiation (e.g. an "ask" action can turn
+        into a "move" operation), so the effects of the final action must
+        always be applied in wl_data_source.dnd_finished.
+
+        Clients can trigger cursor surface changes from this point, so
+        they reflect the current action.
+*/
+Data_Source_Action_Event :: struct {
+	data_source: Data_Source,
+	dnd_action: u32,
+}
+data_source_action_event_read :: proc(buf: []byte) -> (Data_Source_Action_Event, int) {
+	e: Data_Source_Action_Event
+	r: int
+	n := r
+	e.dnd_action, r = util.read_u32(buf[n:]); n += r
+	return e, n
+}
+
+Data_Source_Error :: enum u32 {
+	Invalid_Action_Mask = 0,
+	Invalid_Source = 1,
+}
+
+DATA_DEVICE_INTERFACE :: "wl_data_device"
+DATA_DEVICE_VERSION   :: 4
+
+/*
+	There is one wl_data_device per seat which can be obtained
+      from the global wl_data_device_manager singleton.
+
+      A wl_data_device provides access to inter-client data transfer
+      mechanisms such as copy-and-paste and drag-and-drop.
+*/
+Data_Device :: distinct u32
+
+DATA_DEVICE_START_DRAG_REQUEST_OPCODE :: 0
+/*
+	This request asks the compositor to start a drag-and-drop
+        operation on behalf of the client.
+
+        The source argument is the data source that provides the data
+        for the eventual data transfer. If source is NULL, enter, leave
+        and motion events are sent only to the client that initiated the
+        drag and the client is expected to handle the data passing
+        internally. If source is destroyed, the drag-and-drop session will be
+        cancelled.
+
+        The origin surface is the surface where the drag originates and
+        the client must have an active implicit grab that matches the
+        serial.
+
+        The icon surface is an optional (can be NULL) surface that
+        provides an icon to be moved around with the cursor.  Initially,
+        the top-left corner of the icon surface is placed at the cursor
+        hotspot, but subsequent wl_surface.offset requests can move the
+        relative position. Attach requests must be confirmed with
+        wl_surface.commit as usual. The icon surface is given the role of
+        a drag-and-drop icon. If the icon surface already has another role,
+        it raises a protocol error.
+
+        The input region is ignored for wl_surfaces with the role of a
+        drag-and-drop icon.
+
+        The given source may not be used in any further set_selection or
+        start_drag requests. Attempting to reuse a previously-used source
+        may send a used_source error.
+*/
+Data_Device_Start_Drag_Request :: struct {
+	data_device: Data_Device,
+	source: Data_Source,
+	origin: Surface,
+	icon: Surface,
+	serial: u32,
+}
+data_device_start_drag_request_write :: proc(buf: ^[dynamic]byte, req: Data_Device_Start_Drag_Request) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
+	object := u32(req.data_device)
+	opcode := u16(DATA_DEVICE_START_DRAG_REQUEST_OPCODE)
+	size   := u16(8 + size_of(req.source) + size_of(req.origin) + size_of(req.icon) + size_of(req.serial))
+	num_appended += util.write(buf, object, opcode, size) or_return
+	num_appended += util.write(buf, u32(req.source)) or_return
+	num_appended += util.write(buf, u32(req.origin)) or_return
+	num_appended += util.write(buf, u32(req.icon)) or_return
+	num_appended += util.write(buf, req.serial) or_return
+	return
+}
+
+DATA_DEVICE_SET_SELECTION_REQUEST_OPCODE :: 1
+/*
+	This request asks the compositor to set the selection
+        to the data from the source on behalf of the client.
+
+        To unset the selection, set the source to NULL.
+
+        The given source may not be used in any further set_selection or
+        start_drag requests. Attempting to reuse a previously-used source
+        may send a used_source error.
+*/
+Data_Device_Set_Selection_Request :: struct {
+	data_device: Data_Device,
+	source: Data_Source,
+	serial: u32,
+}
+data_device_set_selection_request_write :: proc(buf: ^[dynamic]byte, req: Data_Device_Set_Selection_Request) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
+	object := u32(req.data_device)
+	opcode := u16(DATA_DEVICE_SET_SELECTION_REQUEST_OPCODE)
+	size   := u16(8 + size_of(req.source) + size_of(req.serial))
+	num_appended += util.write(buf, object, opcode, size) or_return
+	num_appended += util.write(buf, u32(req.source)) or_return
+	num_appended += util.write(buf, req.serial) or_return
+	return
+}
+
+DATA_DEVICE_RELEASE_REQUEST_OPCODE :: 2
+/*
+	This request destroys the data device.
+*/
+Data_Device_Release_Request :: struct {
+	data_device: Data_Device,
+}
+data_device_release_request_write :: proc(buf: ^[dynamic]byte, req: Data_Device_Release_Request) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
+	object := u32(req.data_device)
+	opcode := u16(DATA_DEVICE_RELEASE_REQUEST_OPCODE)
+	size   := u16(8)
+	num_appended += util.write(buf, object, opcode, size) or_return
+	return
+}
+
+/*
+	The data_offer event introduces a new wl_data_offer object,
+        which will subsequently be used in either the
+        data_device.enter event (for drag-and-drop) or the
+        data_device.selection event (for selections).  Immediately
+        following the data_device.data_offer event, the new data_offer
+        object will send out data_offer.offer events to describe the
+        mime types it offers.
+*/
+Data_Device_Data_Offer_Event :: struct {
+	data_device: Data_Device,
+	id: Data_Offer,
+}
+data_device_data_offer_event_read :: proc(buf: []byte) -> (Data_Device_Data_Offer_Event, int) {
+	e: Data_Device_Data_Offer_Event
+	r: int
+	n := r
+	return e, n
+}
+
+/*
+	This event is sent when an active drag-and-drop pointer enters
+        a surface owned by the client.  The position of the pointer at
+        enter time is provided by the x and y arguments, in surface-local
+        coordinates.
+*/
+Data_Device_Enter_Event :: struct {
+	data_device: Data_Device,
+	serial: u32,
+	surface: Surface,
+	x: util.Fixed,
+	y: util.Fixed,
+	id: Data_Offer,
+}
+data_device_enter_event_read :: proc(buf: []byte) -> (Data_Device_Enter_Event, int) {
+	e: Data_Device_Enter_Event
+	r: int
+	n := r
+	e.serial, r = util.read_u32(buf[n:]); n += r
+	surface: u32
+	surface, r = util.read_u32(buf[n:]); n += r
+	e.surface = Surface(surface)
+	e.x, r = util.read_fixed(buf[n:]); n += r
+	e.y, r = util.read_fixed(buf[n:]); n += r
+	id: u32
+	id, r = util.read_u32(buf[n:]); n += r
+	e.id = Data_Offer(id)
+	return e, n
+}
+
+/*
+	This event is sent when the drag-and-drop pointer leaves the
+        surface and the session ends.  The client must destroy the
+        wl_data_offer introduced at enter time at this point.
+*/
+Data_Device_Leave_Event :: struct {
+	data_device: Data_Device,
+}
+data_device_leave_event_read :: proc(buf: []byte) -> (Data_Device_Leave_Event, int) {
+	e: Data_Device_Leave_Event
+	r: int
+	n := r
+	return e, n
+}
+
+/*
+	This event is sent when the drag-and-drop pointer moves within
+        the currently focused surface. The new position of the pointer
+        is provided by the x and y arguments, in surface-local
+        coordinates.
+*/
+Data_Device_Motion_Event :: struct {
+	data_device: Data_Device,
+	time: u32,
+	x: util.Fixed,
+	y: util.Fixed,
+}
+data_device_motion_event_read :: proc(buf: []byte) -> (Data_Device_Motion_Event, int) {
+	e: Data_Device_Motion_Event
+	r: int
+	n := r
+	e.time, r = util.read_u32(buf[n:]); n += r
+	e.x, r = util.read_fixed(buf[n:]); n += r
+	e.y, r = util.read_fixed(buf[n:]); n += r
+	return e, n
+}
+
+/*
+	The event is sent when a drag-and-drop operation is ended
+        because the implicit grab is removed.
+
+        The drag-and-drop destination is expected to honor the last action
+        received through wl_data_offer.action, if the resulting action is
+        "copy" or "move", the destination can still perform
+        wl_data_offer.receive requests, and is expected to end all
+        transfers with a wl_data_offer.finish request.
+
+        If the resulting action is "ask", the action will not be considered
+        final. The drag-and-drop destination is expected to perform one last
+        wl_data_offer.set_actions request, or wl_data_offer.destroy in order
+        to cancel the operation.
+*/
+Data_Device_Drop_Event :: struct {
+	data_device: Data_Device,
+}
+data_device_drop_event_read :: proc(buf: []byte) -> (Data_Device_Drop_Event, int) {
+	e: Data_Device_Drop_Event
+	r: int
+	n := r
+	return e, n
+}
+
+/*
+	The selection event is sent out to notify the client of a new
+        wl_data_offer for the selection for this device.  The
+        data_device.data_offer and the data_offer.offer events are
+        sent out immediately before this event to introduce the data
+        offer object.  The selection event is sent to a client
+        immediately before receiving keyboard focus and when a new
+        selection is set while the client has keyboard focus.  The
+        data_offer is valid until a new data_offer or NULL is received
+        or until the client loses keyboard focus.  Switching surface with
+        keyboard focus within the same client doesn't mean a new selection
+        will be sent.  The client must destroy the previous selection
+        data_offer, if any, upon receiving this event.
+*/
+Data_Device_Selection_Event :: struct {
+	data_device: Data_Device,
+	id: Data_Offer,
+}
+data_device_selection_event_read :: proc(buf: []byte) -> (Data_Device_Selection_Event, int) {
+	e: Data_Device_Selection_Event
+	r: int
+	n := r
+	id: u32
+	id, r = util.read_u32(buf[n:]); n += r
+	e.id = Data_Offer(id)
+	return e, n
+}
+
+Data_Device_Error :: enum u32 {
+	Role = 0,
+	Used_Source = 1,
+}
+
+DATA_DEVICE_MANAGER_INTERFACE :: "wl_data_device_manager"
+DATA_DEVICE_MANAGER_VERSION   :: 4
+
+/*
+	The wl_data_device_manager is a singleton global object that
+      provides access to inter-client data transfer mechanisms such as
+      copy-and-paste and drag-and-drop.  These mechanisms are tied to
+      a wl_seat and this interface lets a client get a wl_data_device
+      corresponding to a wl_seat.
+
+      Depending on the version bound, the objects created from the bound
+      wl_data_device_manager object will have different requirements for
+      functioning properly. See wl_data_source.set_actions,
+      wl_data_offer.accept and wl_data_offer.finish for details.
+*/
+Data_Device_Manager :: distinct u32
+
+DATA_DEVICE_MANAGER_CREATE_DATA_SOURCE_REQUEST_OPCODE :: 0
+/*
+	Create a new data source.
+*/
+Data_Device_Manager_Create_Data_Source_Request :: struct {
+	data_device_manager: Data_Device_Manager,
+	id: Data_Source,
+}
+data_device_manager_create_data_source_request_write :: proc(buf: ^[dynamic]byte, req: Data_Device_Manager_Create_Data_Source_Request, new_id: u32) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
+	object := u32(req.data_device_manager)
+	opcode := u16(DATA_DEVICE_MANAGER_CREATE_DATA_SOURCE_REQUEST_OPCODE)
+	size   := u16(8 + size_of(new_id))
+	num_appended += util.write(buf, object, opcode, size) or_return
+	num_appended += util.write(buf, new_id) or_return
+	return
+}
+
+DATA_DEVICE_MANAGER_GET_DATA_DEVICE_REQUEST_OPCODE :: 1
+/*
+	Create a new data device for a given seat.
+*/
+Data_Device_Manager_Get_Data_Device_Request :: struct {
+	data_device_manager: Data_Device_Manager,
+	id: Data_Device,
+	seat: Seat,
+}
+data_device_manager_get_data_device_request_write :: proc(buf: ^[dynamic]byte, req: Data_Device_Manager_Get_Data_Device_Request, new_id: u32) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
+	object := u32(req.data_device_manager)
+	opcode := u16(DATA_DEVICE_MANAGER_GET_DATA_DEVICE_REQUEST_OPCODE)
+	size   := u16(8 + size_of(new_id))
+	num_appended += util.write(buf, object, opcode, size) or_return
+	num_appended += util.write(buf, new_id) or_return
+	return
+}
+
+DATA_DEVICE_MANAGER_RELEASE_REQUEST_OPCODE :: 2
+/*
+	This request destroys the wl_data_device_manager. This has no effect on any other
+        objects.
+*/
+Data_Device_Manager_Release_Request :: struct {
+	data_device_manager: Data_Device_Manager,
+}
+data_device_manager_release_request_write :: proc(buf: ^[dynamic]byte, req: Data_Device_Manager_Release_Request) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
+	object := u32(req.data_device_manager)
+	opcode := u16(DATA_DEVICE_MANAGER_RELEASE_REQUEST_OPCODE)
+	size   := u16(8)
+	num_appended += util.write(buf, object, opcode, size) or_return
+	return
+}
+
+/*
+	This is a bitmask of the available/preferred actions in a
+        drag-and-drop operation.
+
+        In the compositor, the selected action is a result of matching the
+        actions offered by the source and destination sides.  "action" events
+        with a "none" action will be sent to both source and destination if
+        there is no match. All further checks will effectively happen on
+        (source actions ∩ destination actions).
+
+        In addition, compositors may also pick different actions in
+        reaction to key modifiers being pressed. One common design that
+        is used in major toolkits (and the behavior recommended for
+        compositors) is:
+
+        - If no modifiers are pressed, the first match (in bit order)
+          will be used.
+        - Pressing Shift selects "move", if enabled in the mask.
+        - Pressing Control selects "copy", if enabled in the mask.
+
+        Behavior beyond that is considered implementation-dependent.
+        Compositors may for example bind other modifiers (like Alt/Meta)
+        or drags initiated with other buttons than BTN_LEFT to specific
+        actions (e.g. "ask").
+*/
+Data_Device_Manager_Dnd_Action :: enum u32 {
+	Copy = 0,
+	Move = 1,
+	Ask = 2,
+}
+Data_Device_Manager_Dnd_Action_Set :: bit_set[Data_Device_Manager_Dnd_Action; u32]
+
+SHELL_INTERFACE :: "wl_shell"
+SHELL_VERSION   :: 1
+
+/*
+	This interface is implemented by servers that provide
+      desktop-style user interfaces.
+
+      It allows clients to associate a wl_shell_surface with
+      a basic surface.
+
+      Note! This protocol is deprecated and not intended for production use.
+      For desktop-style user interfaces, use xdg_shell. Compositors and clients
+      should not implement this interface.
+*/
+Shell :: distinct u32
+
+SHELL_GET_SHELL_SURFACE_REQUEST_OPCODE :: 0
+/*
+	Create a shell surface for an existing surface. This gives
+        the wl_surface the role of a shell surface. If the wl_surface
+        already has another role, it raises a protocol error.
+
+        Only one shell surface can be associated with a given surface.
+*/
+Shell_Get_Shell_Surface_Request :: struct {
+	shell: Shell,
+	id: Shell_Surface,
+	surface: Surface,
+}
+shell_get_shell_surface_request_write :: proc(buf: ^[dynamic]byte, req: Shell_Get_Shell_Surface_Request, new_id: u32) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
+	object := u32(req.shell)
+	opcode := u16(SHELL_GET_SHELL_SURFACE_REQUEST_OPCODE)
+	size   := u16(8 + size_of(new_id))
+	num_appended += util.write(buf, object, opcode, size) or_return
+	num_appended += util.write(buf, new_id) or_return
+	return
+}
+
+Shell_Error :: enum u32 {
+	Role = 0,
+}
+
+SHELL_SURFACE_INTERFACE :: "wl_shell_surface"
+SHELL_SURFACE_VERSION   :: 1
+
+/*
+	An interface that may be implemented by a wl_surface, for
+      implementations that provide a desktop-style user interface.
+
+      It provides requests to treat surfaces like toplevel, fullscreen
+      or popup windows, move, resize or maximize them, associate
+      metadata like title and class, etc.
+
+      On the server side the object is automatically destroyed when
+      the related wl_surface is destroyed. On the client side,
+      wl_shell_surface_destroy() must be called before destroying
+      the wl_surface object.
+*/
+Shell_Surface :: distinct u32
+
+SHELL_SURFACE_PONG_REQUEST_OPCODE :: 0
+/*
+	A client must respond to a ping event with a pong request or
+        the client may be deemed unresponsive.
+*/
+Shell_Surface_Pong_Request :: struct {
+	shell_surface: Shell_Surface,
+	serial: u32,
+}
+shell_surface_pong_request_write :: proc(buf: ^[dynamic]byte, req: Shell_Surface_Pong_Request) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
+	object := u32(req.shell_surface)
+	opcode := u16(SHELL_SURFACE_PONG_REQUEST_OPCODE)
+	size   := u16(8 + size_of(req.serial))
+	num_appended += util.write(buf, object, opcode, size) or_return
+	num_appended += util.write(buf, req.serial) or_return
+	return
+}
+
+SHELL_SURFACE_MOVE_REQUEST_OPCODE :: 1
+/*
+	Start a pointer-driven move of the surface.
+
+        This request must be used in response to a button press event.
+        The server may ignore move requests depending on the state of
+        the surface (e.g. fullscreen or maximized).
+*/
+Shell_Surface_Move_Request :: struct {
+	shell_surface: Shell_Surface,
+	seat: Seat,
+	serial: u32,
+}
+shell_surface_move_request_write :: proc(buf: ^[dynamic]byte, req: Shell_Surface_Move_Request) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
+	object := u32(req.shell_surface)
+	opcode := u16(SHELL_SURFACE_MOVE_REQUEST_OPCODE)
+	size   := u16(8 + size_of(req.serial))
+	num_appended += util.write(buf, object, opcode, size) or_return
+	num_appended += util.write(buf, req.serial) or_return
+	return
+}
+
+SHELL_SURFACE_RESIZE_REQUEST_OPCODE :: 2
+/*
+	Start a pointer-driven resizing of the surface.
+
+        This request must be used in response to a button press event.
+        The server may ignore resize requests depending on the state of
+        the surface (e.g. fullscreen or maximized).
+*/
+Shell_Surface_Resize_Request :: struct {
+	shell_surface: Shell_Surface,
+	seat: Seat,
+	serial: u32,
+	edges: u32,
+}
+shell_surface_resize_request_write :: proc(buf: ^[dynamic]byte, req: Shell_Surface_Resize_Request) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
+	object := u32(req.shell_surface)
+	opcode := u16(SHELL_SURFACE_RESIZE_REQUEST_OPCODE)
+	size   := u16(8 + size_of(req.serial) + size_of(req.edges))
+	num_appended += util.write(buf, object, opcode, size) or_return
+	num_appended += util.write(buf, req.serial) or_return
+	num_appended += util.write(buf, req.edges) or_return
+	return
+}
+
+SHELL_SURFACE_SET_TOPLEVEL_REQUEST_OPCODE :: 3
+/*
+	Map the surface as a toplevel surface.
+
+        A toplevel surface is not fullscreen, maximized or transient.
+*/
+Shell_Surface_Set_Toplevel_Request :: struct {
+	shell_surface: Shell_Surface,
+}
+shell_surface_set_toplevel_request_write :: proc(buf: ^[dynamic]byte, req: Shell_Surface_Set_Toplevel_Request) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
+	object := u32(req.shell_surface)
+	opcode := u16(SHELL_SURFACE_SET_TOPLEVEL_REQUEST_OPCODE)
+	size   := u16(8)
+	num_appended += util.write(buf, object, opcode, size) or_return
+	return
+}
+
+SHELL_SURFACE_SET_TRANSIENT_REQUEST_OPCODE :: 4
+/*
+	Map the surface relative to an existing surface.
+
+        The x and y arguments specify the location of the upper left
+        corner of the surface relative to the upper left corner of the
+        parent surface, in surface-local coordinates.
+
+        The flags argument controls details of the transient behaviour.
+*/
+Shell_Surface_Set_Transient_Request :: struct {
+	shell_surface: Shell_Surface,
+	parent: Surface,
+	x: i32,
+	y: i32,
+	flags: u32,
+}
+shell_surface_set_transient_request_write :: proc(buf: ^[dynamic]byte, req: Shell_Surface_Set_Transient_Request) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
+	object := u32(req.shell_surface)
+	opcode := u16(SHELL_SURFACE_SET_TRANSIENT_REQUEST_OPCODE)
+	size   := u16(8 + size_of(req.parent) + size_of(req.x) + size_of(req.y) + size_of(req.flags))
+	num_appended += util.write(buf, object, opcode, size) or_return
+	num_appended += util.write(buf, u32(req.parent)) or_return
+	num_appended += util.write(buf, req.x) or_return
+	num_appended += util.write(buf, req.y) or_return
+	num_appended += util.write(buf, req.flags) or_return
+	return
+}
+
+SHELL_SURFACE_SET_FULLSCREEN_REQUEST_OPCODE :: 5
+/*
+	Map the surface as a fullscreen surface.
+
+        If an output parameter is given then the surface will be made
+        fullscreen on that output. If the client does not specify the
+        output then the compositor will apply its policy - usually
+        choosing the output on which the surface has the biggest surface
+        area.
+
+        The client may specify a method to resolve a size conflict
+        between the output size and the surface size - this is provided
+        through the method parameter.
+
+        The framerate parameter is used only when the method is set
+        to "driver", to indicate the preferred framerate. A value of 0
+        indicates that the client does not care about framerate.  The
+        framerate is specified in mHz, that is framerate of 60000 is 60Hz.
+
+        A method of "scale" or "driver" implies a scaling operation of
+        the surface, either via a direct scaling operation or a change of
+        the output mode. This will override any kind of output scaling, so
+        that mapping a surface with a buffer size equal to the mode can
+        fill the screen independent of buffer_scale.
+
+        A method of "fill" means we don't scale up the buffer, however
+        any output scale is applied. This means that you may run into
+        an edge case where the application maps a buffer with the same
+        size of the output mode but buffer_scale 1 (thus making a
+        surface larger than the output). In this case it is allowed to
+        downscale the results to fit the screen.
+
+        The compositor must reply to this request with a configure event
+        with the dimensions for the output on which the surface will
+        be made fullscreen.
+*/
+Shell_Surface_Set_Fullscreen_Request :: struct {
+	shell_surface: Shell_Surface,
+	method: u32,
+	framerate: u32,
+	output: Output,
+}
+shell_surface_set_fullscreen_request_write :: proc(buf: ^[dynamic]byte, req: Shell_Surface_Set_Fullscreen_Request) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
+	object := u32(req.shell_surface)
+	opcode := u16(SHELL_SURFACE_SET_FULLSCREEN_REQUEST_OPCODE)
+	size   := u16(8 + size_of(req.method) + size_of(req.framerate))
+	num_appended += util.write(buf, object, opcode, size) or_return
+	num_appended += util.write(buf, req.method) or_return
+	num_appended += util.write(buf, req.framerate) or_return
+	return
+}
+
+SHELL_SURFACE_SET_POPUP_REQUEST_OPCODE :: 6
+/*
+	Map the surface as a popup.
+
+        A popup surface is a transient surface with an added pointer
+        grab.
+
+        An existing implicit grab will be changed to owner-events mode,
+        and the popup grab will continue after the implicit grab ends
+        (i.e. releasing the mouse button does not cause the popup to
+        be unmapped).
+
+        The popup grab continues until the window is destroyed or a
+        mouse button is pressed in any other client's window. A click
+        in any of the client's surfaces is reported as normal, however,
+        clicks in other clients' surfaces will be discarded and trigger
+        the callback.
+
+        The x and y arguments specify the location of the upper left
+        corner of the surface relative to the upper left corner of the
+        parent surface, in surface-local coordinates.
+*/
+Shell_Surface_Set_Popup_Request :: struct {
+	shell_surface: Shell_Surface,
+	seat: Seat,
+	serial: u32,
+	parent: Surface,
+	x: i32,
+	y: i32,
+	flags: u32,
+}
+shell_surface_set_popup_request_write :: proc(buf: ^[dynamic]byte, req: Shell_Surface_Set_Popup_Request) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
+	object := u32(req.shell_surface)
+	opcode := u16(SHELL_SURFACE_SET_POPUP_REQUEST_OPCODE)
+	size   := u16(8 + size_of(req.serial) + size_of(req.parent) + size_of(req.x) + size_of(req.y) + size_of(req.flags))
+	num_appended += util.write(buf, object, opcode, size) or_return
+	num_appended += util.write(buf, req.serial) or_return
+	num_appended += util.write(buf, u32(req.parent)) or_return
+	num_appended += util.write(buf, req.x) or_return
+	num_appended += util.write(buf, req.y) or_return
+	num_appended += util.write(buf, req.flags) or_return
+	return
+}
+
+SHELL_SURFACE_SET_MAXIMIZED_REQUEST_OPCODE :: 7
+/*
+	Map the surface as a maximized surface.
+
+        If an output parameter is given then the surface will be
+        maximized on that output. If the client does not specify the
+        output then the compositor will apply its policy - usually
+        choosing the output on which the surface has the biggest surface
+        area.
+
+        The compositor will reply with a configure event telling
+        the expected new surface size. The operation is completed
+        on the next buffer attach to this surface.
+
+        A maximized surface typically fills the entire output it is
+        bound to, except for desktop elements such as panels. This is
+        the main difference between a maximized shell surface and a
+        fullscreen shell surface.
+
+        The details depend on the compositor implementation.
+*/
+Shell_Surface_Set_Maximized_Request :: struct {
+	shell_surface: Shell_Surface,
+	output: Output,
+}
+shell_surface_set_maximized_request_write :: proc(buf: ^[dynamic]byte, req: Shell_Surface_Set_Maximized_Request) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
+	object := u32(req.shell_surface)
+	opcode := u16(SHELL_SURFACE_SET_MAXIMIZED_REQUEST_OPCODE)
+	size   := u16(8)
+	num_appended += util.write(buf, object, opcode, size) or_return
+	return
+}
+
+SHELL_SURFACE_SET_TITLE_REQUEST_OPCODE :: 8
+/*
+	Set a short title for the surface.
+
+        This string may be used to identify the surface in a task bar,
+        window list, or other user interface elements provided by the
+        compositor.
+
+        The string must be encoded in UTF-8.
+*/
+Shell_Surface_Set_Title_Request :: struct {
+	shell_surface: Shell_Surface,
+	title: string,
+}
+shell_surface_set_title_request_write :: proc(buf: ^[dynamic]byte, req: Shell_Surface_Set_Title_Request) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
+	object := u32(req.shell_surface)
+	opcode := u16(SHELL_SURFACE_SET_TITLE_REQUEST_OPCODE)
+	size   := u16(8 + util.compute_string_size(req.title))
+	num_appended += util.write(buf, object, opcode, size) or_return
+	num_appended += util.write(buf, req.title) or_return
+	return
+}
+
+SHELL_SURFACE_SET_CLASS_REQUEST_OPCODE :: 9
+/*
+	Set a class for the surface.
+
+        The surface class identifies the general class of applications
+        to which the surface belongs. A common convention is to use the
+        file name (or the full path if it is a non-standard location) of
+        the application's .desktop file as the class.
+*/
+Shell_Surface_Set_Class_Request :: struct {
+	shell_surface: Shell_Surface,
+	class_: string,
+}
+shell_surface_set_class_request_write :: proc(buf: ^[dynamic]byte, req: Shell_Surface_Set_Class_Request) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
+	object := u32(req.shell_surface)
+	opcode := u16(SHELL_SURFACE_SET_CLASS_REQUEST_OPCODE)
+	size   := u16(8 + util.compute_string_size(req.class_))
+	num_appended += util.write(buf, object, opcode, size) or_return
+	num_appended += util.write(buf, req.class_) or_return
+	return
+}
+
+/*
+	Ping a client to check if it is receiving events and sending
+        requests. A client is expected to reply with a pong request.
+*/
+Shell_Surface_Ping_Event :: struct {
+	shell_surface: Shell_Surface,
+	serial: u32,
+}
+shell_surface_ping_event_read :: proc(buf: []byte) -> (Shell_Surface_Ping_Event, int) {
+	e: Shell_Surface_Ping_Event
+	r: int
+	n := r
+	e.serial, r = util.read_u32(buf[n:]); n += r
+	return e, n
+}
+
+/*
+	The configure event asks the client to resize its surface.
+
+        The size is a hint, in the sense that the client is free to
+        ignore it if it doesn't resize, pick a smaller size (to
+        satisfy aspect ratio or resize in steps of NxM pixels).
+
+        The edges parameter provides a hint about how the surface
+        was resized. The client may use this information to decide
+        how to adjust its content to the new size (e.g. a scrolling
+        area might adjust its content position to leave the viewable
+        content unmoved).
+
+        The client is free to dismiss all but the last configure
+        event it received.
+
+        The width and height arguments specify the size of the window
+        in surface-local coordinates.
+*/
+Shell_Surface_Configure_Event :: struct {
+	shell_surface: Shell_Surface,
+	edges: u32,
+	width: i32,
+	height: i32,
+}
+shell_surface_configure_event_read :: proc(buf: []byte) -> (Shell_Surface_Configure_Event, int) {
+	e: Shell_Surface_Configure_Event
+	r: int
+	n := r
+	e.edges, r = util.read_u32(buf[n:]); n += r
+	e.width, r = util.read_i32(buf[n:]); n += r
+	e.height, r = util.read_i32(buf[n:]); n += r
+	return e, n
+}
+
+/*
+	The popup_done event is sent out when a popup grab is broken,
+        that is, when the user clicks a surface that doesn't belong
+        to the client owning the popup surface.
+*/
+Shell_Surface_Popup_Done_Event :: struct {
+	shell_surface: Shell_Surface,
+}
+shell_surface_popup_done_event_read :: proc(buf: []byte) -> (Shell_Surface_Popup_Done_Event, int) {
+	e: Shell_Surface_Popup_Done_Event
+	r: int
+	n := r
+	return e, n
+}
+
+/*
+	These values are used to indicate which edge of a surface
+        is being dragged in a resize operation. The server may
+        use this information to adapt its behavior, e.g. choose
+        an appropriate cursor image.
+*/
+Shell_Surface_Resize :: enum u32 {
+	Top = 0,
+	Bottom = 1,
+	Left = 2,
+	Right = 3,
+}
+Shell_Surface_Resize_Set :: bit_set[Shell_Surface_Resize; u32]
+
+/*
+	These flags specify details of the expected behaviour
+        of transient surfaces. Used in the set_transient request.
+*/
+Shell_Surface_Transient :: enum u32 {
+	Inactive = 0,
+}
+Shell_Surface_Transient_Set :: bit_set[Shell_Surface_Transient; u32]
+
+/*
+	Hints to indicate to the compositor how to deal with a conflict
+        between the dimensions of the surface and the dimensions of the
+        output. The compositor is free to ignore this parameter.
+*/
+Shell_Surface_Fullscreen_Method :: enum u32 {
+	Default = 0,
+	Scale = 1,
+	Driver = 2,
+	Fill = 3,
+}
+
+SURFACE_INTERFACE :: "wl_surface"
+SURFACE_VERSION   :: 7
+
+/*
+	A surface is a rectangular area that may be displayed on zero
+      or more outputs, and shown any number of times at the compositor's
+      discretion. They can present wl_buffers, receive user input, and
+      define a local coordinate system.
+
+      The size of a surface (and relative positions on it) is described
+      in surface-local coordinates, which may differ from the buffer
+      coordinates of the pixel content, in case a buffer_transform
+      or a buffer_scale is used.
+
+      A surface without a "role" is fairly useless: a compositor does
+      not know where, when or how to present it. The role is the
+      purpose of a wl_surface. Examples of roles are a cursor for a
+      pointer (as set by wl_pointer.set_cursor), a drag icon
+      (wl_data_device.start_drag), a sub-surface
+      (wl_subcompositor.get_subsurface), and a window as defined by a
+      shell protocol (e.g. wl_shell.get_shell_surface).
+
+      A surface can have only one role at a time. Initially a
+      wl_surface does not have a role. Once a wl_surface is given a
+      role, it is set permanently for the whole lifetime of the
+      wl_surface object. Giving the current role again is allowed,
+      unless explicitly forbidden by the relevant interface
+      specification.
+
+      Surface roles are given by requests in other interfaces such as
+      wl_pointer.set_cursor. The request should explicitly mention
+      that this request gives a role to a wl_surface. Often, this
+      request also creates a new protocol object that represents the
+      role and adds additional functionality to wl_surface. When a
+      client wants to destroy a wl_surface, they must destroy this role
+      object before the wl_surface, otherwise a defunct_role_object error is
+      sent.
+
+      Destroying the role object does not remove the role from the
+      wl_surface, but it may stop the wl_surface from "playing the role".
+      For instance, if a wl_subsurface object is destroyed, the wl_surface
+      it was created for will be unmapped and forget its position and
+      z-order. It is allowed to create a wl_subsurface for the same
+      wl_surface again, but it is not allowed to use the wl_surface as
+      a cursor (cursor is a different role than sub-surface, and role
+      switching is not allowed).
+*/
+Surface :: distinct u32
+
+SURFACE_DESTROY_REQUEST_OPCODE :: 0
+/*
+	Deletes the surface and invalidates its object ID.
+*/
+Surface_Destroy_Request :: struct {
+	surface: Surface,
+}
+surface_destroy_request_write :: proc(buf: ^[dynamic]byte, req: Surface_Destroy_Request) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
+	object := u32(req.surface)
+	opcode := u16(SURFACE_DESTROY_REQUEST_OPCODE)
+	size   := u16(8)
+	num_appended += util.write(buf, object, opcode, size) or_return
+	return
+}
+
+SURFACE_ATTACH_REQUEST_OPCODE :: 1
+/*
+	Set a buffer as the content of this surface.
+
+        The new size of the surface is calculated based on the buffer
+        size transformed by the inverse buffer_transform and the
+        inverse buffer_scale. This means that at commit time the supplied
+        buffer size must be an integer multiple of the buffer_scale. If
+        that's not the case, an invalid_size error is sent.
+
+        The x and y arguments specify the location of the new pending
+        buffer's upper left corner, relative to the current buffer's upper
+        left corner, in surface-local coordinates. In other words, the
+        x and y, combined with the new surface size define in which
+        directions the surface's size changes. Setting anything other than 0
+        as x and y arguments is discouraged, and should instead be replaced
+        with using the separate wl_surface.offset request.
+
+        When the bound wl_surface version is 5 or higher, passing any
+        non-zero x or y is a protocol violation, and will result in an
+        'invalid_offset' error being raised. The x and y arguments are ignored
+        and do not change the pending state. To achieve equivalent semantics,
+        use wl_surface.offset.
+
+        Surface contents are double-buffered state, see wl_surface.commit.
+
+        The initial surface contents are void; there is no content.
+        wl_surface.attach assigns the given wl_buffer as the pending
+        wl_buffer. wl_surface.commit makes the pending wl_buffer the new
+        surface contents, and the size of the surface becomes the size
+        calculated from the wl_buffer, as described above. After commit,
+        there is no pending buffer until the next attach.
+
+        Committing a pending wl_buffer allows the compositor to read the
+        pixels in the wl_buffer. The compositor may access the pixels at
+        any time after the wl_surface.commit request. When the compositor
+        will not access the pixels anymore, it will send the
+        wl_buffer.release event. Only after receiving wl_buffer.release,
+        the client may reuse the wl_buffer. A wl_buffer that has been
+        attached and then replaced by another attach instead of committed
+        will not receive a release event, and is not used by the
+        compositor.
+
+        If a pending wl_buffer has been committed to more than one wl_surface,
+        the delivery of wl_buffer.release events becomes undefined. A well
+        behaved client should not rely on wl_buffer.release events in this
+        case. Instead, clients hitting this case should use
+        wl_surface.get_release or use a protocol extension providing per-commit
+        release notifications (if none of these options are available, a
+        fallback can be implemented by creating multiple wl_buffer objects from
+        the same backing storage).
+
+        Destroying the wl_buffer after wl_buffer.release does not change
+        the surface contents. Destroying the wl_buffer before wl_buffer.release
+        is allowed as long as the underlying buffer storage isn't re-used (this
+        can happen e.g. on client process termination). However, if the client
+        destroys the wl_buffer before receiving the wl_buffer.release event and
+        mutates the underlying buffer storage, the surface contents become
+        undefined immediately.
+
+        If wl_surface.attach is sent with a NULL wl_buffer, the
+        following wl_surface.commit will remove the surface content.
+
+        If a pending wl_buffer has been destroyed, the result is not specified.
+        Many compositors are known to remove the surface content on the following
+        wl_surface.commit, but this behaviour is not universal. Clients seeking to
+        maximise compatibility should not destroy pending buffers and should
+        ensure that they explicitly remove content from surfaces, even after
+        destroying buffers.
+*/
+Surface_Attach_Request :: struct {
+	surface: Surface,
+	buffer: Buffer,
+	x: i32,
+	y: i32,
+}
+surface_attach_request_write :: proc(buf: ^[dynamic]byte, req: Surface_Attach_Request) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
+	object := u32(req.surface)
+	opcode := u16(SURFACE_ATTACH_REQUEST_OPCODE)
+	size   := u16(8 + size_of(req.x) + size_of(req.y))
+	num_appended += util.write(buf, object, opcode, size) or_return
+	num_appended += util.write(buf, req.x) or_return
+	num_appended += util.write(buf, req.y) or_return
+	return
+}
+
+SURFACE_DAMAGE_REQUEST_OPCODE :: 2
+/*
+	This request is used to describe the regions where the pending
+        buffer is different from the current surface contents, and where
+        the surface therefore needs to be repainted. The compositor
+        ignores the parts of the damage that fall outside of the surface.
+
+        Damage is double-buffered state, see wl_surface.commit.
+
+        The damage rectangle is specified in surface-local coordinates,
+        where x and y specify the upper left corner of the damage rectangle.
+
+        The initial value for pending damage is empty: no damage.
+        wl_surface.damage adds pending damage: the new pending damage
+        is the union of old pending damage and the given rectangle.
+
+        wl_surface.commit assigns pending damage as the current damage,
+        and clears pending damage. The server will clear the current
+        damage as it repaints the surface.
+
+        Note! New clients should not use this request. Instead damage can be
+        posted with wl_surface.damage_buffer which uses buffer coordinates
+        instead of surface coordinates.
+*/
+Surface_Damage_Request :: struct {
+	surface: Surface,
+	x: i32,
+	y: i32,
+	width: i32,
+	height: i32,
+}
+surface_damage_request_write :: proc(buf: ^[dynamic]byte, req: Surface_Damage_Request) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
+	object := u32(req.surface)
+	opcode := u16(SURFACE_DAMAGE_REQUEST_OPCODE)
+	size   := u16(8 + size_of(req.x) + size_of(req.y) + size_of(req.width) + size_of(req.height))
+	num_appended += util.write(buf, object, opcode, size) or_return
+	num_appended += util.write(buf, req.x) or_return
+	num_appended += util.write(buf, req.y) or_return
+	num_appended += util.write(buf, req.width) or_return
+	num_appended += util.write(buf, req.height) or_return
+	return
+}
+
+SURFACE_FRAME_REQUEST_OPCODE :: 3
+/*
+	Request a notification when it is a good time to start drawing a new
+        frame, by creating a frame callback. This is useful for throttling
+        redrawing operations, and driving animations.
+
+        When a client is animating on a wl_surface, it can use the 'frame'
+        request to get notified when it is a good time to draw and commit the
+        next frame of animation. If the client commits an update earlier than
+        that, it is likely that some updates will not make it to the display,
+        and the client is wasting resources by drawing too often.
+
+        The frame request will take effect on the next wl_surface.commit.
+        The notification will only be posted for one frame unless
+        requested again. For a wl_surface, the notifications are posted in
+        the order the frame requests were committed.
+
+        The server must send the notifications so that a client
+        will not send excessive updates, while still allowing
+        the highest possible update rate for clients that wait for the reply
+        before drawing again. The server should give some time for the client
+        to draw and commit after sending the frame callback events to let it
+        hit the next output refresh.
+
+        A server should avoid signaling the frame callbacks if the
+        surface is not visible in any way, e.g. the surface is off-screen,
+        or completely obscured by other opaque surfaces.
+
+        The object returned by this request will be destroyed by the
+        compositor after the callback is fired and as such the client must not
+        attempt to use it after that point.
+
+        The callback_data passed in the callback is the current time, in
+        milliseconds, with an undefined base.
+*/
+Surface_Frame_Request :: struct {
+	surface: Surface,
+	callback: Callback,
+}
+surface_frame_request_write :: proc(buf: ^[dynamic]byte, req: Surface_Frame_Request, new_id: u32) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
+	object := u32(req.surface)
+	opcode := u16(SURFACE_FRAME_REQUEST_OPCODE)
+	size   := u16(8 + size_of(new_id))
+	num_appended += util.write(buf, object, opcode, size) or_return
+	num_appended += util.write(buf, new_id) or_return
+	return
+}
+
+SURFACE_SET_OPAQUE_REGION_REQUEST_OPCODE :: 4
+/*
+	This request sets the region of the surface that contains
+        opaque content.
+
+        The opaque region is an optimization hint for the compositor
+        that lets it optimize the redrawing of content behind opaque
+        regions.  Setting an opaque region is not required for correct
+        behaviour, but marking transparent content as opaque will result
+        in repaint artifacts.
+
+        The opaque region is specified in surface-local coordinates.
+
+        The compositor ignores the parts of the opaque region that fall
+        outside of the surface.
+
+        Opaque region is double-buffered state, see wl_surface.commit.
+
+        wl_surface.set_opaque_region changes the pending opaque region.
+        wl_surface.commit copies the pending region to the current region.
+        Otherwise, the pending and current regions are never changed.
+
+        The initial value for an opaque region is empty. Setting the pending
+        opaque region has copy semantics, and the wl_region object can be
+        destroyed immediately. A NULL wl_region causes the pending opaque
+        region to be set to empty.
+*/
+Surface_Set_Opaque_Region_Request :: struct {
+	surface: Surface,
+	region: Region,
+}
+surface_set_opaque_region_request_write :: proc(buf: ^[dynamic]byte, req: Surface_Set_Opaque_Region_Request) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
+	object := u32(req.surface)
+	opcode := u16(SURFACE_SET_OPAQUE_REGION_REQUEST_OPCODE)
+	size   := u16(8)
+	num_appended += util.write(buf, object, opcode, size) or_return
+	return
+}
+
+SURFACE_SET_INPUT_REGION_REQUEST_OPCODE :: 5
+/*
+	This request sets the region of the surface that can receive
+        pointer and touch events.
+
+        Input events happening outside of this region will try the next
+        surface in the server surface stack. The compositor ignores the
+        parts of the input region that fall outside of the surface.
+
+        The input region is specified in surface-local coordinates.
+
+        Input region is double-buffered state, see wl_surface.commit.
+
+        wl_surface.set_input_region changes the pending input region.
+        wl_surface.commit copies the pending region to the current region.
+        Otherwise the pending and current regions are never changed,
+        except cursor and icon surfaces are special cases, see
+        wl_pointer.set_cursor and wl_data_device.start_drag.
+
+        The initial value for an input region is infinite. That means the
+        whole surface will accept input. Setting the pending input region
+        has copy semantics, and the wl_region object can be destroyed
+        immediately. A NULL wl_region causes the input region to be set
+        to infinite.
+*/
+Surface_Set_Input_Region_Request :: struct {
+	surface: Surface,
+	region: Region,
+}
+surface_set_input_region_request_write :: proc(buf: ^[dynamic]byte, req: Surface_Set_Input_Region_Request) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
+	object := u32(req.surface)
+	opcode := u16(SURFACE_SET_INPUT_REGION_REQUEST_OPCODE)
+	size   := u16(8)
+	num_appended += util.write(buf, object, opcode, size) or_return
+	return
+}
+
+SURFACE_COMMIT_REQUEST_OPCODE :: 6
+/*
+	Surface state (input, opaque, and damage regions, attached buffers,
+        etc.) is double-buffered. Protocol requests modify the pending state,
+        as opposed to the active state in use by the compositor.
+
+        All requests that need a commit to become effective are documented
+        to affect double-buffered state.
+
+        Other interfaces may add further double-buffered surface state.
+
+        A commit request atomically creates a Content Update (CU) from the
+        pending state, even if the pending state has not been touched. The
+        content update is placed at the end of a per-surface queue until it
+        becomes active. After commit, the new pending state is as documented for
+        each related request.
+
+        A CU is either a Desync Content Update (DCU) or a Sync Content Update
+        (SCU). If the surface is effectively synchronized at the commit request,
+        it is a SCU, otherwise a DCU.
+
+        When a surface transitions from effectively synchronized to effectively
+        desynchronized, all SCUs in its queue which are not reachable by any
+        DCU become DCUs and dependency edges from outside the queue to these CUs
+        are removed.
+
+        See wl_subsurface for the definition of 'effectively synchronized' and
+        'effectively desynchronized'.
+
+        When a CU is placed in the queue, the CU has a dependency on the CU in
+        front of it and to the SCU at end of the queue of every direct child
+        surface if that SCU exists and does not have another dependent. This can
+        form a directed acyclic graph of CUs with dependencies as edges.
+
+        In addition to surface state, the CU can have constraints that must be
+        satisfied before it can be applied. Other interfaces may add CU
+        constraints.
+
+        All DCUs which do not have a SCU in front of themselves in their queue,
+        are candidates. If the graph that's reachable by a candidate does not
+        have any unsatisfied constraints, the entire graph must be applied
+        atomically.
+
+        When a CU is applied, the wl_buffer is applied before all other state.
+        This means that all coordinates in double-buffered state are relative to
+        the newly attached wl_buffers, except for wl_surface.attach itself. If
+        there is no newly attached wl_buffer, the coordinates are relative to
+        the previous content update.
+*/
+Surface_Commit_Request :: struct {
+	surface: Surface,
+}
+surface_commit_request_write :: proc(buf: ^[dynamic]byte, req: Surface_Commit_Request) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
+	object := u32(req.surface)
+	opcode := u16(SURFACE_COMMIT_REQUEST_OPCODE)
+	size   := u16(8)
+	num_appended += util.write(buf, object, opcode, size) or_return
+	return
+}
+
+SURFACE_SET_BUFFER_TRANSFORM_REQUEST_OPCODE :: 7
+/*
+	This request sets the transformation that the client has already applied
+        to the content of the buffer. The accepted values for the transform
+        parameter are the values for wl_output.transform.
+
+        The compositor applies the inverse of this transformation whenever it
+        uses the buffer contents.
+
+        Buffer transform is double-buffered state, see wl_surface.commit.
+
+        A newly created surface has its buffer transformation set to normal.
+
+        wl_surface.set_buffer_transform changes the pending buffer
+        transformation. wl_surface.commit copies the pending buffer
+        transformation to the current one. Otherwise, the pending and current
+        values are never changed.
+
+        The purpose of this request is to allow clients to render content
+        according to the output transform, thus permitting the compositor to
+        use certain optimizations even if the display is rotated. Using
+        hardware overlays and scanning out a client buffer for fullscreen
+        surfaces are examples of such optimizations. Those optimizations are
+        highly dependent on the compositor implementation, so the use of this
+        request should be considered on a case-by-case basis.
+
+        Note that if the transform value includes 90 or 270 degree rotation,
+        the width of the buffer will become the surface height and the height
+        of the buffer will become the surface width.
+
+        If transform is not one of the values from the
+        wl_output.transform enum the invalid_transform protocol error
+        is raised.
+*/
+Surface_Set_Buffer_Transform_Request :: struct {
+	surface: Surface,
+	transform: i32,
+}
+surface_set_buffer_transform_request_write :: proc(buf: ^[dynamic]byte, req: Surface_Set_Buffer_Transform_Request) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
+	object := u32(req.surface)
+	opcode := u16(SURFACE_SET_BUFFER_TRANSFORM_REQUEST_OPCODE)
+	size   := u16(8 + size_of(req.transform))
+	num_appended += util.write(buf, object, opcode, size) or_return
+	num_appended += util.write(buf, req.transform) or_return
+	return
+}
+
+SURFACE_SET_BUFFER_SCALE_REQUEST_OPCODE :: 8
+/*
+	This request sets an optional scaling factor on how the compositor
+        interprets the contents of the buffer attached to the window.
+
+        Buffer scale is double-buffered state, see wl_surface.commit.
+
+        A newly created surface has its buffer scale set to 1.
+
+        wl_surface.set_buffer_scale changes the pending buffer scale.
+        wl_surface.commit copies the pending buffer scale to the current one.
+        Otherwise, the pending and current values are never changed.
+
+        The purpose of this request is to allow clients to supply higher
+        resolution buffer data for use on high resolution outputs. It is
+        intended that you pick the same buffer scale as the scale of the
+        output that the surface is displayed on. This means the compositor
+        can avoid scaling when rendering the surface on that output.
+
+        Note that if the scale is larger than 1, then you have to attach
+        a buffer that is larger (by a factor of scale in each dimension)
+        than the desired surface size.
+
+        If scale is not greater than 0 the invalid_scale protocol error is
+        raised.
+*/
+Surface_Set_Buffer_Scale_Request :: struct {
+	surface: Surface,
+	scale: i32,
+}
+surface_set_buffer_scale_request_write :: proc(buf: ^[dynamic]byte, req: Surface_Set_Buffer_Scale_Request) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
+	object := u32(req.surface)
+	opcode := u16(SURFACE_SET_BUFFER_SCALE_REQUEST_OPCODE)
+	size   := u16(8 + size_of(req.scale))
+	num_appended += util.write(buf, object, opcode, size) or_return
+	num_appended += util.write(buf, req.scale) or_return
+	return
+}
+
+SURFACE_DAMAGE_BUFFER_REQUEST_OPCODE :: 9
+/*
+	This request is used to describe the regions where the pending
+        buffer is different from the current surface contents, and where
+        the surface therefore needs to be repainted. The compositor
+        ignores the parts of the damage that fall outside of the surface.
+
+        Damage is double-buffered state, see wl_surface.commit.
+
+        The damage rectangle is specified in buffer coordinates,
+        where x and y specify the upper left corner of the damage rectangle.
+
+        The initial value for pending damage is empty: no damage.
+        wl_surface.damage_buffer adds pending damage: the new pending
+        damage is the union of old pending damage and the given rectangle.
+
+        wl_surface.commit assigns pending damage as the current damage,
+        and clears pending damage. The server will clear the current
+        damage as it repaints the surface.
+
+        This request differs from wl_surface.damage in only one way - it
+        takes damage in buffer coordinates instead of surface-local
+        coordinates. While this generally is more intuitive than surface
+        coordinates, it is especially desirable when using wp_viewport
+        or when a drawing library (like EGL) is unaware of buffer scale
+        and buffer transform.
+
+        Note: Because buffer transformation changes and damage requests may
+        be interleaved in the protocol stream, it is impossible to determine
+        the actual mapping between surface and buffer damage until
+        wl_surface.commit time. Therefore, compositors wishing to take both
+        kinds of damage into account will have to accumulate damage from the
+        two requests separately and only transform from one to the other
+        after receiving the wl_surface.commit.
+*/
+Surface_Damage_Buffer_Request :: struct {
+	surface: Surface,
+	x: i32,
+	y: i32,
+	width: i32,
+	height: i32,
+}
+surface_damage_buffer_request_write :: proc(buf: ^[dynamic]byte, req: Surface_Damage_Buffer_Request) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
+	object := u32(req.surface)
+	opcode := u16(SURFACE_DAMAGE_BUFFER_REQUEST_OPCODE)
+	size   := u16(8 + size_of(req.x) + size_of(req.y) + size_of(req.width) + size_of(req.height))
+	num_appended += util.write(buf, object, opcode, size) or_return
+	num_appended += util.write(buf, req.x) or_return
+	num_appended += util.write(buf, req.y) or_return
+	num_appended += util.write(buf, req.width) or_return
+	num_appended += util.write(buf, req.height) or_return
+	return
+}
+
+SURFACE_OFFSET_REQUEST_OPCODE :: 10
+/*
+	The x and y arguments specify the location of the new pending
+        buffer's upper left corner, relative to the current buffer's upper
+        left corner, in surface-local coordinates. In other words, the
+        x and y, combined with the new surface size define in which
+        directions the surface's size changes.
+
+        The exact semantics of wl_surface.offset are role-specific. Refer to
+        the documentation of specific roles for more information.
+
+        Surface location offset is double-buffered state, see
+        wl_surface.commit.
+
+        This request is semantically equivalent to and the replaces the x and y
+        arguments in the wl_surface.attach request in wl_surface versions prior
+        to 5. See wl_surface.attach for details.
+*/
+Surface_Offset_Request :: struct {
+	surface: Surface,
+	x: i32,
+	y: i32,
+}
+surface_offset_request_write :: proc(buf: ^[dynamic]byte, req: Surface_Offset_Request) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
+	object := u32(req.surface)
+	opcode := u16(SURFACE_OFFSET_REQUEST_OPCODE)
+	size   := u16(8 + size_of(req.x) + size_of(req.y))
+	num_appended += util.write(buf, object, opcode, size) or_return
+	num_appended += util.write(buf, req.x) or_return
+	num_appended += util.write(buf, req.y) or_return
+	return
+}
+
+SURFACE_GET_RELEASE_REQUEST_OPCODE :: 11
+/*
+	Create a callback for the release of the buffer attached by the client
+        with wl_surface.attach.
+
+        The compositor will release the buffer when it has finished its usage of
+        the underlying storage for the relevant commit. Once the client receives
+        this event, and assuming the associated buffer is not pending release
+        from other wl_surface.commit requests, the client can safely re-use the
+        buffer.
+
+        Release callbacks are double-buffered state, and will be associated
+        with the pending buffer at wl_surface.commit time.
+
+        The callback_data passed in the wl_callback.done event is unused and
+        is always zero.
+
+        Sending this request without attaching a non-null buffer in the same
+        content update is a protocol error. The compositor will send the
+        no_buffer error in this case.
+*/
+Surface_Get_Release_Request :: struct {
+	surface: Surface,
+	callback: Callback,
+}
+surface_get_release_request_write :: proc(buf: ^[dynamic]byte, req: Surface_Get_Release_Request, new_id: u32) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
+	object := u32(req.surface)
+	opcode := u16(SURFACE_GET_RELEASE_REQUEST_OPCODE)
+	size   := u16(8 + size_of(new_id))
+	num_appended += util.write(buf, object, opcode, size) or_return
+	num_appended += util.write(buf, new_id) or_return
+	return
+}
+
+/*
+	This is emitted whenever a surface's creation, movement, or resizing
+        results in some part of it being within the scanout region of an
+        output.
+
+        Note that a surface may be overlapping with zero or more outputs.
+*/
+Surface_Enter_Event :: struct {
+	surface: Surface,
+	output: Output,
+}
+surface_enter_event_read :: proc(buf: []byte) -> (Surface_Enter_Event, int) {
+	e: Surface_Enter_Event
+	r: int
+	n := r
+	output: u32
+	output, r = util.read_u32(buf[n:]); n += r
+	e.output = Output(output)
+	return e, n
+}
+
+/*
+	This is emitted whenever a surface's creation, movement, or resizing
+        results in it no longer having any part of it within the scanout region
+        of an output.
+
+        Clients should not use the number of outputs the surface is on for frame
+        throttling purposes. The surface might be hidden even if no leave event
+        has been sent, and the compositor might expect new surface content
+        updates even if no enter event has been sent. The frame event should be
+        used instead.
+*/
+Surface_Leave_Event :: struct {
+	surface: Surface,
+	output: Output,
+}
+surface_leave_event_read :: proc(buf: []byte) -> (Surface_Leave_Event, int) {
+	e: Surface_Leave_Event
+	r: int
+	n := r
+	output: u32
+	output, r = util.read_u32(buf[n:]); n += r
+	e.output = Output(output)
+	return e, n
+}
+
+/*
+	This event indicates the preferred buffer scale for this surface. It is
+        sent whenever the compositor's preference changes.
+
+        Before receiving this event the preferred buffer scale for this surface
+        is 1.
+
+        It is intended that scaling aware clients use this event to scale their
+        content and use wl_surface.set_buffer_scale to indicate the scale they
+        have rendered with. This allows clients to supply a higher detail
+        buffer.
+
+        The compositor shall emit a scale value greater than 0.
+*/
+Surface_Preferred_Buffer_Scale_Event :: struct {
+	surface: Surface,
+	factor: i32,
+}
+surface_preferred_buffer_scale_event_read :: proc(buf: []byte) -> (Surface_Preferred_Buffer_Scale_Event, int) {
+	e: Surface_Preferred_Buffer_Scale_Event
+	r: int
+	n := r
+	e.factor, r = util.read_i32(buf[n:]); n += r
+	return e, n
+}
+
+/*
+	This event indicates the preferred buffer transform for this surface.
+        It is sent whenever the compositor's preference changes.
+
+        Before receiving this event the preferred buffer transform for this
+        surface is normal.
+
+        Applying this transformation to the surface buffer contents and using
+        wl_surface.set_buffer_transform might allow the compositor to use the
+        surface buffer more efficiently.
+*/
+Surface_Preferred_Buffer_Transform_Event :: struct {
+	surface: Surface,
+	transform: u32,
+}
+surface_preferred_buffer_transform_event_read :: proc(buf: []byte) -> (Surface_Preferred_Buffer_Transform_Event, int) {
+	e: Surface_Preferred_Buffer_Transform_Event
+	r: int
+	n := r
+	e.transform, r = util.read_u32(buf[n:]); n += r
+	return e, n
+}
+
+/*
+	These errors can be emitted in response to wl_surface requests.
+*/
+Surface_Error :: enum u32 {
+	Invalid_Scale = 0,
+	Invalid_Transform = 1,
+	Invalid_Size = 2,
+	Invalid_Offset = 3,
+	Defunct_Role_Object = 4,
+	No_Buffer = 5,
+}
+
+SEAT_INTERFACE :: "wl_seat"
+SEAT_VERSION   :: 11
+
+/*
+	A seat is a group of keyboards, pointer and touch devices. This
+      object is published as a global during start up, or when such a
+      device is hot plugged.  A seat typically has a pointer and
+      maintains a keyboard focus and a pointer focus.
+*/
+Seat :: distinct u32
+
+SEAT_GET_POINTER_REQUEST_OPCODE :: 0
+/*
+	The ID provided will be initialized to the wl_pointer interface
+        for this seat.
+
+        This request only takes effect if the seat has the pointer
+        capability, or has had the pointer capability in the past.
+        It is a protocol violation to issue this request on a seat that has
+        never had the pointer capability. The missing_capability error will
+        be sent in this case.
+*/
+Seat_Get_Pointer_Request :: struct {
+	seat: Seat,
+	id: Pointer,
+}
+seat_get_pointer_request_write :: proc(buf: ^[dynamic]byte, req: Seat_Get_Pointer_Request, new_id: u32) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
+	object := u32(req.seat)
+	opcode := u16(SEAT_GET_POINTER_REQUEST_OPCODE)
+	size   := u16(8 + size_of(new_id))
+	num_appended += util.write(buf, object, opcode, size) or_return
+	num_appended += util.write(buf, new_id) or_return
+	return
+}
+
+SEAT_GET_KEYBOARD_REQUEST_OPCODE :: 1
+/*
+	The ID provided will be initialized to the wl_keyboard interface
+        for this seat.
+
+        This request only takes effect if the seat has the keyboard
+        capability, or has had the keyboard capability in the past.
+        It is a protocol violation to issue this request on a seat that has
+        never had the keyboard capability. The missing_capability error will
+        be sent in this case.
+*/
+Seat_Get_Keyboard_Request :: struct {
+	seat: Seat,
+	id: Keyboard,
+}
+seat_get_keyboard_request_write :: proc(buf: ^[dynamic]byte, req: Seat_Get_Keyboard_Request, new_id: u32) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
+	object := u32(req.seat)
+	opcode := u16(SEAT_GET_KEYBOARD_REQUEST_OPCODE)
+	size   := u16(8 + size_of(new_id))
+	num_appended += util.write(buf, object, opcode, size) or_return
+	num_appended += util.write(buf, new_id) or_return
+	return
+}
+
+SEAT_GET_TOUCH_REQUEST_OPCODE :: 2
+/*
+	The ID provided will be initialized to the wl_touch interface
+        for this seat.
+
+        This request only takes effect if the seat has the touch
+        capability, or has had the touch capability in the past.
+        It is a protocol violation to issue this request on a seat that has
+        never had the touch capability. The missing_capability error will
+        be sent in this case.
+*/
+Seat_Get_Touch_Request :: struct {
+	seat: Seat,
+	id: Touch,
+}
+seat_get_touch_request_write :: proc(buf: ^[dynamic]byte, req: Seat_Get_Touch_Request, new_id: u32) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
+	object := u32(req.seat)
+	opcode := u16(SEAT_GET_TOUCH_REQUEST_OPCODE)
+	size   := u16(8 + size_of(new_id))
+	num_appended += util.write(buf, object, opcode, size) or_return
+	num_appended += util.write(buf, new_id) or_return
+	return
+}
+
+SEAT_RELEASE_REQUEST_OPCODE :: 3
+/*
+	Using this request a client can tell the server that it is not going to
+        use the seat object anymore.
+*/
+Seat_Release_Request :: struct {
+	seat: Seat,
+}
+seat_release_request_write :: proc(buf: ^[dynamic]byte, req: Seat_Release_Request) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
+	object := u32(req.seat)
+	opcode := u16(SEAT_RELEASE_REQUEST_OPCODE)
+	size   := u16(8)
+	num_appended += util.write(buf, object, opcode, size) or_return
+	return
+}
+
+/*
+	This is sent on binding to the seat global or whenever a seat gains
+        or loses the pointer, keyboard or touch capabilities.
+        The argument is a capability enum containing the complete set of
+        capabilities this seat has.
+
+        When the pointer capability is added, a client may create a
+        wl_pointer object using the wl_seat.get_pointer request. This object
+        will receive pointer events until the capability is removed in the
+        future.
+
+        When the pointer capability is removed, a client should destroy the
+        wl_pointer objects associated with the seat where the capability was
+        removed, using the wl_pointer.release request. No further pointer
+        events will be received on these objects.
+
+        In some compositors, if a seat regains the pointer capability and a
+        client has a previously obtained wl_pointer object of version 4 or
+        less, that object may start sending pointer events again. This
+        behavior is considered a misinterpretation of the intended behavior
+        and must not be relied upon by the client. wl_pointer objects of
+        version 5 or later must not send events if created before the most
+        recent event notifying the client of an added pointer capability.
+
+        The above behavior also applies to wl_keyboard and wl_touch with the
+        keyboard and touch capabilities, respectively.
+*/
+Seat_Capabilities_Event :: struct {
+	seat: Seat,
+	capabilities: u32,
+}
+seat_capabilities_event_read :: proc(buf: []byte) -> (Seat_Capabilities_Event, int) {
+	e: Seat_Capabilities_Event
+	r: int
+	n := r
+	e.capabilities, r = util.read_u32(buf[n:]); n += r
+	return e, n
+}
+
+/*
+	In a multi-seat configuration the seat name can be used by clients to
+        help identify which physical devices the seat represents.
+
+        The seat name is a UTF-8 string with no convention defined for its
+        contents. Each name is unique among all wl_seat globals. The name is
+        only guaranteed to be unique for the current compositor instance.
+
+        The same seat names are used for all clients. Thus, the name can be
+        shared across processes to refer to a specific wl_seat global.
+
+        The name event is sent after binding to the seat global, and should be sent
+        before announcing capabilities. This event is only sent once per seat object,
+        and the name does not change over the lifetime of the wl_seat global.
+
+        Compositors may re-use the same seat name if the wl_seat global is
+        destroyed and re-created later.
+*/
+Seat_Name_Event :: struct {
+	seat: Seat,
+	name: string,
+}
+seat_name_event_read :: proc(buf: []byte) -> (Seat_Name_Event, int) {
+	e: Seat_Name_Event
+	r: int
+	n := r
+	e.name, r = util.read_string(buf[n:]); n += r
+	return e, n
+}
+
+/*
+	This is a bitmask of capabilities this seat has; if a member is
+        set, then it is present on the seat.
+*/
+Seat_Capability :: enum u32 {
+	Pointer = 0,
+	Keyboard = 1,
+	Touch = 2,
+}
+Seat_Capability_Set :: bit_set[Seat_Capability; u32]
+
+/*
+	These errors can be emitted in response to wl_seat requests.
+*/
+Seat_Error :: enum u32 {
+	Missing_Capability = 0,
+}
+
+POINTER_INTERFACE :: "wl_pointer"
+POINTER_VERSION   :: 11
+
+/*
+	The wl_pointer interface represents one or more input devices,
+      such as mice, which control the pointer location and pointer_focus
+      of a seat.
+
+      The wl_pointer interface generates motion, enter and leave
+      events for the surfaces that the pointer is located over,
+      and button and axis events for button presses, button releases
+      and scrolling.
+*/
+Pointer :: distinct u32
+
+POINTER_SET_CURSOR_REQUEST_OPCODE :: 0
+/*
+	Set the pointer surface, i.e., the surface that contains the
+        pointer image (cursor). This request gives the surface the role
+        of a cursor. If the surface already has another role, it raises
+        a protocol error.
+
+        The cursor actually changes only if the pointer
+        focus for this device is one of the requesting client's surfaces
+        or the surface parameter is the current pointer surface. If
+        there was a previous surface set with this request it is
+        replaced. If surface is NULL, the pointer image is hidden.
+
+        The parameters hotspot_x and hotspot_y define the position of
+        the pointer surface relative to the pointer location. Its
+        top-left corner is always at (x, y) - (hotspot_x, hotspot_y),
+        where (x, y) are the coordinates of the pointer location, in
+        surface-local coordinates.
+
+        On wl_surface.offset requests to the pointer surface, hotspot_x
+        and hotspot_y are decremented by the x and y parameters
+        passed to the request. The offset must be applied by
+        wl_surface.commit as usual.
+
+        The hotspot can also be updated by passing the currently set
+        pointer surface to this request with new values for hotspot_x
+        and hotspot_y.
+
+        The input region is ignored for wl_surfaces with the role of
+        a cursor. When the use as a cursor ends, the wl_surface is
+        unmapped.
+
+        The serial parameter must match the latest wl_pointer.enter
+        serial number sent to the client. Otherwise the request will be
+        ignored.
+*/
+Pointer_Set_Cursor_Request :: struct {
+	pointer: Pointer,
+	serial: u32,
+	surface: Surface,
+	hotspot_x: i32,
+	hotspot_y: i32,
+}
+pointer_set_cursor_request_write :: proc(buf: ^[dynamic]byte, req: Pointer_Set_Cursor_Request) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
+	object := u32(req.pointer)
+	opcode := u16(POINTER_SET_CURSOR_REQUEST_OPCODE)
+	size   := u16(8 + size_of(req.serial) + size_of(req.hotspot_x) + size_of(req.hotspot_y))
+	num_appended += util.write(buf, object, opcode, size) or_return
+	num_appended += util.write(buf, req.serial) or_return
+	num_appended += util.write(buf, req.hotspot_x) or_return
+	num_appended += util.write(buf, req.hotspot_y) or_return
+	return
+}
+
+POINTER_RELEASE_REQUEST_OPCODE :: 1
+/*
+	Using this request a client can tell the server that it is not going to
+        use the pointer object anymore.
+
+        This request destroys the pointer proxy object, so clients must not call
+        wl_pointer_destroy() after using this request.
+*/
+Pointer_Release_Request :: struct {
+	pointer: Pointer,
+}
+pointer_release_request_write :: proc(buf: ^[dynamic]byte, req: Pointer_Release_Request) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
+	object := u32(req.pointer)
+	opcode := u16(POINTER_RELEASE_REQUEST_OPCODE)
+	size   := u16(8)
+	num_appended += util.write(buf, object, opcode, size) or_return
+	return
+}
+
+/*
+	Notification that this seat's pointer is focused on a certain
+        surface.
+
+        When a seat's focus enters a surface, the pointer image
+        is undefined and a client should respond to this event by setting
+        an appropriate pointer image with the set_cursor request.
+*/
+Pointer_Enter_Event :: struct {
+	pointer: Pointer,
+	serial: u32,
+	surface: Surface,
+	surface_x: util.Fixed,
+	surface_y: util.Fixed,
+}
+pointer_enter_event_read :: proc(buf: []byte) -> (Pointer_Enter_Event, int) {
+	e: Pointer_Enter_Event
+	r: int
+	n := r
+	e.serial, r = util.read_u32(buf[n:]); n += r
+	surface: u32
+	surface, r = util.read_u32(buf[n:]); n += r
+	e.surface = Surface(surface)
+	e.surface_x, r = util.read_fixed(buf[n:]); n += r
+	e.surface_y, r = util.read_fixed(buf[n:]); n += r
+	return e, n
+}
+
+/*
+	Notification that this seat's pointer is no longer focused on
+        a certain surface.
+
+        The leave notification is sent before the enter notification
+        for the new focus.
+*/
+Pointer_Leave_Event :: struct {
+	pointer: Pointer,
+	serial: u32,
+	surface: Surface,
+}
+pointer_leave_event_read :: proc(buf: []byte) -> (Pointer_Leave_Event, int) {
+	e: Pointer_Leave_Event
+	r: int
+	n := r
+	e.serial, r = util.read_u32(buf[n:]); n += r
+	surface: u32
+	surface, r = util.read_u32(buf[n:]); n += r
+	e.surface = Surface(surface)
+	return e, n
+}
+
+/*
+	Notification of pointer location change. The arguments
+        surface_x and surface_y are the location relative to the
+        focused surface.
+*/
+Pointer_Motion_Event :: struct {
+	pointer: Pointer,
+	time: u32,
+	surface_x: util.Fixed,
+	surface_y: util.Fixed,
+}
+pointer_motion_event_read :: proc(buf: []byte) -> (Pointer_Motion_Event, int) {
+	e: Pointer_Motion_Event
+	r: int
+	n := r
+	e.time, r = util.read_u32(buf[n:]); n += r
+	e.surface_x, r = util.read_fixed(buf[n:]); n += r
+	e.surface_y, r = util.read_fixed(buf[n:]); n += r
+	return e, n
+}
+
+/*
+	Mouse button click and release notifications.
+
+        The location of the click is given by the last motion, warp or
+        enter event.
+        The time argument is a timestamp with millisecond
+        granularity, with an undefined base.
+
+        The button is a button code as defined in the Linux kernel's
+        linux/input-event-codes.h header file, e.g. BTN_LEFT.
+
+        Any 16-bit button code value is reserved for future additions to the
+        kernel's event code list. All other button codes above 0xFFFF are
+        currently undefined but may be used in future versions of this
+        protocol.
+*/
+Pointer_Button_Event :: struct {
+	pointer: Pointer,
+	serial: u32,
+	time: u32,
+	button: u32,
+	state: u32,
+}
+pointer_button_event_read :: proc(buf: []byte) -> (Pointer_Button_Event, int) {
+	e: Pointer_Button_Event
+	r: int
+	n := r
+	e.serial, r = util.read_u32(buf[n:]); n += r
+	e.time, r = util.read_u32(buf[n:]); n += r
+	e.button, r = util.read_u32(buf[n:]); n += r
+	e.state, r = util.read_u32(buf[n:]); n += r
+	return e, n
+}
+
+/*
+	Scroll and other axis notifications.
+
+        For scroll events (vertical and horizontal scroll axes), the
+        value parameter is the length of a vector along the specified
+        axis in a coordinate space identical to those of motion events,
+        representing a relative movement along the specified axis.
+
+        For devices that support movements non-parallel to axes multiple
+        axis events will be emitted.
+
+        When applicable, for example for touch pads, the server can
+        choose to emit scroll events where the motion vector is
+        equivalent to a motion event vector.
+
+        When applicable, a client can transform its content relative to the
+        scroll distance.
+*/
+Pointer_Axis_Event :: struct {
+	pointer: Pointer,
+	time: u32,
+	axis: u32,
+	value: util.Fixed,
+}
+pointer_axis_event_read :: proc(buf: []byte) -> (Pointer_Axis_Event, int) {
+	e: Pointer_Axis_Event
+	r: int
+	n := r
+	e.time, r = util.read_u32(buf[n:]); n += r
+	e.axis, r = util.read_u32(buf[n:]); n += r
+	e.value, r = util.read_fixed(buf[n:]); n += r
+	return e, n
+}
+
+/*
+	Indicates the end of a set of events that logically belong together.
+        A client is expected to accumulate the data in all events within the
+        frame before proceeding.
+
+        All wl_pointer events before a wl_pointer.frame event belong
+        logically together. For example, in a diagonal scroll motion the
+        compositor will send an optional wl_pointer.axis_source event, two
+        wl_pointer.axis events (horizontal and vertical) and finally a
+        wl_pointer.frame event. The client may use this information to
+        calculate a diagonal vector for scrolling.
+
+        When multiple wl_pointer.axis events occur within the same frame,
+        the motion vector is the combined motion of all events.
+        When a wl_pointer.axis and a wl_pointer.axis_stop event occur within
+        the same frame, this indicates that axis movement in one axis has
+        stopped but continues in the other axis.
+        When multiple wl_pointer.axis_stop events occur within the same
+        frame, this indicates that these axes stopped in the same instance.
+
+        A wl_pointer.frame event is sent for every logical event group,
+        even if the group only contains a single wl_pointer event.
+        Specifically, a client may get a sequence: motion, frame, button,
+        frame, axis, frame, axis_stop, frame.
+
+        The wl_pointer.enter and wl_pointer.leave events are logical events
+        generated by the compositor and not the hardware. These events are
+        also grouped by a wl_pointer.frame. When a pointer moves from one
+        surface to another, a compositor should group the
+        wl_pointer.leave event within the same wl_pointer.frame.
+        However, a client must not rely on wl_pointer.leave and
+        wl_pointer.enter being in the same wl_pointer.frame.
+        Compositor-specific policies may require the wl_pointer.leave and
+        wl_pointer.enter event being split across multiple wl_pointer.frame
+        groups.
+*/
+Pointer_Frame_Event :: struct {
+	pointer: Pointer,
+}
+pointer_frame_event_read :: proc(buf: []byte) -> (Pointer_Frame_Event, int) {
+	e: Pointer_Frame_Event
+	r: int
+	n := r
+	return e, n
+}
+
+/*
+	Source information for scroll and other axes.
+
+        This event does not occur on its own. It is sent before a
+        wl_pointer.frame event and carries the source information for
+        all events within that frame.
+
+        The source specifies how this event was generated. If the source is
+        wl_pointer.axis_source.finger, a wl_pointer.axis_stop event will be
+        sent when the user lifts the finger off the device.
+
+        If the source is wl_pointer.axis_source.wheel,
+        wl_pointer.axis_source.wheel_tilt or
+        wl_pointer.axis_source.continuous, a wl_pointer.axis_stop event may
+        or may not be sent. Whether a compositor sends an axis_stop event
+        for these sources is hardware-specific and implementation-dependent;
+        clients must not rely on receiving an axis_stop event for these
+        scroll sources and should treat scroll sequences from these scroll
+        sources as unterminated by default.
+
+        This event is optional. If the source is unknown for a particular
+        axis event sequence, no event is sent.
+        Only one wl_pointer.axis_source event is permitted per frame.
+
+        The order of wl_pointer.axis_discrete and wl_pointer.axis_source is
+        not guaranteed.
+*/
+Pointer_Axis_Source_Event :: struct {
+	pointer: Pointer,
+	axis_source: u32,
+}
+pointer_axis_source_event_read :: proc(buf: []byte) -> (Pointer_Axis_Source_Event, int) {
+	e: Pointer_Axis_Source_Event
+	r: int
+	n := r
+	e.axis_source, r = util.read_u32(buf[n:]); n += r
+	return e, n
+}
+
+/*
+	Stop notification for scroll and other axes.
+
+        For some wl_pointer.axis_source types, a wl_pointer.axis_stop event
+        is sent to notify a client that the axis sequence has terminated.
+        This enables the client to implement kinetic scrolling.
+        See the wl_pointer.axis_source documentation for information on when
+        this event may be generated.
+
+        Any wl_pointer.axis events with the same axis_source after this
+        event should be considered as the start of a new axis motion.
+
+        The timestamp is to be interpreted identical to the timestamp in the
+        wl_pointer.axis event. The timestamp value may be the same as a
+        preceding wl_pointer.axis event.
+*/
+Pointer_Axis_Stop_Event :: struct {
+	pointer: Pointer,
+	time: u32,
+	axis: u32,
+}
+pointer_axis_stop_event_read :: proc(buf: []byte) -> (Pointer_Axis_Stop_Event, int) {
+	e: Pointer_Axis_Stop_Event
+	r: int
+	n := r
+	e.time, r = util.read_u32(buf[n:]); n += r
+	e.axis, r = util.read_u32(buf[n:]); n += r
+	return e, n
+}
+
+/*
+	Discrete step information for scroll and other axes.
+
+        This event carries the axis value of the wl_pointer.axis event in
+        discrete steps (e.g. mouse wheel clicks).
+
+        This event is deprecated with wl_pointer version 8 - this event is not
+        sent to clients supporting version 8 or later.
+
+        This event does not occur on its own, it is coupled with a
+        wl_pointer.axis event that represents this axis value on a
+        continuous scale. The protocol guarantees that each axis_discrete
+        event is always followed by exactly one axis event with the same
+        axis number within the same wl_pointer.frame. Note that the protocol
+        allows for other events to occur between the axis_discrete and
+        its coupled axis event, including other axis_discrete or axis
+        events. A wl_pointer.frame must not contain more than one axis_discrete
+        event per axis type.
+
+        This event is optional; continuous scrolling devices
+        like two-finger scrolling on touchpads do not have discrete
+        steps and do not generate this event.
+
+        The discrete value carries the directional information. e.g. a value
+        of -2 is two steps towards the negative direction of this axis.
+
+        The axis number is identical to the axis number in the associated
+        axis event.
+
+        The order of wl_pointer.axis_discrete and wl_pointer.axis_source is
+        not guaranteed.
+*/
+Pointer_Axis_Discrete_Event :: struct {
+	pointer: Pointer,
+	axis: u32,
+	discrete: i32,
+}
+pointer_axis_discrete_event_read :: proc(buf: []byte) -> (Pointer_Axis_Discrete_Event, int) {
+	e: Pointer_Axis_Discrete_Event
+	r: int
+	n := r
+	e.axis, r = util.read_u32(buf[n:]); n += r
+	e.discrete, r = util.read_i32(buf[n:]); n += r
+	return e, n
+}
+
+/*
+	Discrete high-resolution scroll information.
+
+        This event carries high-resolution wheel scroll information,
+        with each multiple of 120 representing one logical scroll step
+        (a wheel detent). For example, an axis_value120 of 30 is one quarter of
+        a logical scroll step in the positive direction, a value120 of
+        -240 are two logical scroll steps in the negative direction within the
+        same hardware event.
+        Clients that rely on discrete scrolling should accumulate the
+        value120 to multiples of 120 before processing the event.
+
+        The value120 must not be zero.
+
+        This event replaces the wl_pointer.axis_discrete event in clients
+        supporting wl_pointer version 8 or later.
+
+        Where a wl_pointer.axis_source event occurs in the same
+        wl_pointer.frame, the axis source applies to this event.
+
+        The order of wl_pointer.axis_value120 and wl_pointer.axis_source is
+        not guaranteed.
+*/
+Pointer_Axis_Value120_Event :: struct {
+	pointer: Pointer,
+	axis: u32,
+	value120: i32,
+}
+pointer_axis_value120_event_read :: proc(buf: []byte) -> (Pointer_Axis_Value120_Event, int) {
+	e: Pointer_Axis_Value120_Event
+	r: int
+	n := r
+	e.axis, r = util.read_u32(buf[n:]); n += r
+	e.value120, r = util.read_i32(buf[n:]); n += r
+	return e, n
+}
+
+/*
+	Relative directional information of the entity causing the axis
+        motion.
+
+        For a wl_pointer.axis event, the wl_pointer.axis_relative_direction
+        event specifies the movement direction of the entity causing the
+        wl_pointer.axis event. For example:
+        - if a user's fingers on a touchpad move down and this
+          causes a wl_pointer.axis vertical_scroll down event, the physical
+          direction is 'identical'
+        - if a user's fingers on a touchpad move down and this causes a
+          wl_pointer.axis vertical_scroll up scroll up event ('natural
+          scrolling'), the physical direction is 'inverted'.
+
+        A client may use this information to adjust scroll motion of
+        components. Specifically, enabling natural scrolling causes the
+        content to change direction compared to traditional scrolling.
+        Some widgets like volume control sliders should usually match the
+        physical direction regardless of whether natural scrolling is
+        active. This event enables clients to match the scroll direction of
+        a widget to the physical direction.
+
+        This event does not occur on its own, it is coupled with a
+        wl_pointer.axis event that represents this axis value.
+        The protocol guarantees that each axis_relative_direction event is
+        always followed by exactly one axis event with the same
+        axis number within the same wl_pointer.frame. Note that the protocol
+        allows for other events to occur between the axis_relative_direction
+        and its coupled axis event.
+
+        The axis number is identical to the axis number in the associated
+        axis event.
+
+        The order of wl_pointer.axis_relative_direction,
+        wl_pointer.axis_discrete and wl_pointer.axis_source is not
+        guaranteed.
+*/
+Pointer_Axis_Relative_Direction_Event :: struct {
+	pointer: Pointer,
+	axis: u32,
+	direction: u32,
+}
+pointer_axis_relative_direction_event_read :: proc(buf: []byte) -> (Pointer_Axis_Relative_Direction_Event, int) {
+	e: Pointer_Axis_Relative_Direction_Event
+	r: int
+	n := r
+	e.axis, r = util.read_u32(buf[n:]); n += r
+	e.direction, r = util.read_u32(buf[n:]); n += r
+	return e, n
+}
+
+/*
+	Notification of pointer location change within a surface.
+
+	This location change is not due to events on the input device,
+	but because either the surface under the pointer was moved and
+	thus the relative position of the pointer changed, or because
+	the compositor changed the pointer position in response to an
+	event like pointer confinement being exited.
+
+	The arguments surface_x and surface_y are the location relative to
+	the focused surface.
+
+	This event must not occur in the same wl_pointer.frame as a
+	wl_pointer.enter or wl_pointer.motion event.
+*/
+Pointer_Warp_Event :: struct {
+	pointer: Pointer,
+	surface_x: util.Fixed,
+	surface_y: util.Fixed,
+}
+pointer_warp_event_read :: proc(buf: []byte) -> (Pointer_Warp_Event, int) {
+	e: Pointer_Warp_Event
+	r: int
+	n := r
+	e.surface_x, r = util.read_fixed(buf[n:]); n += r
+	e.surface_y, r = util.read_fixed(buf[n:]); n += r
+	return e, n
+}
+
+Pointer_Error :: enum u32 {
+	Role = 0,
+}
+
+/*
+	Describes the physical state of a button that produced the button
+        event.
+*/
+Pointer_Button_State :: enum u32 {
+	Released = 0,
+	Pressed = 1,
+}
+
+/*
+	Describes the axis types of scroll events.
+*/
+Pointer_Axis :: enum u32 {
+	Vertical_Scroll = 0,
+	Horizontal_Scroll = 1,
+}
+
+/*
+	Describes the source types for axis events. This indicates to the
+        client how an axis event was physically generated; a client may
+        adjust the user interface accordingly. For example, scroll events
+        from a "finger" source may be in a smooth coordinate space with
+        kinetic scrolling whereas a "wheel" source may be in discrete steps
+        of a number of lines.
+
+        The "continuous" axis source is a device generating events in a
+        continuous coordinate space, but using something other than a
+        finger. One example for this source is button-based scrolling where
+        the vertical motion of a device is converted to scroll events while
+        a button is held down.
+
+        The "wheel tilt" axis source indicates that the actual device is a
+        wheel but the scroll event is not caused by a rotation but a
+        (usually sideways) tilt of the wheel.
+*/
+Pointer_Axis_Source :: enum u32 {
+	Wheel = 0,
+	Finger = 1,
+	Continuous = 2,
+	Wheel_Tilt = 3,
+}
+
+/*
+	This specifies the direction of the physical motion that caused a
+        wl_pointer.axis event, relative to the wl_pointer.axis direction.
+*/
+Pointer_Axis_Relative_Direction :: enum u32 {
+	Identical = 0,
+	Inverted = 1,
+}
+
+KEYBOARD_INTERFACE :: "wl_keyboard"
+KEYBOARD_VERSION   :: 11
+
+/*
+	The wl_keyboard interface represents one or more keyboards
+      associated with a seat.
+
+      Each wl_keyboard has the following logical state:
+
+      - an active surface (possibly null),
+      - the keys currently logically down,
+      - the active modifiers,
+      - the active group.
+
+      By default, the active surface is null, the keys currently logically down
+      are empty, the active modifiers and the active group are 0.
+*/
+Keyboard :: distinct u32
+
+KEYBOARD_RELEASE_REQUEST_OPCODE :: 0
+Keyboard_Release_Request :: struct {
+	keyboard: Keyboard,
+}
+keyboard_release_request_write :: proc(buf: ^[dynamic]byte, req: Keyboard_Release_Request) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
+	object := u32(req.keyboard)
+	opcode := u16(KEYBOARD_RELEASE_REQUEST_OPCODE)
+	size   := u16(8)
+	num_appended += util.write(buf, object, opcode, size) or_return
+	return
+}
+
+/*
+	This event provides a file descriptor to the client which can be
+        memory-mapped in read-only mode to provide a keyboard mapping
+        description.
+
+        From version 7 onwards, the fd must be mapped with MAP_PRIVATE by
+        the recipient, as MAP_SHARED may fail.
+*/
+Keyboard_Keymap_Event :: struct {
+	keyboard: Keyboard,
+	format: u32,
+	fd: linux.Fd,
+	size: u32,
+}
+keyboard_keymap_event_read :: proc(buf: []byte) -> (Keyboard_Keymap_Event, int) {
+	e: Keyboard_Keymap_Event
+	r: int
+	n := r
+	e.format, r = util.read_u32(buf[n:]); n += r
+	e.size, r = util.read_u32(buf[n:]); n += r
+	return e, n
+}
+
+/*
+	Notification that this seat's keyboard focus is on a certain
+        surface.
+
+        The compositor must send the wl_keyboard.modifiers event after this
+        event.
+
+        In the wl_keyboard logical state, this event sets the active surface to
+        the surface argument and the keys currently logically down to the keys
+        in the keys argument. The compositor must not send this event if the
+        wl_keyboard already had an active surface immediately before this event.
+
+        Clients should not use the list of pressed keys to emulate key-press
+        events. The order of keys in the list is unspecified.
+*/
+Keyboard_Enter_Event :: struct {
+	keyboard: Keyboard,
+	serial: u32,
+	surface: Surface,
+	keys: []u8,
+}
+keyboard_enter_event_read :: proc(buf: []byte) -> (Keyboard_Enter_Event, int) {
+	e: Keyboard_Enter_Event
+	r: int
+	n := r
+	e.serial, r = util.read_u32(buf[n:]); n += r
+	surface: u32
+	surface, r = util.read_u32(buf[n:]); n += r
+	e.surface = Surface(surface)
+	e.keys, r = util.read_array(buf[n:]); n += r
+	return e, n
+}
+
+/*
+	Notification that this seat's keyboard focus is no longer on
+        a certain surface.
+
+        The leave notification is sent before the enter notification
+        for the new focus.
+
+        In the wl_keyboard logical state, this event resets all values to their
+        defaults. The compositor must not send this event if the active surface
+        of the wl_keyboard was not equal to the surface argument immediately
+        before this event.
+*/
+Keyboard_Leave_Event :: struct {
+	keyboard: Keyboard,
+	serial: u32,
+	surface: Surface,
+}
+keyboard_leave_event_read :: proc(buf: []byte) -> (Keyboard_Leave_Event, int) {
+	e: Keyboard_Leave_Event
+	r: int
+	n := r
+	e.serial, r = util.read_u32(buf[n:]); n += r
+	surface: u32
+	surface, r = util.read_u32(buf[n:]); n += r
+	e.surface = Surface(surface)
+	return e, n
+}
+
+/*
+	A key was pressed or released.
+        The time argument is a timestamp with millisecond
+        granularity, with an undefined base.
+
+        The key is a platform-specific key code that can be interpreted
+        by feeding it to the keyboard mapping (see the keymap event).
+
+        If this event produces a change in modifiers, then the resulting
+        wl_keyboard.modifiers event must be sent after this event.
+
+        In the wl_keyboard logical state, this event adds the key to the keys
+        currently logically down (if the state argument is pressed) or removes
+        the key from the keys currently logically down (if the state argument is
+        released). The compositor must not send this event if the wl_keyboard
+        did not have an active surface immediately before this event. The
+        compositor must not send this event if state is pressed (resp. released)
+        and the key was already logically down (resp. was not logically down)
+        immediately before this event.
+
+        Since version 10, compositors may send key events with the "repeated"
+        key state when a wl_keyboard.repeat_info event with a rate argument of
+        0 has been received. This allows the compositor to take over the
+        responsibility of key repetition.
+*/
+Keyboard_Key_Event :: struct {
+	keyboard: Keyboard,
+	serial: u32,
+	time: u32,
+	key: u32,
+	state: u32,
+}
+keyboard_key_event_read :: proc(buf: []byte) -> (Keyboard_Key_Event, int) {
+	e: Keyboard_Key_Event
+	r: int
+	n := r
+	e.serial, r = util.read_u32(buf[n:]); n += r
+	e.time, r = util.read_u32(buf[n:]); n += r
+	e.key, r = util.read_u32(buf[n:]); n += r
+	e.state, r = util.read_u32(buf[n:]); n += r
+	return e, n
+}
+
+/*
+	Notifies clients that the modifier and/or group state has
+        changed, and it should update its local state.
+
+        The compositor may send this event without a surface of the client
+        having keyboard focus, for example to tie modifier information to
+        pointer focus instead. If a modifier event with pressed modifiers is sent
+        without a prior enter event, the client can assume the modifier state is
+        valid until it receives the next wl_keyboard.modifiers event. In order to
+        reset the modifier state again, the compositor can send a
+        wl_keyboard.modifiers event with no pressed modifiers.
+
+        In the wl_keyboard logical state, this event updates the modifiers and
+        group.
+*/
+Keyboard_Modifiers_Event :: struct {
+	keyboard: Keyboard,
+	serial: u32,
+	mods_depressed: u32,
+	mods_latched: u32,
+	mods_locked: u32,
+	group: u32,
+}
+keyboard_modifiers_event_read :: proc(buf: []byte) -> (Keyboard_Modifiers_Event, int) {
+	e: Keyboard_Modifiers_Event
+	r: int
+	n := r
+	e.serial, r = util.read_u32(buf[n:]); n += r
+	e.mods_depressed, r = util.read_u32(buf[n:]); n += r
+	e.mods_latched, r = util.read_u32(buf[n:]); n += r
+	e.mods_locked, r = util.read_u32(buf[n:]); n += r
+	e.group, r = util.read_u32(buf[n:]); n += r
+	return e, n
+}
+
+/*
+	Informs the client about the keyboard's repeat rate and delay.
+
+        This event is sent as soon as the wl_keyboard object has been created,
+        and is guaranteed to be received by the client before any key press
+        event.
+
+        Negative values for either rate or delay are illegal. A rate of zero
+        will disable any repeating (regardless of the value of delay).
+
+        This event can be sent later on as well with a new value if necessary,
+        so clients should continue listening for the event past the creation
+        of wl_keyboard.
+*/
+Keyboard_Repeat_Info_Event :: struct {
+	keyboard: Keyboard,
+	rate: i32,
+	delay: i32,
+}
+keyboard_repeat_info_event_read :: proc(buf: []byte) -> (Keyboard_Repeat_Info_Event, int) {
+	e: Keyboard_Repeat_Info_Event
+	r: int
+	n := r
+	e.rate, r = util.read_i32(buf[n:]); n += r
+	e.delay, r = util.read_i32(buf[n:]); n += r
+	return e, n
+}
+
+/*
+	This specifies the format of the keymap provided to the
+        client with the wl_keyboard.keymap event.
+*/
+Keyboard_Keymap_Format :: enum u32 {
+	No_Keymap = 0,
+	Xkb_V1 = 1,
+}
+
+/*
+	Describes the physical state of a key that produced the key event.
+
+        Since version 10, the key can be in a "repeated" pseudo-state which
+        means the same as "pressed", but is used to signal repetition in the
+        key event.
+
+        The key may only enter the repeated state after entering the pressed
+        state and before entering the released state. This event may be
+        generated multiple times while the key is down.
+*/
+Keyboard_Key_State :: enum u32 {
+	Released = 0,
+	Pressed = 1,
+	Repeated = 2,
+}
+
+TOUCH_INTERFACE :: "wl_touch"
+TOUCH_VERSION   :: 11
+
+/*
+	The wl_touch interface represents a touchscreen
+      associated with a seat.
+
+      Touch interactions can consist of one or more contacts.
+      For each contact, a series of events is generated, starting
+      with a down event, followed by zero or more motion events,
+      and ending with an up event. Events relating to the same
+      contact point can be identified by the ID of the sequence.
+*/
+Touch :: distinct u32
+
+TOUCH_RELEASE_REQUEST_OPCODE :: 0
+Touch_Release_Request :: struct {
+	touch: Touch,
+}
+touch_release_request_write :: proc(buf: ^[dynamic]byte, req: Touch_Release_Request) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
+	object := u32(req.touch)
+	opcode := u16(TOUCH_RELEASE_REQUEST_OPCODE)
+	size   := u16(8)
+	num_appended += util.write(buf, object, opcode, size) or_return
+	return
+}
+
+/*
+	A new touch point has appeared on the surface. This touch point is
+        assigned a unique ID. Future events from this touch point reference
+        this ID. The ID ceases to be valid after a touch up event and may be
+        reused in the future.
+*/
+Touch_Down_Event :: struct {
+	touch: Touch,
+	serial: u32,
+	time: u32,
+	surface: Surface,
+	id: i32,
+	x: util.Fixed,
+	y: util.Fixed,
+}
+touch_down_event_read :: proc(buf: []byte) -> (Touch_Down_Event, int) {
+	e: Touch_Down_Event
+	r: int
+	n := r
+	e.serial, r = util.read_u32(buf[n:]); n += r
+	e.time, r = util.read_u32(buf[n:]); n += r
+	surface: u32
+	surface, r = util.read_u32(buf[n:]); n += r
+	e.surface = Surface(surface)
+	e.id, r = util.read_i32(buf[n:]); n += r
+	e.x, r = util.read_fixed(buf[n:]); n += r
+	e.y, r = util.read_fixed(buf[n:]); n += r
+	return e, n
+}
+
+/*
+	The touch point has disappeared. No further events will be sent for
+        this touch point and the touch point's ID is released and may be
+        reused in a future touch down event.
+*/
+Touch_Up_Event :: struct {
+	touch: Touch,
+	serial: u32,
+	time: u32,
+	id: i32,
+}
+touch_up_event_read :: proc(buf: []byte) -> (Touch_Up_Event, int) {
+	e: Touch_Up_Event
+	r: int
+	n := r
+	e.serial, r = util.read_u32(buf[n:]); n += r
+	e.time, r = util.read_u32(buf[n:]); n += r
+	e.id, r = util.read_i32(buf[n:]); n += r
+	return e, n
+}
+
+/*
+	A touch point has changed coordinates.
+*/
+Touch_Motion_Event :: struct {
+	touch: Touch,
+	time: u32,
+	id: i32,
+	x: util.Fixed,
+	y: util.Fixed,
+}
+touch_motion_event_read :: proc(buf: []byte) -> (Touch_Motion_Event, int) {
+	e: Touch_Motion_Event
+	r: int
+	n := r
+	e.time, r = util.read_u32(buf[n:]); n += r
+	e.id, r = util.read_i32(buf[n:]); n += r
+	e.x, r = util.read_fixed(buf[n:]); n += r
+	e.y, r = util.read_fixed(buf[n:]); n += r
+	return e, n
+}
+
+/*
+	Indicates the end of a set of events that logically belong together.
+        A client is expected to accumulate the data in all events within the
+        frame before proceeding.
+
+        A wl_touch.frame terminates at least one event but otherwise no
+        guarantee is provided about the set of events within a frame. A client
+        must assume that any state not updated in a frame is unchanged from the
+        previously known state.
+*/
+Touch_Frame_Event :: struct {
+	touch: Touch,
+}
+touch_frame_event_read :: proc(buf: []byte) -> (Touch_Frame_Event, int) {
+	e: Touch_Frame_Event
+	r: int
+	n := r
+	return e, n
+}
+
+/*
+	Sent if the compositor decides the touch stream is a global
+        gesture. No further events are sent to the clients from that
+        particular gesture. Touch cancellation applies to all touch points
+        currently active on this client's surface. The client is
+        responsible for finalizing the touch points, future touch points on
+        this surface may reuse the touch point ID.
+
+        No frame event is required after the cancel event.
+*/
+Touch_Cancel_Event :: struct {
+	touch: Touch,
+}
+touch_cancel_event_read :: proc(buf: []byte) -> (Touch_Cancel_Event, int) {
+	e: Touch_Cancel_Event
+	r: int
+	n := r
+	return e, n
+}
+
+/*
+	Sent when a touchpoint has changed its shape.
+
+        This event does not occur on its own. It is sent before a
+        wl_touch.frame event and carries the new shape information for
+        any previously reported, or new touch points of that frame.
+
+        Other events describing the touch point such as wl_touch.down,
+        wl_touch.motion or wl_touch.orientation may be sent within the
+        same wl_touch.frame. A client should treat these events as a single
+        logical touch point update. The order of wl_touch.shape,
+        wl_touch.orientation and wl_touch.motion is not guaranteed.
+        A wl_touch.down event is guaranteed to occur before the first
+        wl_touch.shape event for this touch ID but both events may occur within
+        the same wl_touch.frame.
+
+        A touchpoint shape is approximated by an ellipse through the major and
+        minor axis length. The major axis length describes the longer diameter
+        of the ellipse, while the minor axis length describes the shorter
+        diameter. Major and minor are orthogonal and both are specified in
+        surface-local coordinates. The center of the ellipse is always at the
+        touchpoint location as reported by wl_touch.down or wl_touch.motion.
+
+        This event is only sent by the compositor if the touch device supports
+        shape reports. The client has to make reasonable assumptions about the
+        shape if it did not receive this event.
+*/
+Touch_Shape_Event :: struct {
+	touch: Touch,
+	id: i32,
+	major: util.Fixed,
+	minor: util.Fixed,
+}
+touch_shape_event_read :: proc(buf: []byte) -> (Touch_Shape_Event, int) {
+	e: Touch_Shape_Event
+	r: int
+	n := r
+	e.id, r = util.read_i32(buf[n:]); n += r
+	e.major, r = util.read_fixed(buf[n:]); n += r
+	e.minor, r = util.read_fixed(buf[n:]); n += r
+	return e, n
+}
+
+/*
+	Sent when a touchpoint has changed its orientation.
+
+        This event does not occur on its own. It is sent before a
+        wl_touch.frame event and carries the new shape information for
+        any previously reported, or new touch points of that frame.
+
+        Other events describing the touch point such as wl_touch.down,
+        wl_touch.motion or wl_touch.shape may be sent within the
+        same wl_touch.frame. A client should treat these events as a single
+        logical touch point update. The order of wl_touch.shape,
+        wl_touch.orientation and wl_touch.motion is not guaranteed.
+        A wl_touch.down event is guaranteed to occur before the first
+        wl_touch.orientation event for this touch ID but both events may occur
+        within the same wl_touch.frame.
+
+        The orientation describes the clockwise angle of a touchpoint's major
+        axis to the positive surface y-axis and is normalized to the -180 to
+        +180 degree range. The granularity of orientation depends on the touch
+        device, some devices only support binary rotation values between 0 and
+        90 degrees.
+
+        This event is only sent by the compositor if the touch device supports
+        orientation reports.
+*/
+Touch_Orientation_Event :: struct {
+	touch: Touch,
+	id: i32,
+	orientation: util.Fixed,
+}
+touch_orientation_event_read :: proc(buf: []byte) -> (Touch_Orientation_Event, int) {
+	e: Touch_Orientation_Event
+	r: int
+	n := r
+	e.id, r = util.read_i32(buf[n:]); n += r
+	e.orientation, r = util.read_fixed(buf[n:]); n += r
+	return e, n
+}
+
+OUTPUT_INTERFACE :: "wl_output"
+OUTPUT_VERSION   :: 4
+
+/*
+	An output describes part of the compositor geometry.  The
+      compositor works in the 'compositor coordinate system' and an
+      output corresponds to a rectangular area in that space that is
+      actually visible.  This typically corresponds to a monitor that
+      displays part of the compositor space.  This object is published
+      as global during start up, or when a monitor is hotplugged.
+*/
+Output :: distinct u32
+
+OUTPUT_RELEASE_REQUEST_OPCODE :: 0
+/*
+	Using this request a client can tell the server that it is not going to
+        use the output object anymore.
+*/
+Output_Release_Request :: struct {
+	output: Output,
+}
+output_release_request_write :: proc(buf: ^[dynamic]byte, req: Output_Release_Request) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
+	object := u32(req.output)
+	opcode := u16(OUTPUT_RELEASE_REQUEST_OPCODE)
+	size   := u16(8)
+	num_appended += util.write(buf, object, opcode, size) or_return
+	return
+}
+
+/*
+	The geometry event describes geometric properties of the output.
+        The event is sent when binding to the output object and whenever
+        any of the properties change.
+
+        The physical size can be set to zero if it doesn't make sense for this
+        output (e.g. for projectors or virtual outputs).
+
+        The geometry event will be followed by a done event (starting from
+        version 2).
+
+        Clients should use wl_surface.preferred_buffer_transform instead of the
+        transform advertised by this event to find the preferred buffer
+        transform to use for a surface.
+
+        Note: wl_output only advertises partial information about the output
+        position and identification. Some compositors, for instance those not
+        implementing a desktop-style output layout or those exposing virtual
+        outputs, might fake this information. Instead of using x and y, clients
+        should use xdg_output.logical_position. Instead of using make and model,
+        clients should use name and description.
+*/
+Output_Geometry_Event :: struct {
+	output: Output,
+	x: i32,
+	y: i32,
+	physical_width: i32,
+	physical_height: i32,
+	subpixel: i32,
+	make: string,
+	model: string,
+	transform: i32,
+}
+output_geometry_event_read :: proc(buf: []byte) -> (Output_Geometry_Event, int) {
+	e: Output_Geometry_Event
+	r: int
+	n := r
+	e.x, r = util.read_i32(buf[n:]); n += r
+	e.y, r = util.read_i32(buf[n:]); n += r
+	e.physical_width, r = util.read_i32(buf[n:]); n += r
+	e.physical_height, r = util.read_i32(buf[n:]); n += r
+	e.subpixel, r = util.read_i32(buf[n:]); n += r
+	e.make, r = util.read_string(buf[n:]); n += r
+	e.model, r = util.read_string(buf[n:]); n += r
+	e.transform, r = util.read_i32(buf[n:]); n += r
+	return e, n
+}
+
+/*
+	The mode event describes an available mode for the output.
+
+        The event is sent when binding to the output object and there
+        will always be one mode, the current mode.  The event is sent
+        again if an output changes mode, for the mode that is now
+        current.  In other words, the current mode is always the last
+        mode that was received with the current flag set.
+
+        Non-current modes are deprecated. A compositor can decide to only
+        advertise the current mode and never send other modes. Clients
+        should not rely on non-current modes.
+
+        The size of a mode is given in physical hardware units of
+        the output device. This is not necessarily the same as
+        the output size in the global compositor space. For instance,
+        the output may be scaled, as described in wl_output.scale,
+        or transformed, as described in wl_output.transform. Clients
+        willing to retrieve the output size in the global compositor
+        space should use xdg_output.logical_size instead.
+
+        The vertical refresh rate can be set to zero if it doesn't make
+        sense for this output (e.g. for virtual outputs).
+
+        The mode event will be followed by a done event (starting from
+        version 2).
+
+        Clients should not use the refresh rate to schedule frames. Instead,
+        they should use the wl_surface.frame event or the presentation-time
+        protocol.
+
+        Note: this information is not always meaningful for all outputs. Some
+        compositors, such as those exposing virtual outputs, might fake the
+        refresh rate or the size.
+*/
+Output_Mode_Event :: struct {
+	output: Output,
+	flags: u32,
+	width: i32,
+	height: i32,
+	refresh: i32,
+}
+output_mode_event_read :: proc(buf: []byte) -> (Output_Mode_Event, int) {
+	e: Output_Mode_Event
+	r: int
+	n := r
+	e.flags, r = util.read_u32(buf[n:]); n += r
+	e.width, r = util.read_i32(buf[n:]); n += r
+	e.height, r = util.read_i32(buf[n:]); n += r
+	e.refresh, r = util.read_i32(buf[n:]); n += r
+	return e, n
+}
+
+/*
+	This event is sent after all other properties have been
+        sent after binding to the output object and after any
+        other property changes done after that. This allows
+        changes to the output properties to be seen as
+        atomic, even if they happen via multiple events.
+*/
+Output_Done_Event :: struct {
+	output: Output,
+}
+output_done_event_read :: proc(buf: []byte) -> (Output_Done_Event, int) {
+	e: Output_Done_Event
+	r: int
+	n := r
+	return e, n
+}
+
+/*
+	This event contains scaling geometry information
+        that is not in the geometry event. It may be sent after
+        binding the output object or if the output scale changes
+        later. The compositor will emit a non-zero, positive
+        value for scale. If it is not sent, the client should
+        assume a scale of 1.
+
+        A scale larger than 1 means that the compositor will
+        automatically scale surface buffers by this amount
+        when rendering. This is used for very high resolution
+        displays where applications rendering at the native
+        resolution would be too small to be legible.
+
+        Clients should use wl_surface.preferred_buffer_scale
+        instead of this event to find the preferred buffer
+        scale to use for a surface.
+
+        The scale event will be followed by a done event.
+*/
+Output_Scale_Event :: struct {
+	output: Output,
+	factor: i32,
+}
+output_scale_event_read :: proc(buf: []byte) -> (Output_Scale_Event, int) {
+	e: Output_Scale_Event
+	r: int
+	n := r
+	e.factor, r = util.read_i32(buf[n:]); n += r
+	return e, n
+}
+
+/*
+	Many compositors will assign user-friendly names to their outputs, show
+        them to the user, allow the user to refer to an output, etc. The client
+        may wish to know this name as well to offer the user similar behaviors.
+
+        The name is a UTF-8 string with no convention defined for its contents.
+        Each name is unique among all wl_output globals. The name is only
+        guaranteed to be unique for the compositor instance.
+
+        The same output name is used for all clients for a given wl_output
+        global. Thus, the name can be shared across processes to refer to a
+        specific wl_output global.
+
+        The name is not guaranteed to be persistent across sessions, thus cannot
+        be used to reliably identify an output in e.g. configuration files.
+
+        Examples of names include 'HDMI-A-1', 'WL-1', 'X11-1', etc. However, do
+        not assume that the name is a reflection of an underlying DRM connector,
+        X11 connection, etc.
+
+        The name event is sent after binding the output object. This event is
+        only sent once per output object, and the name does not change over the
+        lifetime of the wl_output global.
+
+        Compositors may re-use the same output name if the wl_output global is
+        destroyed and re-created later. Compositors should avoid re-using the
+        same name if possible.
+
+        The name event will be followed by a done event.
+*/
+Output_Name_Event :: struct {
+	output: Output,
+	name: string,
+}
+output_name_event_read :: proc(buf: []byte) -> (Output_Name_Event, int) {
+	e: Output_Name_Event
+	r: int
+	n := r
+	e.name, r = util.read_string(buf[n:]); n += r
+	return e, n
+}
+
+/*
+	Many compositors can produce human-readable descriptions of their
+        outputs. The client may wish to know this description as well, e.g. for
+        output selection purposes.
+
+        The description is a UTF-8 string with no convention defined for its
+        contents. The description is not guaranteed to be unique among all
+        wl_output globals. Examples might include 'Foocorp 11" Display' or
+        'Virtual X11 output via :1'.
+
+        The description event is sent after binding the output object and
+        whenever the description changes. The description is optional, and may
+        not be sent at all.
+
+        The description event will be followed by a done event.
+*/
+Output_Description_Event :: struct {
+	output: Output,
+	description: string,
+}
+output_description_event_read :: proc(buf: []byte) -> (Output_Description_Event, int) {
+	e: Output_Description_Event
+	r: int
+	n := r
+	e.description, r = util.read_string(buf[n:]); n += r
+	return e, n
+}
+
+/*
+	This enumeration describes how the physical
+        pixels on an output are laid out.
+*/
+Output_Subpixel :: enum u32 {
+	Unknown = 0,
+	None = 1,
+	Horizontal_Rgb = 2,
+	Horizontal_Bgr = 3,
+	Vertical_Rgb = 4,
+	Vertical_Bgr = 5,
+}
+
+/*
+	This describes transformations that clients and compositors apply to
+        buffer contents.
+
+        The flipped values correspond to an initial flip around a
+        vertical axis followed by rotation.
+
+        The purpose is mainly to allow clients to render accordingly and
+        tell the compositor, so that for fullscreen surfaces, the
+        compositor will still be able to scan out directly from client
+        surfaces.
+*/
+Output_Transform :: enum u32 {
+	Normal = 0,
+	_90 = 1,
+	_180 = 2,
+	_270 = 3,
+	Flipped = 4,
+	Flipped_90 = 5,
+	Flipped_180 = 6,
+	Flipped_270 = 7,
+}
+
+/*
+	These flags describe properties of an output mode.
+        They are used in the flags bitfield of the mode event.
+*/
+Output_Mode :: enum u32 {
+	Current = 0,
+	Preferred = 1,
+}
+Output_Mode_Set :: bit_set[Output_Mode; u32]
+
+REGION_INTERFACE :: "wl_region"
+REGION_VERSION   :: 7
+
+/*
+	A region object describes an area.
+
+      Region objects are used to describe the opaque and input
+      regions of a surface.
+*/
+Region :: distinct u32
+
+REGION_DESTROY_REQUEST_OPCODE :: 0
+/*
+	Destroy the region.  This will invalidate the object ID.
+*/
+Region_Destroy_Request :: struct {
+	region: Region,
+}
+region_destroy_request_write :: proc(buf: ^[dynamic]byte, req: Region_Destroy_Request) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
+	object := u32(req.region)
+	opcode := u16(REGION_DESTROY_REQUEST_OPCODE)
+	size   := u16(8)
+	num_appended += util.write(buf, object, opcode, size) or_return
+	return
+}
+
+REGION_ADD_REQUEST_OPCODE :: 1
+/*
+	Add the specified rectangle to the region.
+*/
+Region_Add_Request :: struct {
+	region: Region,
+	x: i32,
+	y: i32,
+	width: i32,
+	height: i32,
+}
+region_add_request_write :: proc(buf: ^[dynamic]byte, req: Region_Add_Request) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
+	object := u32(req.region)
+	opcode := u16(REGION_ADD_REQUEST_OPCODE)
+	size   := u16(8 + size_of(req.x) + size_of(req.y) + size_of(req.width) + size_of(req.height))
+	num_appended += util.write(buf, object, opcode, size) or_return
+	num_appended += util.write(buf, req.x) or_return
+	num_appended += util.write(buf, req.y) or_return
+	num_appended += util.write(buf, req.width) or_return
+	num_appended += util.write(buf, req.height) or_return
+	return
+}
+
+REGION_SUBTRACT_REQUEST_OPCODE :: 2
+/*
+	Subtract the specified rectangle from the region.
+*/
+Region_Subtract_Request :: struct {
+	region: Region,
+	x: i32,
+	y: i32,
+	width: i32,
+	height: i32,
+}
+region_subtract_request_write :: proc(buf: ^[dynamic]byte, req: Region_Subtract_Request) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
+	object := u32(req.region)
+	opcode := u16(REGION_SUBTRACT_REQUEST_OPCODE)
+	size   := u16(8 + size_of(req.x) + size_of(req.y) + size_of(req.width) + size_of(req.height))
+	num_appended += util.write(buf, object, opcode, size) or_return
+	num_appended += util.write(buf, req.x) or_return
+	num_appended += util.write(buf, req.y) or_return
+	num_appended += util.write(buf, req.width) or_return
+	num_appended += util.write(buf, req.height) or_return
+	return
+}
+
+SUBCOMPOSITOR_INTERFACE :: "wl_subcompositor"
+SUBCOMPOSITOR_VERSION   :: 1
+
+/*
+	The global interface exposing sub-surface compositing capabilities.
+      A wl_surface, that has sub-surfaces associated, is called the
+      parent surface. Sub-surfaces can be arbitrarily nested and create
+      a tree of sub-surfaces.
+
+      The root surface in a tree of sub-surfaces is the main
+      surface. The main surface cannot be a sub-surface, because
+      sub-surfaces must always have a parent.
+
+      A main surface with its sub-surfaces forms a (compound) window.
+      For window management purposes, this set of wl_surface objects is
+      to be considered as a single window, and it should also behave as
+      such.
+
+      The aim of sub-surfaces is to offload some of the compositing work
+      within a window from clients to the compositor. A prime example is
+      a video player with decorations and video in separate wl_surface
+      objects. This should allow the compositor to pass YUV video buffer
+      processing to dedicated overlay hardware when possible.
+*/
+Subcompositor :: distinct u32
+
+SUBCOMPOSITOR_DESTROY_REQUEST_OPCODE :: 0
+/*
+	Informs the server that the client will not be using this
+        protocol object anymore. This does not affect any other
+        objects, wl_subsurface objects included.
+*/
+Subcompositor_Destroy_Request :: struct {
+	subcompositor: Subcompositor,
+}
+subcompositor_destroy_request_write :: proc(buf: ^[dynamic]byte, req: Subcompositor_Destroy_Request) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
+	object := u32(req.subcompositor)
+	opcode := u16(SUBCOMPOSITOR_DESTROY_REQUEST_OPCODE)
+	size   := u16(8)
+	num_appended += util.write(buf, object, opcode, size) or_return
+	return
+}
+
+SUBCOMPOSITOR_GET_SUBSURFACE_REQUEST_OPCODE :: 1
+/*
+	Create a sub-surface interface for the given surface, and
+        associate it with the given parent surface. This turns a
+        plain wl_surface into a sub-surface.
+
+        The to-be sub-surface must not already have another role, and it
+        must not have an existing wl_subsurface object. Otherwise the
+        bad_surface protocol error is raised.
+
+        Adding sub-surfaces to a parent is a double-buffered operation on the
+        parent (see wl_surface.commit). The effect of adding a sub-surface
+        becomes visible on the next time the state of the parent surface is
+        applied.
+
+        The parent surface must not be one of the child surface's descendants,
+        and the parent must be different from the child surface, otherwise the
+        bad_parent protocol error is raised.
+
+        This request modifies the behaviour of wl_surface.commit request on
+        the sub-surface, see the documentation on wl_subsurface interface.
+*/
+Subcompositor_Get_Subsurface_Request :: struct {
+	subcompositor: Subcompositor,
+	id: Subsurface,
+	surface: Surface,
+	parent: Surface,
+}
+subcompositor_get_subsurface_request_write :: proc(buf: ^[dynamic]byte, req: Subcompositor_Get_Subsurface_Request, new_id: u32) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
+	object := u32(req.subcompositor)
+	opcode := u16(SUBCOMPOSITOR_GET_SUBSURFACE_REQUEST_OPCODE)
+	size   := u16(8 + size_of(req.parent) + size_of(new_id))
+	num_appended += util.write(buf, object, opcode, size) or_return
+	num_appended += util.write(buf, u32(req.parent)) or_return
+	num_appended += util.write(buf, new_id) or_return
+	return
+}
+
+Subcompositor_Error :: enum u32 {
+	Bad_Surface = 0,
+	Bad_Parent = 1,
+}
+
+SUBSURFACE_INTERFACE :: "wl_subsurface"
+SUBSURFACE_VERSION   :: 1
+
+/*
+	An additional interface to a wl_surface object, which has been
+      made a sub-surface. A sub-surface has one parent surface. A
+      sub-surface's size and position are not limited to that of the parent.
+      Particularly, a sub-surface is not automatically clipped to its
+      parent's area.
+
+      A sub-surface becomes mapped, when a non-NULL wl_buffer is applied
+      and the parent surface is mapped. The order of which one happens
+      first is irrelevant. A sub-surface is hidden if the parent becomes
+      hidden, or if a NULL wl_buffer is applied. These rules apply
+      recursively through the tree of surfaces.
+
+      A sub-surface can be in one of two modes. The possible modes are
+      synchronized and desynchronized, see methods wl_subsurface.set_sync and
+      wl_subsurface.set_desync.
+
+      The main surface can be thought to be always in desynchronized mode,
+      since it does not have a parent in the sub-surfaces sense.
+
+      Even if a sub-surface is in desynchronized mode, it will behave as
+      in synchronized mode, if its parent surface behaves as in
+      synchronized mode. This rule is applied recursively throughout the
+      tree of surfaces. This means, that one can set a sub-surface into
+      synchronized mode, and then assume that all its child and grand-child
+      sub-surfaces are synchronized, too, without explicitly setting them.
+
+      If a surface behaves as in synchronized mode, it is effectively
+      synchronized, otherwise it is effectively desynchronized.
+
+      A sub-surface is initially in the synchronized mode.
+
+      The wl_subsurface interface has requests which modify double-buffered
+      state of the parent surface (wl_subsurface.set_position, .place_above and
+      .place_below).
+
+      Destroying a sub-surface takes effect immediately. If you need to
+      synchronize the removal of a sub-surface to the parent surface update,
+      unmap the sub-surface first by attaching a NULL wl_buffer, update parent,
+      and then destroy the sub-surface.
+
+      If the parent wl_surface object is destroyed, the sub-surface is
+      unmapped.
+
+      A sub-surface never has the keyboard focus of any seat.
+
+      The wl_surface.offset request is ignored: clients must use set_position
+      instead to move the sub-surface.
+*/
+Subsurface :: distinct u32
+
+SUBSURFACE_DESTROY_REQUEST_OPCODE :: 0
+/*
+	The sub-surface interface is removed from the wl_surface object
+        that was turned into a sub-surface with a
+        wl_subcompositor.get_subsurface request. The wl_surface's association
+        to the parent is deleted. The wl_surface is unmapped immediately.
+*/
+Subsurface_Destroy_Request :: struct {
+	subsurface: Subsurface,
+}
+subsurface_destroy_request_write :: proc(buf: ^[dynamic]byte, req: Subsurface_Destroy_Request) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
+	object := u32(req.subsurface)
+	opcode := u16(SUBSURFACE_DESTROY_REQUEST_OPCODE)
+	size   := u16(8)
+	num_appended += util.write(buf, object, opcode, size) or_return
+	return
+}
+
+SUBSURFACE_SET_POSITION_REQUEST_OPCODE :: 1
+/*
+	This sets the position of the sub-surface, relative to the parent
+        surface.
+
+        The sub-surface will be moved so that its origin (top left
+        corner pixel) will be at the location x, y of the parent surface
+        coordinate system. The coordinates are not restricted to the parent
+        surface area. Negative values are allowed.
+
+        The initial position is 0, 0.
+
+        Position is double-buffered state on the parent surface, see
+        wl_subsurface and wl_surface.commit for more information.
+*/
+Subsurface_Set_Position_Request :: struct {
+	subsurface: Subsurface,
+	x: i32,
+	y: i32,
+}
+subsurface_set_position_request_write :: proc(buf: ^[dynamic]byte, req: Subsurface_Set_Position_Request) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
+	object := u32(req.subsurface)
+	opcode := u16(SUBSURFACE_SET_POSITION_REQUEST_OPCODE)
+	size   := u16(8 + size_of(req.x) + size_of(req.y))
+	num_appended += util.write(buf, object, opcode, size) or_return
+	num_appended += util.write(buf, req.x) or_return
+	num_appended += util.write(buf, req.y) or_return
+	return
+}
+
+SUBSURFACE_PLACE_ABOVE_REQUEST_OPCODE :: 2
+/*
+	This sub-surface is taken from the stack, and put back just
+        above the reference surface, changing the z-order of the sub-surfaces.
+        The reference surface must be one of the sibling surfaces, or the
+        parent surface. Using any other surface, including this sub-surface,
+        will cause a protocol error.
+
+        A new sub-surface is initially added as the top-most in the stack
+        of its siblings and parent.
+
+        Z-order is double-buffered state on the parent surface, see
+        wl_subsurface and wl_surface.commit for more information.
+*/
+Subsurface_Place_Above_Request :: struct {
+	subsurface: Subsurface,
+	sibling: Surface,
+}
+subsurface_place_above_request_write :: proc(buf: ^[dynamic]byte, req: Subsurface_Place_Above_Request) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
+	object := u32(req.subsurface)
+	opcode := u16(SUBSURFACE_PLACE_ABOVE_REQUEST_OPCODE)
+	size   := u16(8 + size_of(req.sibling))
+	num_appended += util.write(buf, object, opcode, size) or_return
+	num_appended += util.write(buf, u32(req.sibling)) or_return
+	return
+}
+
+SUBSURFACE_PLACE_BELOW_REQUEST_OPCODE :: 3
+/*
+	The sub-surface is placed just below the reference surface.
+
+        See wl_subsurface.place_above.
+*/
+Subsurface_Place_Below_Request :: struct {
+	subsurface: Subsurface,
+	sibling: Surface,
+}
+subsurface_place_below_request_write :: proc(buf: ^[dynamic]byte, req: Subsurface_Place_Below_Request) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
+	object := u32(req.subsurface)
+	opcode := u16(SUBSURFACE_PLACE_BELOW_REQUEST_OPCODE)
+	size   := u16(8 + size_of(req.sibling))
+	num_appended += util.write(buf, object, opcode, size) or_return
+	num_appended += util.write(buf, u32(req.sibling)) or_return
+	return
+}
+
+SUBSURFACE_SET_SYNC_REQUEST_OPCODE :: 4
+/*
+	Change the commit behaviour of the sub-surface to synchronized
+        mode.
+
+        See wl_subsurface and wl_surface.commit for more information.
+*/
+Subsurface_Set_Sync_Request :: struct {
+	subsurface: Subsurface,
+}
+subsurface_set_sync_request_write :: proc(buf: ^[dynamic]byte, req: Subsurface_Set_Sync_Request) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
+	object := u32(req.subsurface)
+	opcode := u16(SUBSURFACE_SET_SYNC_REQUEST_OPCODE)
+	size   := u16(8)
+	num_appended += util.write(buf, object, opcode, size) or_return
+	return
+}
+
+SUBSURFACE_SET_DESYNC_REQUEST_OPCODE :: 5
+/*
+	Change the commit behaviour of the sub-surface to desynchronized
+        mode.
+
+        See wl_subsurface and wl_surface.commit for more information.
+*/
+Subsurface_Set_Desync_Request :: struct {
+	subsurface: Subsurface,
+}
+subsurface_set_desync_request_write :: proc(buf: ^[dynamic]byte, req: Subsurface_Set_Desync_Request) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
+	object := u32(req.subsurface)
+	opcode := u16(SUBSURFACE_SET_DESYNC_REQUEST_OPCODE)
+	size   := u16(8)
+	num_appended += util.write(buf, object, opcode, size) or_return
+	return
+}
+
+Subsurface_Error :: enum u32 {
+	Bad_Surface = 0,
+}
+
+FIXES_INTERFACE :: "wl_fixes"
+FIXES_VERSION   :: 2
+
+/*
+	This global fixes problems with other core-protocol interfaces that
+      cannot be fixed in these interfaces themselves.
+*/
+Fixes :: distinct u32
+
+FIXES_DESTROY_REQUEST_OPCODE :: 0
+Fixes_Destroy_Request :: struct {
+	fixes: Fixes,
+}
+fixes_destroy_request_write :: proc(buf: ^[dynamic]byte, req: Fixes_Destroy_Request) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
+	object := u32(req.fixes)
+	opcode := u16(FIXES_DESTROY_REQUEST_OPCODE)
+	size   := u16(8)
+	num_appended += util.write(buf, object, opcode, size) or_return
+	return
+}
+
+FIXES_DESTROY_REGISTRY_REQUEST_OPCODE :: 1
+/*
+	This request destroys a wl_registry object.
+
+        The client should no longer use the wl_registry after making this
+        request.
+
+        The compositor will emit a wl_display.delete_id event with the object ID
+        of the registry and will no longer emit any events on the registry. The
+        client should re-use the object ID once it receives the
+        wl_display.delete_id event.
+*/
+Fixes_Destroy_Registry_Request :: struct {
+	fixes: Fixes,
+	registry: Registry,
+}
+fixes_destroy_registry_request_write :: proc(buf: ^[dynamic]byte, req: Fixes_Destroy_Registry_Request) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
+	object := u32(req.fixes)
+	opcode := u16(FIXES_DESTROY_REGISTRY_REQUEST_OPCODE)
+	size   := u16(8)
+	num_appended += util.write(buf, object, opcode, size) or_return
+	return
+}
+
+FIXES_ACK_GLOBAL_REMOVE_REQUEST_OPCODE :: 2
+/*
+	Acknowledge the removal of the specified global.
+
+        If no global with the specified name exists or the global is not removed,
+        the wl_fixes.invalid_ack_remove protocol error will be posted.
+
+        Due to the Wayland protocol being asynchronous, the wl_global objects
+        cannot be destroyed immediately. For example, if a wl_global is removed
+        and a client attempts to bind that global around same time, it can
+        result in a protocol error due to an unknown global name in the bind
+        request.
+
+        In order to avoid crashing clients, the compositor should remove the
+        wl_global once it is guaranteed that no more bind requests will come.
+
+        The wl_fixes.ack_global_remove() request is used to signal to the
+        compositor that the client will not bind the given global anymore. After
+        all clients acknowledge the removal of the global, the compositor can
+        safely destroy it.
+
+        The client must call the wl_fixes.ack_global_remove() request in
+        response to a wl_registry.global_remove() event even if it did not bind
+        the corresponding global.
+*/
+Fixes_Ack_Global_Remove_Request :: struct {
+	fixes: Fixes,
+	registry: Registry,
+	name: u32,
+}
+fixes_ack_global_remove_request_write :: proc(buf: ^[dynamic]byte, req: Fixes_Ack_Global_Remove_Request) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
+	object := u32(req.fixes)
+	opcode := u16(FIXES_ACK_GLOBAL_REMOVE_REQUEST_OPCODE)
+	size   := u16(8 + size_of(req.name))
+	num_appended += util.write(buf, object, opcode, size) or_return
+	num_appended += util.write(buf, req.name) or_return
+	return
+}
+
+/*
+	These errors can be emitted in response to wl_fixes requests.
+*/
+Fixes_Error :: enum u32 {
+	Invalid_Ack_Remove = 0,
+}
+
