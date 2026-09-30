@@ -8,7 +8,7 @@ write_client_protocol :: proc(sb: ^strings.Builder, p: Protocol, allocator := co
 	fmt.sbprintf(sb, "package %v\n\n", p.pkg)
 	fmt.sbprintf(sb, "import \"../../util\"\n")
 	if p.pkg != "wayland" {
-		fmt.sbprintf(sb, "import wayland \"../wayland\"\n")
+		fmt.sbprintf(sb, "import \"../wayland\"\n")
 	}
 	fmt.sbprintf(sb, "import \"core:sys/linux\"\n")
 	fmt.sbprintf(sb, "import \"base:runtime\"\n\n")

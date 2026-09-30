@@ -1,7 +1,7 @@
 package xdg
 
 import "../../util"
-import wayland "../wayland"
+import "../wayland"
 import "core:sys/linux"
 import "base:runtime"
 

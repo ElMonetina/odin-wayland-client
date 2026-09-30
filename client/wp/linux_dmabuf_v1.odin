@@ -1,7 +1,7 @@
 package wp
 
 import "../../util"
-import wayland "../wayland"
+import "../wayland"
 import "core:sys/linux"
 import "base:runtime"
 
@@ -795,4 +795,3 @@ Linux_Dmabuf_Feedback_V1_Tranche_Flags :: enum u32 {
 	Sampling = 1,
 }
 Linux_Dmabuf_Feedback_V1_Tranche_Flags_Set :: bit_set[Linux_Dmabuf_Feedback_V1_Tranche_Flags; u32]
-
