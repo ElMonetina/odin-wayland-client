@@ -31,6 +31,9 @@ import "base:runtime"
     SOFTWARE.
 */
 
+@(rodata)
+display := Display(1)
+
 DISPLAY_INTERFACE :: "wl_display"
 DISPLAY_VERSION   :: 1
 
@@ -92,6 +95,7 @@ display_get_registry_request_write :: proc(buf: ^[dynamic]byte, req: Display_Get
 	return
 }
 
+DISPLAY_ERROR_EVENT_OPCODE :: 0
 /*
 	The error event is sent out when a fatal (non-recoverable)
         error has occurred.  The object_id argument is the object
@@ -119,6 +123,7 @@ display_error_event_read :: proc(buf: []byte) -> (Display_Error_Event, int) {
 	return e, n
 }
 
+DISPLAY_DELETE_ID_EVENT_OPCODE :: 1
 /*
 	This event is used internally by the object ID management logic.
 
@@ -200,6 +205,7 @@ registry_bind_request_write :: proc(buf: ^[dynamic]byte, req: Registry_Bind_Requ
 	return
 }
 
+REGISTRY_GLOBAL_EVENT_OPCODE :: 0
 /*
 	Notify the client of global objects.
 
@@ -223,6 +229,7 @@ registry_global_event_read :: proc(buf: []byte) -> (Registry_Global_Event, int) 
 	return e, n
 }
 
+REGISTRY_GLOBAL_REMOVE_EVENT_OPCODE :: 1
 /*
 	Notify the client of removed global objects.
 
@@ -259,6 +266,7 @@ CALLBACK_VERSION   :: 1
 */
 Callback :: distinct u32
 
+CALLBACK_DONE_EVENT_OPCODE :: 0
 /*
 	Notify the client when the related request is done.
 */
@@ -495,6 +503,7 @@ shm_release_request_write :: proc(buf: ^[dynamic]byte, req: Shm_Release_Request)
 	return
 }
 
+SHM_FORMAT_EVENT_OPCODE :: 0
 /*
 	Informs the client about a valid pixel format that
         can be used for buffers. Known formats include
@@ -731,6 +740,7 @@ buffer_destroy_request_write :: proc(buf: ^[dynamic]byte, req: Buffer_Destroy_Re
 	return
 }
 
+BUFFER_RELEASE_EVENT_OPCODE :: 0
 /*
 	Sent when this wl_buffer is no longer used by the compositor.
 
@@ -926,6 +936,7 @@ data_offer_set_actions_request_write :: proc(buf: ^[dynamic]byte, req: Data_Offe
 	return
 }
 
+DATA_OFFER_OFFER_EVENT_OPCODE :: 0
 /*
 	Sent immediately after creating the wl_data_offer object.  One
         event per offered mime type.
@@ -942,6 +953,7 @@ data_offer_offer_event_read :: proc(buf: []byte) -> (Data_Offer_Offer_Event, int
 	return e, n
 }
 
+DATA_OFFER_SOURCE_ACTIONS_EVENT_OPCODE :: 1
 /*
 	This event indicates the actions offered by the data source. It
         will be sent immediately after creating the wl_data_offer object,
@@ -960,6 +972,7 @@ data_offer_source_actions_event_read :: proc(buf: []byte) -> (Data_Offer_Source_
 	return e, n
 }
 
+DATA_OFFER_ACTION_EVENT_OPCODE :: 2
 /*
 	This event indicates the action selected by the compositor after
         matching the source/destination side actions. Only one action (or
@@ -1090,6 +1103,7 @@ data_source_set_actions_request_write :: proc(buf: ^[dynamic]byte, req: Data_Sou
 	return
 }
 
+DATA_SOURCE_TARGET_EVENT_OPCODE :: 0
 /*
 	Sent when a target accepts pointer_focus or motion events.  If
         a target does not accept any of the offered types, type is NULL.
@@ -1108,6 +1122,7 @@ data_source_target_event_read :: proc(buf: []byte) -> (Data_Source_Target_Event,
 	return e, n
 }
 
+DATA_SOURCE_SEND_EVENT_OPCODE :: 1
 /*
 	Request for data from the client.  Send the data as the
         specified mime type over the passed file descriptor, then
@@ -1118,14 +1133,16 @@ Data_Source_Send_Event :: struct {
 	mime_type: string,
 	fd: linux.Fd,
 }
-data_source_send_event_read :: proc(buf: []byte) -> (Data_Source_Send_Event, int) {
+data_source_send_event_read :: proc(buf: []byte, fds: ^[dynamic; 28]linux.Fd) -> (Data_Source_Send_Event, int) {
 	e: Data_Source_Send_Event
 	r: int
 	n := r
 	e.mime_type, r = util.read_string(buf[n:]); n += r
+	e.fd = pop_front(fds)
 	return e, n
 }
 
+DATA_SOURCE_CANCELLED_EVENT_OPCODE :: 2
 /*
 	This data source is no longer valid. There are several reasons why
         this could happen:
@@ -1158,6 +1175,7 @@ data_source_cancelled_event_read :: proc(buf: []byte) -> (Data_Source_Cancelled_
 	return e, n
 }
 
+DATA_SOURCE_DND_DROP_PERFORMED_EVENT_OPCODE :: 3
 /*
 	The user performed the drop action. This event does not indicate
         acceptance, wl_data_source.cancelled may still be emitted afterwards
@@ -1179,6 +1197,7 @@ data_source_dnd_drop_performed_event_read :: proc(buf: []byte) -> (Data_Source_D
 	return e, n
 }
 
+DATA_SOURCE_DND_FINISHED_EVENT_OPCODE :: 4
 /*
 	The drop destination finished interoperating with this data
         source, so the client is now free to destroy this data source and
@@ -1197,6 +1216,7 @@ data_source_dnd_finished_event_read :: proc(buf: []byte) -> (Data_Source_Dnd_Fin
 	return e, n
 }
 
+DATA_SOURCE_ACTION_EVENT_OPCODE :: 5
 /*
 	This event indicates the action selected by the compositor after
         matching the source/destination side actions. Only one action (or
@@ -1345,6 +1365,7 @@ data_device_release_request_write :: proc(buf: ^[dynamic]byte, req: Data_Device_
 	return
 }
 
+DATA_DEVICE_DATA_OFFER_EVENT_OPCODE :: 0
 /*
 	The data_offer event introduces a new wl_data_offer object,
         which will subsequently be used in either the
@@ -1362,9 +1383,13 @@ data_device_data_offer_event_read :: proc(buf: []byte) -> (Data_Device_Data_Offe
 	e: Data_Device_Data_Offer_Event
 	r: int
 	n := r
+	id: u32
+	id, r = util.read_u32(buf[n:]); n += r
+	e.id = Data_Offer(id)
 	return e, n
 }
 
+DATA_DEVICE_ENTER_EVENT_OPCODE :: 1
 /*
 	This event is sent when an active drag-and-drop pointer enters
         a surface owned by the client.  The position of the pointer at
@@ -1395,6 +1420,7 @@ data_device_enter_event_read :: proc(buf: []byte) -> (Data_Device_Enter_Event, i
 	return e, n
 }
 
+DATA_DEVICE_LEAVE_EVENT_OPCODE :: 2
 /*
 	This event is sent when the drag-and-drop pointer leaves the
         surface and the session ends.  The client must destroy the
@@ -1410,6 +1436,7 @@ data_device_leave_event_read :: proc(buf: []byte) -> (Data_Device_Leave_Event, i
 	return e, n
 }
 
+DATA_DEVICE_MOTION_EVENT_OPCODE :: 3
 /*
 	This event is sent when the drag-and-drop pointer moves within
         the currently focused surface. The new position of the pointer
@@ -1432,6 +1459,7 @@ data_device_motion_event_read :: proc(buf: []byte) -> (Data_Device_Motion_Event,
 	return e, n
 }
 
+DATA_DEVICE_DROP_EVENT_OPCODE :: 4
 /*
 	The event is sent when a drag-and-drop operation is ended
         because the implicit grab is removed.
@@ -1457,6 +1485,7 @@ data_device_drop_event_read :: proc(buf: []byte) -> (Data_Device_Drop_Event, int
 	return e, n
 }
 
+DATA_DEVICE_SELECTION_EVENT_OPCODE :: 5
 /*
 	The selection event is sent out to notify the client of a new
         wl_data_offer for the selection for this device.  The
@@ -1934,6 +1963,7 @@ shell_surface_set_class_request_write :: proc(buf: ^[dynamic]byte, req: Shell_Su
 	return
 }
 
+SHELL_SURFACE_PING_EVENT_OPCODE :: 0
 /*
 	Ping a client to check if it is receiving events and sending
         requests. A client is expected to reply with a pong request.
@@ -1950,6 +1980,7 @@ shell_surface_ping_event_read :: proc(buf: []byte) -> (Shell_Surface_Ping_Event,
 	return e, n
 }
 
+SHELL_SURFACE_CONFIGURE_EVENT_OPCODE :: 1
 /*
 	The configure event asks the client to resize its surface.
 
@@ -1985,6 +2016,7 @@ shell_surface_configure_event_read :: proc(buf: []byte) -> (Shell_Surface_Config
 	return e, n
 }
 
+SHELL_SURFACE_POPUP_DONE_EVENT_OPCODE :: 2
 /*
 	The popup_done event is sent out when a popup grab is broken,
         that is, when the user clicks a surface that doesn't belong
@@ -2619,6 +2651,7 @@ surface_get_release_request_write :: proc(buf: ^[dynamic]byte, req: Surface_Get_
 	return
 }
 
+SURFACE_ENTER_EVENT_OPCODE :: 0
 /*
 	This is emitted whenever a surface's creation, movement, or resizing
         results in some part of it being within the scanout region of an
@@ -2640,6 +2673,7 @@ surface_enter_event_read :: proc(buf: []byte) -> (Surface_Enter_Event, int) {
 	return e, n
 }
 
+SURFACE_LEAVE_EVENT_OPCODE :: 1
 /*
 	This is emitted whenever a surface's creation, movement, or resizing
         results in it no longer having any part of it within the scanout region
@@ -2665,6 +2699,7 @@ surface_leave_event_read :: proc(buf: []byte) -> (Surface_Leave_Event, int) {
 	return e, n
 }
 
+SURFACE_PREFERRED_BUFFER_SCALE_EVENT_OPCODE :: 2
 /*
 	This event indicates the preferred buffer scale for this surface. It is
         sent whenever the compositor's preference changes.
@@ -2691,6 +2726,7 @@ surface_preferred_buffer_scale_event_read :: proc(buf: []byte) -> (Surface_Prefe
 	return e, n
 }
 
+SURFACE_PREFERRED_BUFFER_TRANSFORM_EVENT_OPCODE :: 3
 /*
 	This event indicates the preferred buffer transform for this surface.
         It is sent whenever the compositor's preference changes.
@@ -2825,6 +2861,7 @@ seat_release_request_write :: proc(buf: ^[dynamic]byte, req: Seat_Release_Reques
 	return
 }
 
+SEAT_CAPABILITIES_EVENT_OPCODE :: 0
 /*
 	This is sent on binding to the seat global or whenever a seat gains
         or loses the pointer, keyboard or touch capabilities.
@@ -2864,6 +2901,7 @@ seat_capabilities_event_read :: proc(buf: []byte) -> (Seat_Capabilities_Event, i
 	return e, n
 }
 
+SEAT_NAME_EVENT_OPCODE :: 1
 /*
 	In a multi-seat configuration the seat name can be used by clients to
         help identify which physical devices the seat represents.
@@ -3000,6 +3038,7 @@ pointer_release_request_write :: proc(buf: ^[dynamic]byte, req: Pointer_Release_
 	return
 }
 
+POINTER_ENTER_EVENT_OPCODE :: 0
 /*
 	Notification that this seat's pointer is focused on a certain
         surface.
@@ -3028,6 +3067,7 @@ pointer_enter_event_read :: proc(buf: []byte) -> (Pointer_Enter_Event, int) {
 	return e, n
 }
 
+POINTER_LEAVE_EVENT_OPCODE :: 1
 /*
 	Notification that this seat's pointer is no longer focused on
         a certain surface.
@@ -3051,6 +3091,7 @@ pointer_leave_event_read :: proc(buf: []byte) -> (Pointer_Leave_Event, int) {
 	return e, n
 }
 
+POINTER_MOTION_EVENT_OPCODE :: 2
 /*
 	Notification of pointer location change. The arguments
         surface_x and surface_y are the location relative to the
@@ -3072,6 +3113,7 @@ pointer_motion_event_read :: proc(buf: []byte) -> (Pointer_Motion_Event, int) {
 	return e, n
 }
 
+POINTER_BUTTON_EVENT_OPCODE :: 3
 /*
 	Mouse button click and release notifications.
 
@@ -3106,6 +3148,7 @@ pointer_button_event_read :: proc(buf: []byte) -> (Pointer_Button_Event, int) {
 	return e, n
 }
 
+POINTER_AXIS_EVENT_OPCODE :: 4
 /*
 	Scroll and other axis notifications.
 
@@ -3140,6 +3183,7 @@ pointer_axis_event_read :: proc(buf: []byte) -> (Pointer_Axis_Event, int) {
 	return e, n
 }
 
+POINTER_FRAME_EVENT_OPCODE :: 5
 /*
 	Indicates the end of a set of events that logically belong together.
         A client is expected to accumulate the data in all events within the
@@ -3186,6 +3230,7 @@ pointer_frame_event_read :: proc(buf: []byte) -> (Pointer_Frame_Event, int) {
 	return e, n
 }
 
+POINTER_AXIS_SOURCE_EVENT_OPCODE :: 6
 /*
 	Source information for scroll and other axes.
 
@@ -3225,6 +3270,7 @@ pointer_axis_source_event_read :: proc(buf: []byte) -> (Pointer_Axis_Source_Even
 	return e, n
 }
 
+POINTER_AXIS_STOP_EVENT_OPCODE :: 7
 /*
 	Stop notification for scroll and other axes.
 
@@ -3255,6 +3301,7 @@ pointer_axis_stop_event_read :: proc(buf: []byte) -> (Pointer_Axis_Stop_Event, i
 	return e, n
 }
 
+POINTER_AXIS_DISCRETE_EVENT_OPCODE :: 8
 /*
 	Discrete step information for scroll and other axes.
 
@@ -3301,6 +3348,7 @@ pointer_axis_discrete_event_read :: proc(buf: []byte) -> (Pointer_Axis_Discrete_
 	return e, n
 }
 
+POINTER_AXIS_VALUE120_EVENT_OPCODE :: 9
 /*
 	Discrete high-resolution scroll information.
 
@@ -3338,6 +3386,7 @@ pointer_axis_value120_event_read :: proc(buf: []byte) -> (Pointer_Axis_Value120_
 	return e, n
 }
 
+POINTER_AXIS_RELATIVE_DIRECTION_EVENT_OPCODE :: 10
 /*
 	Relative directional information of the entity causing the axis
         motion.
@@ -3389,6 +3438,7 @@ pointer_axis_relative_direction_event_read :: proc(buf: []byte) -> (Pointer_Axis
 	return e, n
 }
 
+POINTER_WARP_EVENT_OPCODE :: 11
 /*
 	Notification of pointer location change within a surface.
 
@@ -3504,6 +3554,7 @@ keyboard_release_request_write :: proc(buf: ^[dynamic]byte, req: Keyboard_Releas
 	return
 }
 
+KEYBOARD_KEYMAP_EVENT_OPCODE :: 0
 /*
 	This event provides a file descriptor to the client which can be
         memory-mapped in read-only mode to provide a keyboard mapping
@@ -3518,15 +3569,17 @@ Keyboard_Keymap_Event :: struct {
 	fd: linux.Fd,
 	size: u32,
 }
-keyboard_keymap_event_read :: proc(buf: []byte) -> (Keyboard_Keymap_Event, int) {
+keyboard_keymap_event_read :: proc(buf: []byte, fds: ^[dynamic; 28]linux.Fd) -> (Keyboard_Keymap_Event, int) {
 	e: Keyboard_Keymap_Event
 	r: int
 	n := r
 	e.format, r = util.read_u32(buf[n:]); n += r
+	e.fd = pop_front(fds)
 	e.size, r = util.read_u32(buf[n:]); n += r
 	return e, n
 }
 
+KEYBOARD_ENTER_EVENT_OPCODE :: 1
 /*
 	Notification that this seat's keyboard focus is on a certain
         surface.
@@ -3560,6 +3613,7 @@ keyboard_enter_event_read :: proc(buf: []byte) -> (Keyboard_Enter_Event, int) {
 	return e, n
 }
 
+KEYBOARD_LEAVE_EVENT_OPCODE :: 2
 /*
 	Notification that this seat's keyboard focus is no longer on
         a certain surface.
@@ -3588,6 +3642,7 @@ keyboard_leave_event_read :: proc(buf: []byte) -> (Keyboard_Leave_Event, int) {
 	return e, n
 }
 
+KEYBOARD_KEY_EVENT_OPCODE :: 3
 /*
 	A key was pressed or released.
         The time argument is a timestamp with millisecond
@@ -3631,6 +3686,7 @@ keyboard_key_event_read :: proc(buf: []byte) -> (Keyboard_Key_Event, int) {
 	return e, n
 }
 
+KEYBOARD_MODIFIERS_EVENT_OPCODE :: 4
 /*
 	Notifies clients that the modifier and/or group state has
         changed, and it should update its local state.
@@ -3666,6 +3722,7 @@ keyboard_modifiers_event_read :: proc(buf: []byte) -> (Keyboard_Modifiers_Event,
 	return e, n
 }
 
+KEYBOARD_REPEAT_INFO_EVENT_OPCODE :: 5
 /*
 	Informs the client about the keyboard's repeat rate and delay.
 
@@ -3747,6 +3804,7 @@ touch_release_request_write :: proc(buf: ^[dynamic]byte, req: Touch_Release_Requ
 	return
 }
 
+TOUCH_DOWN_EVENT_OPCODE :: 0
 /*
 	A new touch point has appeared on the surface. This touch point is
         assigned a unique ID. Future events from this touch point reference
@@ -3777,6 +3835,7 @@ touch_down_event_read :: proc(buf: []byte) -> (Touch_Down_Event, int) {
 	return e, n
 }
 
+TOUCH_UP_EVENT_OPCODE :: 1
 /*
 	The touch point has disappeared. No further events will be sent for
         this touch point and the touch point's ID is released and may be
@@ -3798,6 +3857,7 @@ touch_up_event_read :: proc(buf: []byte) -> (Touch_Up_Event, int) {
 	return e, n
 }
 
+TOUCH_MOTION_EVENT_OPCODE :: 2
 /*
 	A touch point has changed coordinates.
 */
@@ -3819,6 +3879,7 @@ touch_motion_event_read :: proc(buf: []byte) -> (Touch_Motion_Event, int) {
 	return e, n
 }
 
+TOUCH_FRAME_EVENT_OPCODE :: 3
 /*
 	Indicates the end of a set of events that logically belong together.
         A client is expected to accumulate the data in all events within the
@@ -3839,6 +3900,7 @@ touch_frame_event_read :: proc(buf: []byte) -> (Touch_Frame_Event, int) {
 	return e, n
 }
 
+TOUCH_CANCEL_EVENT_OPCODE :: 4
 /*
 	Sent if the compositor decides the touch stream is a global
         gesture. No further events are sent to the clients from that
@@ -3859,6 +3921,7 @@ touch_cancel_event_read :: proc(buf: []byte) -> (Touch_Cancel_Event, int) {
 	return e, n
 }
 
+TOUCH_SHAPE_EVENT_OPCODE :: 5
 /*
 	Sent when a touchpoint has changed its shape.
 
@@ -3902,6 +3965,7 @@ touch_shape_event_read :: proc(buf: []byte) -> (Touch_Shape_Event, int) {
 	return e, n
 }
 
+TOUCH_ORIENTATION_EVENT_OPCODE :: 6
 /*
 	Sent when a touchpoint has changed its orientation.
 
@@ -3970,6 +4034,7 @@ output_release_request_write :: proc(buf: ^[dynamic]byte, req: Output_Release_Re
 	return
 }
 
+OUTPUT_GEOMETRY_EVENT_OPCODE :: 0
 /*
 	The geometry event describes geometric properties of the output.
         The event is sent when binding to the output object and whenever
@@ -4018,6 +4083,7 @@ output_geometry_event_read :: proc(buf: []byte) -> (Output_Geometry_Event, int) 
 	return e, n
 }
 
+OUTPUT_MODE_EVENT_OPCODE :: 1
 /*
 	The mode event describes an available mode for the output.
 
@@ -4071,6 +4137,7 @@ output_mode_event_read :: proc(buf: []byte) -> (Output_Mode_Event, int) {
 	return e, n
 }
 
+OUTPUT_DONE_EVENT_OPCODE :: 2
 /*
 	This event is sent after all other properties have been
         sent after binding to the output object and after any
@@ -4088,6 +4155,7 @@ output_done_event_read :: proc(buf: []byte) -> (Output_Done_Event, int) {
 	return e, n
 }
 
+OUTPUT_SCALE_EVENT_OPCODE :: 3
 /*
 	This event contains scaling geometry information
         that is not in the geometry event. It may be sent after
@@ -4120,6 +4188,7 @@ output_scale_event_read :: proc(buf: []byte) -> (Output_Scale_Event, int) {
 	return e, n
 }
 
+OUTPUT_NAME_EVENT_OPCODE :: 4
 /*
 	Many compositors will assign user-friendly names to their outputs, show
         them to the user, allow the user to refer to an output, etc. The client
@@ -4162,6 +4231,7 @@ output_name_event_read :: proc(buf: []byte) -> (Output_Name_Event, int) {
 	return e, n
 }
 
+OUTPUT_DESCRIPTION_EVENT_OPCODE :: 5
 /*
 	Many compositors can produce human-readable descriptions of their
         outputs. The client may wish to know this description as well, e.g. for

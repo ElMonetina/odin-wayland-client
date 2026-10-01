@@ -131,6 +131,7 @@ wm_base_pong_request_write :: proc(buf: ^[dynamic]byte, req: Wm_Base_Pong_Reques
 	return
 }
 
+WM_BASE_PING_EVENT_OPCODE :: 0
 /*
 	The ping event asks the client if it's still alive. Pass the
 	serial specified in the event back to the compositor by sending
@@ -713,6 +714,7 @@ surface_ack_configure_request_write :: proc(buf: ^[dynamic]byte, req: Surface_Ac
 	return
 }
 
+SURFACE_CONFIGURE_EVENT_OPCODE :: 0
 /*
 	The configure event marks the end of a configure sequence. A configure
 	sequence is a set of one or more events configuring the state of the
@@ -1271,6 +1273,7 @@ toplevel_set_minimized_request_write :: proc(buf: ^[dynamic]byte, req: Toplevel_
 	return
 }
 
+TOPLEVEL_CONFIGURE_EVENT_OPCODE :: 0
 /*
 	This configure event asks the client to resize its toplevel surface or
 	to change its state. The configured state should not be applied
@@ -1311,6 +1314,7 @@ toplevel_configure_event_read :: proc(buf: []byte) -> (Toplevel_Configure_Event,
 	return e, n
 }
 
+TOPLEVEL_CLOSE_EVENT_OPCODE :: 1
 /*
 	The close event is sent by the compositor when the user
 	wants the surface to be closed. This should be equivalent to
@@ -1331,6 +1335,7 @@ toplevel_close_event_read :: proc(buf: []byte) -> (Toplevel_Close_Event, int) {
 	return e, n
 }
 
+TOPLEVEL_CONFIGURE_BOUNDS_EVENT_OPCODE :: 2
 /*
 	The configure_bounds event may be sent prior to a xdg_toplevel.configure
 	event to communicate the bounds a window geometry size is recommended
@@ -1362,6 +1367,7 @@ toplevel_configure_bounds_event_read :: proc(buf: []byte) -> (Toplevel_Configure
 	return e, n
 }
 
+TOPLEVEL_WM_CAPABILITIES_EVENT_OPCODE :: 3
 /*
 	This event advertises the capabilities supported by the compositor. If
 	a capability isn't supported, clients should hide or disable the UI
@@ -1593,6 +1599,7 @@ popup_reposition_request_write :: proc(buf: ^[dynamic]byte, req: Popup_Repositio
 	return
 }
 
+POPUP_CONFIGURE_EVENT_OPCODE :: 0
 /*
 	This event asks the popup surface to configure itself given the
 	configuration. The configured state should not be applied immediately.
@@ -1625,6 +1632,7 @@ popup_configure_event_read :: proc(buf: []byte) -> (Popup_Configure_Event, int) 
 	return e, n
 }
 
+POPUP_POPUP_DONE_EVENT_OPCODE :: 1
 /*
 	The popup_done event is sent out when a popup is dismissed by the
 	compositor. The client should destroy the xdg_popup object at this
@@ -1640,6 +1648,7 @@ popup_popup_done_event_read :: proc(buf: []byte) -> (Popup_Popup_Done_Event, int
 	return e, n
 }
 
+POPUP_REPOSITIONED_EVENT_OPCODE :: 2
 /*
 	The repositioned event is sent as part of a popup configuration
 	sequence, together with xdg_popup.configure and lastly

@@ -37,7 +37,7 @@ Connection_Error :: enum {
 
 create :: proc(allocator := context.allocator, temp_allocator := context.temp_allocator) -> (client: Client, err: Error) {
 	client.requests_byte_buffer = make([dynamic]byte, 0, WAYLAND_BUFFER_LEN, allocator) or_return
-	client.events_byte_buffer   = make([dynamic]byte, 0, WAYLAND_BUFFER_LEN, allocator) or_return
+	client.events_byte_buffer   = make([dynamic]byte, 0, 4 * WAYLAND_BUFFER_LEN, allocator) or_return
 	client.id_to_interface      = make(map[u32]string, allocator)
 	client.wayland_socket       = connect(temp_allocator) or_return
 	client.id_to_interface[u32(wl.display)] = wl.DISPLAY_INTERFACE
@@ -176,9 +176,14 @@ recv_control_fds :: proc(control_start, control_end: uintptr, fds: ^[dynamic; 28
 	}
 }
 
-poll_event :: proc(client: ^Client, allocator := context.temp_allocator) -> (ev: Event, present: bool) {
+poll_event :: proc(client: ^Client) -> (ev: Event, present: bool) {
 	client.polling_error = nil
 	read_pos := client.events_read_pos
+	if read_pos > WAYLAND_BUFFER_LEN {
+		remove_range(&client.events_byte_buffer, 0, read_pos)
+		read_pos = 0
+		client.events_read_pos = 0
+	}
 	for {
 		buf := client.events_byte_buffer
 		if read_pos + WAYLAND_HEADER_SIZE > len(buf) {
@@ -215,16 +220,12 @@ poll_event :: proc(client: ^Client, allocator := context.temp_allocator) -> (ev:
 			read_pos += int(size)
 			continue // skip to next if object hasn't been bound
 		}
-		ev, err  := event_read(client, interface, object_id, opcode, buf[read_pos + WAYLAND_HEADER_SIZE:read_pos + int(size)], &client.incoming_fds, allocator)
+		ev, err  := event_read(client, interface, object_id, opcode, buf[read_pos + WAYLAND_HEADER_SIZE:read_pos + int(size)], &client.incoming_fds)
 		if err != .None {
 			client.polling_error = err
 			return
 		}
 		read_pos += int(size)
-		if read_pos > WAYLAND_BUFFER_LEN {
-			remove_range(&client.events_byte_buffer, 0, read_pos)
-			read_pos = 0
-		}
 		client.events_read_pos = read_pos
 		if ev != nil {
 			return ev, true

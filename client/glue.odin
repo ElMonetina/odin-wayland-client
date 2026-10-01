@@ -1,6 +1,7 @@
 package client
 
 import "base:runtime"
+import "core:sys/linux"
 import "wayland"
 import "wp"
 import "xdg"
@@ -1021,3 +1022,432 @@ Event :: union {
 	xdg.Popup_Popup_Done_Event,
 	xdg.Popup_Repositioned_Event,
 }
+
+event_read :: proc(client: ^Client, interface: string, object_id: u32, opcode: u16, data: []byte, fds: ^[dynamic; 28]linux.Fd) -> (ev: Event, err: runtime.Allocator_Error) {
+	switch interface {
+	case wayland.DISPLAY_INTERFACE:
+		switch opcode {
+		case wayland.DISPLAY_ERROR_EVENT_OPCODE:
+			decoded, _ := wayland.display_error_event_read(data)
+			decoded.display = wayland.Display(object_id)
+			return Event(decoded), nil
+		case wayland.DISPLAY_DELETE_ID_EVENT_OPCODE:
+			decoded, _ := wayland.display_delete_id_event_read(data)
+			delete_key(&client.id_to_interface, decoded.id)
+			return {}, nil
+		}
+	case wayland.REGISTRY_INTERFACE:
+		switch opcode {
+		case wayland.REGISTRY_GLOBAL_EVENT_OPCODE:
+			decoded, _ := wayland.registry_global_event_read(data)
+			decoded.registry = wayland.Registry(object_id)
+			return Event(decoded), nil
+		case wayland.REGISTRY_GLOBAL_REMOVE_EVENT_OPCODE:
+			decoded, _ := wayland.registry_global_remove_event_read(data)
+			decoded.registry = wayland.Registry(object_id)
+			return Event(decoded), nil
+		}
+	case wayland.CALLBACK_INTERFACE:
+		switch opcode {
+		case wayland.CALLBACK_DONE_EVENT_OPCODE:
+			delete_key(&client.id_to_interface, object_id)
+			return {}, nil
+		}
+	case wayland.COMPOSITOR_INTERFACE:
+		switch opcode {
+		}
+	case wayland.SHM_POOL_INTERFACE:
+		switch opcode {
+		}
+	case wayland.SHM_INTERFACE:
+		switch opcode {
+		case wayland.SHM_FORMAT_EVENT_OPCODE:
+			decoded, _ := wayland.shm_format_event_read(data)
+			decoded.shm = wayland.Shm(object_id)
+			return Event(decoded), nil
+		}
+	case wayland.BUFFER_INTERFACE:
+		switch opcode {
+		case wayland.BUFFER_RELEASE_EVENT_OPCODE:
+			decoded, _ := wayland.buffer_release_event_read(data)
+			decoded.buffer = wayland.Buffer(object_id)
+			return Event(decoded), nil
+		}
+	case wayland.DATA_OFFER_INTERFACE:
+		switch opcode {
+		case wayland.DATA_OFFER_OFFER_EVENT_OPCODE:
+			decoded, _ := wayland.data_offer_offer_event_read(data)
+			decoded.data_offer = wayland.Data_Offer(object_id)
+			return Event(decoded), nil
+		case wayland.DATA_OFFER_SOURCE_ACTIONS_EVENT_OPCODE:
+			decoded, _ := wayland.data_offer_source_actions_event_read(data)
+			decoded.data_offer = wayland.Data_Offer(object_id)
+			return Event(decoded), nil
+		case wayland.DATA_OFFER_ACTION_EVENT_OPCODE:
+			decoded, _ := wayland.data_offer_action_event_read(data)
+			decoded.data_offer = wayland.Data_Offer(object_id)
+			return Event(decoded), nil
+		}
+	case wayland.DATA_SOURCE_INTERFACE:
+		switch opcode {
+		case wayland.DATA_SOURCE_TARGET_EVENT_OPCODE:
+			decoded, _ := wayland.data_source_target_event_read(data)
+			decoded.data_source = wayland.Data_Source(object_id)
+			return Event(decoded), nil
+		case wayland.DATA_SOURCE_SEND_EVENT_OPCODE:
+			decoded, _ := wayland.data_source_send_event_read(data, fds)
+			decoded.data_source = wayland.Data_Source(object_id)
+			return Event(decoded), nil
+		case wayland.DATA_SOURCE_CANCELLED_EVENT_OPCODE:
+			decoded, _ := wayland.data_source_cancelled_event_read(data)
+			decoded.data_source = wayland.Data_Source(object_id)
+			return Event(decoded), nil
+		case wayland.DATA_SOURCE_DND_DROP_PERFORMED_EVENT_OPCODE:
+			decoded, _ := wayland.data_source_dnd_drop_performed_event_read(data)
+			decoded.data_source = wayland.Data_Source(object_id)
+			return Event(decoded), nil
+		case wayland.DATA_SOURCE_DND_FINISHED_EVENT_OPCODE:
+			decoded, _ := wayland.data_source_dnd_finished_event_read(data)
+			decoded.data_source = wayland.Data_Source(object_id)
+			return Event(decoded), nil
+		case wayland.DATA_SOURCE_ACTION_EVENT_OPCODE:
+			decoded, _ := wayland.data_source_action_event_read(data)
+			decoded.data_source = wayland.Data_Source(object_id)
+			return Event(decoded), nil
+		}
+	case wayland.DATA_DEVICE_INTERFACE:
+		switch opcode {
+		case wayland.DATA_DEVICE_DATA_OFFER_EVENT_OPCODE:
+			decoded, _ := wayland.data_device_data_offer_event_read(data)
+			decoded.data_device = wayland.Data_Device(object_id)
+			client.id_to_interface[u32(decoded.id)] = wayland.DATA_OFFER_INTERFACE
+			return Event(decoded), nil
+		case wayland.DATA_DEVICE_ENTER_EVENT_OPCODE:
+			decoded, _ := wayland.data_device_enter_event_read(data)
+			decoded.data_device = wayland.Data_Device(object_id)
+			return Event(decoded), nil
+		case wayland.DATA_DEVICE_LEAVE_EVENT_OPCODE:
+			decoded, _ := wayland.data_device_leave_event_read(data)
+			decoded.data_device = wayland.Data_Device(object_id)
+			return Event(decoded), nil
+		case wayland.DATA_DEVICE_MOTION_EVENT_OPCODE:
+			decoded, _ := wayland.data_device_motion_event_read(data)
+			decoded.data_device = wayland.Data_Device(object_id)
+			return Event(decoded), nil
+		case wayland.DATA_DEVICE_DROP_EVENT_OPCODE:
+			decoded, _ := wayland.data_device_drop_event_read(data)
+			decoded.data_device = wayland.Data_Device(object_id)
+			return Event(decoded), nil
+		case wayland.DATA_DEVICE_SELECTION_EVENT_OPCODE:
+			decoded, _ := wayland.data_device_selection_event_read(data)
+			decoded.data_device = wayland.Data_Device(object_id)
+			return Event(decoded), nil
+		}
+	case wayland.DATA_DEVICE_MANAGER_INTERFACE:
+		switch opcode {
+		}
+	case wayland.SHELL_INTERFACE:
+		switch opcode {
+		}
+	case wayland.SHELL_SURFACE_INTERFACE:
+		switch opcode {
+		case wayland.SHELL_SURFACE_PING_EVENT_OPCODE:
+			decoded, _ := wayland.shell_surface_ping_event_read(data)
+			decoded.shell_surface = wayland.Shell_Surface(object_id)
+			return Event(decoded), nil
+		case wayland.SHELL_SURFACE_CONFIGURE_EVENT_OPCODE:
+			decoded, _ := wayland.shell_surface_configure_event_read(data)
+			decoded.shell_surface = wayland.Shell_Surface(object_id)
+			return Event(decoded), nil
+		case wayland.SHELL_SURFACE_POPUP_DONE_EVENT_OPCODE:
+			decoded, _ := wayland.shell_surface_popup_done_event_read(data)
+			decoded.shell_surface = wayland.Shell_Surface(object_id)
+			return Event(decoded), nil
+		}
+	case wayland.SURFACE_INTERFACE:
+		switch opcode {
+		case wayland.SURFACE_ENTER_EVENT_OPCODE:
+			decoded, _ := wayland.surface_enter_event_read(data)
+			decoded.surface = wayland.Surface(object_id)
+			return Event(decoded), nil
+		case wayland.SURFACE_LEAVE_EVENT_OPCODE:
+			decoded, _ := wayland.surface_leave_event_read(data)
+			decoded.surface = wayland.Surface(object_id)
+			return Event(decoded), nil
+		case wayland.SURFACE_PREFERRED_BUFFER_SCALE_EVENT_OPCODE:
+			decoded, _ := wayland.surface_preferred_buffer_scale_event_read(data)
+			decoded.surface = wayland.Surface(object_id)
+			return Event(decoded), nil
+		case wayland.SURFACE_PREFERRED_BUFFER_TRANSFORM_EVENT_OPCODE:
+			decoded, _ := wayland.surface_preferred_buffer_transform_event_read(data)
+			decoded.surface = wayland.Surface(object_id)
+			return Event(decoded), nil
+		}
+	case wayland.SEAT_INTERFACE:
+		switch opcode {
+		case wayland.SEAT_CAPABILITIES_EVENT_OPCODE:
+			decoded, _ := wayland.seat_capabilities_event_read(data)
+			decoded.seat = wayland.Seat(object_id)
+			return Event(decoded), nil
+		case wayland.SEAT_NAME_EVENT_OPCODE:
+			decoded, _ := wayland.seat_name_event_read(data)
+			decoded.seat = wayland.Seat(object_id)
+			return Event(decoded), nil
+		}
+	case wayland.POINTER_INTERFACE:
+		switch opcode {
+		case wayland.POINTER_ENTER_EVENT_OPCODE:
+			decoded, _ := wayland.pointer_enter_event_read(data)
+			decoded.pointer = wayland.Pointer(object_id)
+			return Event(decoded), nil
+		case wayland.POINTER_LEAVE_EVENT_OPCODE:
+			decoded, _ := wayland.pointer_leave_event_read(data)
+			decoded.pointer = wayland.Pointer(object_id)
+			return Event(decoded), nil
+		case wayland.POINTER_MOTION_EVENT_OPCODE:
+			decoded, _ := wayland.pointer_motion_event_read(data)
+			decoded.pointer = wayland.Pointer(object_id)
+			return Event(decoded), nil
+		case wayland.POINTER_BUTTON_EVENT_OPCODE:
+			decoded, _ := wayland.pointer_button_event_read(data)
+			decoded.pointer = wayland.Pointer(object_id)
+			return Event(decoded), nil
+		case wayland.POINTER_AXIS_EVENT_OPCODE:
+			decoded, _ := wayland.pointer_axis_event_read(data)
+			decoded.pointer = wayland.Pointer(object_id)
+			return Event(decoded), nil
+		case wayland.POINTER_FRAME_EVENT_OPCODE:
+			decoded, _ := wayland.pointer_frame_event_read(data)
+			decoded.pointer = wayland.Pointer(object_id)
+			return Event(decoded), nil
+		case wayland.POINTER_AXIS_SOURCE_EVENT_OPCODE:
+			decoded, _ := wayland.pointer_axis_source_event_read(data)
+			decoded.pointer = wayland.Pointer(object_id)
+			return Event(decoded), nil
+		case wayland.POINTER_AXIS_STOP_EVENT_OPCODE:
+			decoded, _ := wayland.pointer_axis_stop_event_read(data)
+			decoded.pointer = wayland.Pointer(object_id)
+			return Event(decoded), nil
+		case wayland.POINTER_AXIS_DISCRETE_EVENT_OPCODE:
+			decoded, _ := wayland.pointer_axis_discrete_event_read(data)
+			decoded.pointer = wayland.Pointer(object_id)
+			return Event(decoded), nil
+		case wayland.POINTER_AXIS_VALUE120_EVENT_OPCODE:
+			decoded, _ := wayland.pointer_axis_value120_event_read(data)
+			decoded.pointer = wayland.Pointer(object_id)
+			return Event(decoded), nil
+		case wayland.POINTER_AXIS_RELATIVE_DIRECTION_EVENT_OPCODE:
+			decoded, _ := wayland.pointer_axis_relative_direction_event_read(data)
+			decoded.pointer = wayland.Pointer(object_id)
+			return Event(decoded), nil
+		case wayland.POINTER_WARP_EVENT_OPCODE:
+			decoded, _ := wayland.pointer_warp_event_read(data)
+			decoded.pointer = wayland.Pointer(object_id)
+			return Event(decoded), nil
+		}
+	case wayland.KEYBOARD_INTERFACE:
+		switch opcode {
+		case wayland.KEYBOARD_KEYMAP_EVENT_OPCODE:
+			decoded, _ := wayland.keyboard_keymap_event_read(data, fds)
+			decoded.keyboard = wayland.Keyboard(object_id)
+			return Event(decoded), nil
+		case wayland.KEYBOARD_ENTER_EVENT_OPCODE:
+			decoded, _ := wayland.keyboard_enter_event_read(data)
+			decoded.keyboard = wayland.Keyboard(object_id)
+			return Event(decoded), nil
+		case wayland.KEYBOARD_LEAVE_EVENT_OPCODE:
+			decoded, _ := wayland.keyboard_leave_event_read(data)
+			decoded.keyboard = wayland.Keyboard(object_id)
+			return Event(decoded), nil
+		case wayland.KEYBOARD_KEY_EVENT_OPCODE:
+			decoded, _ := wayland.keyboard_key_event_read(data)
+			decoded.keyboard = wayland.Keyboard(object_id)
+			return Event(decoded), nil
+		case wayland.KEYBOARD_MODIFIERS_EVENT_OPCODE:
+			decoded, _ := wayland.keyboard_modifiers_event_read(data)
+			decoded.keyboard = wayland.Keyboard(object_id)
+			return Event(decoded), nil
+		case wayland.KEYBOARD_REPEAT_INFO_EVENT_OPCODE:
+			decoded, _ := wayland.keyboard_repeat_info_event_read(data)
+			decoded.keyboard = wayland.Keyboard(object_id)
+			return Event(decoded), nil
+		}
+	case wayland.TOUCH_INTERFACE:
+		switch opcode {
+		case wayland.TOUCH_DOWN_EVENT_OPCODE:
+			decoded, _ := wayland.touch_down_event_read(data)
+			decoded.touch = wayland.Touch(object_id)
+			return Event(decoded), nil
+		case wayland.TOUCH_UP_EVENT_OPCODE:
+			decoded, _ := wayland.touch_up_event_read(data)
+			decoded.touch = wayland.Touch(object_id)
+			return Event(decoded), nil
+		case wayland.TOUCH_MOTION_EVENT_OPCODE:
+			decoded, _ := wayland.touch_motion_event_read(data)
+			decoded.touch = wayland.Touch(object_id)
+			return Event(decoded), nil
+		case wayland.TOUCH_FRAME_EVENT_OPCODE:
+			decoded, _ := wayland.touch_frame_event_read(data)
+			decoded.touch = wayland.Touch(object_id)
+			return Event(decoded), nil
+		case wayland.TOUCH_CANCEL_EVENT_OPCODE:
+			decoded, _ := wayland.touch_cancel_event_read(data)
+			decoded.touch = wayland.Touch(object_id)
+			return Event(decoded), nil
+		case wayland.TOUCH_SHAPE_EVENT_OPCODE:
+			decoded, _ := wayland.touch_shape_event_read(data)
+			decoded.touch = wayland.Touch(object_id)
+			return Event(decoded), nil
+		case wayland.TOUCH_ORIENTATION_EVENT_OPCODE:
+			decoded, _ := wayland.touch_orientation_event_read(data)
+			decoded.touch = wayland.Touch(object_id)
+			return Event(decoded), nil
+		}
+	case wayland.OUTPUT_INTERFACE:
+		switch opcode {
+		case wayland.OUTPUT_GEOMETRY_EVENT_OPCODE:
+			decoded, _ := wayland.output_geometry_event_read(data)
+			decoded.output = wayland.Output(object_id)
+			return Event(decoded), nil
+		case wayland.OUTPUT_MODE_EVENT_OPCODE:
+			decoded, _ := wayland.output_mode_event_read(data)
+			decoded.output = wayland.Output(object_id)
+			return Event(decoded), nil
+		case wayland.OUTPUT_DONE_EVENT_OPCODE:
+			decoded, _ := wayland.output_done_event_read(data)
+			decoded.output = wayland.Output(object_id)
+			return Event(decoded), nil
+		case wayland.OUTPUT_SCALE_EVENT_OPCODE:
+			decoded, _ := wayland.output_scale_event_read(data)
+			decoded.output = wayland.Output(object_id)
+			return Event(decoded), nil
+		case wayland.OUTPUT_NAME_EVENT_OPCODE:
+			decoded, _ := wayland.output_name_event_read(data)
+			decoded.output = wayland.Output(object_id)
+			return Event(decoded), nil
+		case wayland.OUTPUT_DESCRIPTION_EVENT_OPCODE:
+			decoded, _ := wayland.output_description_event_read(data)
+			decoded.output = wayland.Output(object_id)
+			return Event(decoded), nil
+		}
+	case wayland.REGION_INTERFACE:
+		switch opcode {
+		}
+	case wayland.SUBCOMPOSITOR_INTERFACE:
+		switch opcode {
+		}
+	case wayland.SUBSURFACE_INTERFACE:
+		switch opcode {
+		}
+	case wayland.FIXES_INTERFACE:
+		switch opcode {
+		}
+	case wp.LINUX_DMABUF_V1_INTERFACE:
+		switch opcode {
+		case wp.LINUX_DMABUF_V1_FORMAT_EVENT_OPCODE:
+			decoded, _ := wp.linux_dmabuf_v1_format_event_read(data)
+			decoded.linux_dmabuf_v1 = wp.Linux_Dmabuf_V1(object_id)
+			return Event(decoded), nil
+		case wp.LINUX_DMABUF_V1_MODIFIER_EVENT_OPCODE:
+			decoded, _ := wp.linux_dmabuf_v1_modifier_event_read(data)
+			decoded.linux_dmabuf_v1 = wp.Linux_Dmabuf_V1(object_id)
+			return Event(decoded), nil
+		}
+	case wp.LINUX_BUFFER_PARAMS_V1_INTERFACE:
+		switch opcode {
+		case wp.LINUX_BUFFER_PARAMS_V1_CREATED_EVENT_OPCODE:
+			decoded, _ := wp.linux_buffer_params_v1_created_event_read(data)
+			decoded.linux_buffer_params_v1 = wp.Linux_Buffer_Params_V1(object_id)
+			client.id_to_interface[u32(decoded.buffer)] = wayland.BUFFER_INTERFACE
+			return Event(decoded), nil
+		case wp.LINUX_BUFFER_PARAMS_V1_FAILED_EVENT_OPCODE:
+			decoded, _ := wp.linux_buffer_params_v1_failed_event_read(data)
+			decoded.linux_buffer_params_v1 = wp.Linux_Buffer_Params_V1(object_id)
+			return Event(decoded), nil
+		}
+	case wp.LINUX_DMABUF_FEEDBACK_V1_INTERFACE:
+		switch opcode {
+		case wp.LINUX_DMABUF_FEEDBACK_V1_DONE_EVENT_OPCODE:
+			decoded, _ := wp.linux_dmabuf_feedback_v1_done_event_read(data)
+			decoded.linux_dmabuf_feedback_v1 = wp.Linux_Dmabuf_Feedback_V1(object_id)
+			return Event(decoded), nil
+		case wp.LINUX_DMABUF_FEEDBACK_V1_FORMAT_TABLE_EVENT_OPCODE:
+			decoded, _ := wp.linux_dmabuf_feedback_v1_format_table_event_read(data, fds)
+			decoded.linux_dmabuf_feedback_v1 = wp.Linux_Dmabuf_Feedback_V1(object_id)
+			return Event(decoded), nil
+		case wp.LINUX_DMABUF_FEEDBACK_V1_MAIN_DEVICE_EVENT_OPCODE:
+			decoded, _ := wp.linux_dmabuf_feedback_v1_main_device_event_read(data)
+			decoded.linux_dmabuf_feedback_v1 = wp.Linux_Dmabuf_Feedback_V1(object_id)
+			return Event(decoded), nil
+		case wp.LINUX_DMABUF_FEEDBACK_V1_TRANCHE_DONE_EVENT_OPCODE:
+			decoded, _ := wp.linux_dmabuf_feedback_v1_tranche_done_event_read(data)
+			decoded.linux_dmabuf_feedback_v1 = wp.Linux_Dmabuf_Feedback_V1(object_id)
+			return Event(decoded), nil
+		case wp.LINUX_DMABUF_FEEDBACK_V1_TRANCHE_TARGET_DEVICE_EVENT_OPCODE:
+			decoded, _ := wp.linux_dmabuf_feedback_v1_tranche_target_device_event_read(data)
+			decoded.linux_dmabuf_feedback_v1 = wp.Linux_Dmabuf_Feedback_V1(object_id)
+			return Event(decoded), nil
+		case wp.LINUX_DMABUF_FEEDBACK_V1_TRANCHE_FORMATS_EVENT_OPCODE:
+			decoded, _ := wp.linux_dmabuf_feedback_v1_tranche_formats_event_read(data)
+			decoded.linux_dmabuf_feedback_v1 = wp.Linux_Dmabuf_Feedback_V1(object_id)
+			return Event(decoded), nil
+		case wp.LINUX_DMABUF_FEEDBACK_V1_TRANCHE_FLAGS_EVENT_OPCODE:
+			decoded, _ := wp.linux_dmabuf_feedback_v1_tranche_flags_event_read(data)
+			decoded.linux_dmabuf_feedback_v1 = wp.Linux_Dmabuf_Feedback_V1(object_id)
+			return Event(decoded), nil
+		}
+	case xdg.WM_BASE_INTERFACE:
+		switch opcode {
+		case xdg.WM_BASE_PING_EVENT_OPCODE:
+			decoded, _ := xdg.wm_base_ping_event_read(data)
+			decoded.wm_base = xdg.Wm_Base(object_id)
+			return Event(decoded), nil
+		}
+	case xdg.POSITIONER_INTERFACE:
+		switch opcode {
+		}
+	case xdg.SURFACE_INTERFACE:
+		switch opcode {
+		case xdg.SURFACE_CONFIGURE_EVENT_OPCODE:
+			decoded, _ := xdg.surface_configure_event_read(data)
+			decoded.surface = xdg.Surface(object_id)
+			return Event(decoded), nil
+		}
+	case xdg.TOPLEVEL_INTERFACE:
+		switch opcode {
+		case xdg.TOPLEVEL_CONFIGURE_EVENT_OPCODE:
+			decoded, _ := xdg.toplevel_configure_event_read(data)
+			decoded.toplevel = xdg.Toplevel(object_id)
+			return Event(decoded), nil
+		case xdg.TOPLEVEL_CLOSE_EVENT_OPCODE:
+			decoded, _ := xdg.toplevel_close_event_read(data)
+			decoded.toplevel = xdg.Toplevel(object_id)
+			return Event(decoded), nil
+		case xdg.TOPLEVEL_CONFIGURE_BOUNDS_EVENT_OPCODE:
+			decoded, _ := xdg.toplevel_configure_bounds_event_read(data)
+			decoded.toplevel = xdg.Toplevel(object_id)
+			return Event(decoded), nil
+		case xdg.TOPLEVEL_WM_CAPABILITIES_EVENT_OPCODE:
+			decoded, _ := xdg.toplevel_wm_capabilities_event_read(data)
+			decoded.toplevel = xdg.Toplevel(object_id)
+			return Event(decoded), nil
+		}
+	case xdg.POPUP_INTERFACE:
+		switch opcode {
+		case xdg.POPUP_CONFIGURE_EVENT_OPCODE:
+			decoded, _ := xdg.popup_configure_event_read(data)
+			decoded.popup = xdg.Popup(object_id)
+			return Event(decoded), nil
+		case xdg.POPUP_POPUP_DONE_EVENT_OPCODE:
+			decoded, _ := xdg.popup_popup_done_event_read(data)
+			decoded.popup = xdg.Popup(object_id)
+			return Event(decoded), nil
+		case xdg.POPUP_REPOSITIONED_EVENT_OPCODE:
+			decoded, _ := xdg.popup_repositioned_event_read(data)
+			decoded.popup = xdg.Popup(object_id)
+			return Event(decoded), nil
+		}
+	}
+	return {}, nil
+}
+

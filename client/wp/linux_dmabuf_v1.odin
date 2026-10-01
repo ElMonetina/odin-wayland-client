@@ -176,6 +176,7 @@ linux_dmabuf_v1_get_surface_feedback_request_write :: proc(buf: ^[dynamic]byte, 
 	return
 }
 
+LINUX_DMABUF_V1_FORMAT_EVENT_OPCODE :: 0
 /*
 	This event advertises one buffer format that the server supports.
         All the supported formats are advertised once when the client
@@ -201,6 +202,7 @@ linux_dmabuf_v1_format_event_read :: proc(buf: []byte) -> (Linux_Dmabuf_V1_Forma
 	return e, n
 }
 
+LINUX_DMABUF_V1_MODIFIER_EVENT_OPCODE :: 1
 /*
 	This event advertises the formats that the server supports, along with
         the modifiers supported for each format. All the supported modifiers
@@ -482,6 +484,7 @@ linux_buffer_params_v1_set_sampling_device_request_write :: proc(buf: ^[dynamic]
 	return
 }
 
+LINUX_BUFFER_PARAMS_V1_CREATED_EVENT_OPCODE :: 0
 /*
 	This event indicates that the attempted buffer creation was
         successful. It provides the new wl_buffer referencing the dmabuf(s).
@@ -497,9 +500,13 @@ linux_buffer_params_v1_created_event_read :: proc(buf: []byte) -> (Linux_Buffer_
 	e: Linux_Buffer_Params_V1_Created_Event
 	r: int
 	n := r
+	buffer: u32
+	buffer, r = util.read_u32(buf[n:]); n += r
+	e.buffer = wayland.Buffer(buffer)
 	return e, n
 }
 
+LINUX_BUFFER_PARAMS_V1_FAILED_EVENT_OPCODE :: 1
 /*
 	This event indicates that the attempted buffer creation has
         failed. It usually means that one of the dmabuf constraints
@@ -593,6 +600,7 @@ linux_dmabuf_feedback_v1_destroy_request_write :: proc(buf: ^[dynamic]byte, req:
 	return
 }
 
+LINUX_DMABUF_FEEDBACK_V1_DONE_EVENT_OPCODE :: 0
 /*
 	This event is sent after all parameters of a zwp_linux_dmabuf_feedback_v1
         object have been sent.
@@ -610,6 +618,7 @@ linux_dmabuf_feedback_v1_done_event_read :: proc(buf: []byte) -> (Linux_Dmabuf_F
 	return e, n
 }
 
+LINUX_DMABUF_FEEDBACK_V1_FORMAT_TABLE_EVENT_OPCODE :: 1
 /*
 	This event provides a file descriptor which can be memory-mapped to
         access the format and modifier table.
@@ -631,14 +640,16 @@ Linux_Dmabuf_Feedback_V1_Format_Table_Event :: struct {
 	fd: linux.Fd,
 	size: u32,
 }
-linux_dmabuf_feedback_v1_format_table_event_read :: proc(buf: []byte) -> (Linux_Dmabuf_Feedback_V1_Format_Table_Event, int) {
+linux_dmabuf_feedback_v1_format_table_event_read :: proc(buf: []byte, fds: ^[dynamic; 28]linux.Fd) -> (Linux_Dmabuf_Feedback_V1_Format_Table_Event, int) {
 	e: Linux_Dmabuf_Feedback_V1_Format_Table_Event
 	r: int
 	n := r
+	e.fd = pop_front(fds)
 	e.size, r = util.read_u32(buf[n:]); n += r
 	return e, n
 }
 
+LINUX_DMABUF_FEEDBACK_V1_MAIN_DEVICE_EVENT_OPCODE :: 2
 /*
 	This event advertises the main device that the server prefers to use
         when direct scan-out to the target device isn't possible. The
@@ -679,6 +690,7 @@ linux_dmabuf_feedback_v1_main_device_event_read :: proc(buf: []byte) -> (Linux_D
 	return e, n
 }
 
+LINUX_DMABUF_FEEDBACK_V1_TRANCHE_DONE_EVENT_OPCODE :: 3
 /*
 	This event splits tranche_target_device and tranche_formats events into
         preference tranches. It is sent after a set of tranche_target_device
@@ -695,6 +707,7 @@ linux_dmabuf_feedback_v1_tranche_done_event_read :: proc(buf: []byte) -> (Linux_
 	return e, n
 }
 
+LINUX_DMABUF_FEEDBACK_V1_TRANCHE_TARGET_DEVICE_EVENT_OPCODE :: 4
 /*
 	This event advertises the target device that the server prefers to use
         for a buffer created given this tranche. The advertised target device
@@ -735,6 +748,7 @@ linux_dmabuf_feedback_v1_tranche_target_device_event_read :: proc(buf: []byte) -
 	return e, n
 }
 
+LINUX_DMABUF_FEEDBACK_V1_TRANCHE_FORMATS_EVENT_OPCODE :: 5
 /*
 	This event advertises the format + modifier combinations that the
         compositor supports.
@@ -773,6 +787,7 @@ linux_dmabuf_feedback_v1_tranche_formats_event_read :: proc(buf: []byte) -> (Lin
 	return e, n
 }
 
+LINUX_DMABUF_FEEDBACK_V1_TRANCHE_FLAGS_EVENT_OPCODE :: 6
 /*
 	This event sets tranche-specific flags. This event is tied to a
         preference tranche, see the tranche_done event.
