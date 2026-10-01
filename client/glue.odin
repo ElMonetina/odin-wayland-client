@@ -1,5 +1,6 @@
 package client
 
+import "base:runtime"
 import "wayland"
 import "wp"
 import "xdg"
@@ -125,6 +126,817 @@ Request :: union {
 	xdg.Popup_Reposition_Request,
 }
 
+request_queue :: proc{
+	wayland_display_sync_queue,
+	wayland_display_get_registry_queue,
+	wayland_registry_bind_queue,
+	wayland_compositor_create_surface_queue,
+	wayland_compositor_create_region_queue,
+	wayland_compositor_release_queue,
+	wayland_shm_pool_create_buffer_queue,
+	wayland_shm_pool_destroy_queue,
+	wayland_shm_pool_resize_queue,
+	wayland_shm_create_pool_queue,
+	wayland_shm_release_queue,
+	wayland_buffer_destroy_queue,
+	wayland_data_offer_accept_queue,
+	wayland_data_offer_receive_queue,
+	wayland_data_offer_destroy_queue,
+	wayland_data_offer_finish_queue,
+	wayland_data_offer_set_actions_queue,
+	wayland_data_source_offer_queue,
+	wayland_data_source_destroy_queue,
+	wayland_data_source_set_actions_queue,
+	wayland_data_device_start_drag_queue,
+	wayland_data_device_set_selection_queue,
+	wayland_data_device_release_queue,
+	wayland_data_device_manager_create_data_source_queue,
+	wayland_data_device_manager_get_data_device_queue,
+	wayland_data_device_manager_release_queue,
+	wayland_shell_get_shell_surface_queue,
+	wayland_shell_surface_pong_queue,
+	wayland_shell_surface_move_queue,
+	wayland_shell_surface_resize_queue,
+	wayland_shell_surface_set_toplevel_queue,
+	wayland_shell_surface_set_transient_queue,
+	wayland_shell_surface_set_fullscreen_queue,
+	wayland_shell_surface_set_popup_queue,
+	wayland_shell_surface_set_maximized_queue,
+	wayland_shell_surface_set_title_queue,
+	wayland_shell_surface_set_class_queue,
+	wayland_surface_destroy_queue,
+	wayland_surface_attach_queue,
+	wayland_surface_damage_queue,
+	wayland_surface_frame_queue,
+	wayland_surface_set_opaque_region_queue,
+	wayland_surface_set_input_region_queue,
+	wayland_surface_commit_queue,
+	wayland_surface_set_buffer_transform_queue,
+	wayland_surface_set_buffer_scale_queue,
+	wayland_surface_damage_buffer_queue,
+	wayland_surface_offset_queue,
+	wayland_surface_get_release_queue,
+	wayland_seat_get_pointer_queue,
+	wayland_seat_get_keyboard_queue,
+	wayland_seat_get_touch_queue,
+	wayland_seat_release_queue,
+	wayland_pointer_set_cursor_queue,
+	wayland_pointer_release_queue,
+	wayland_keyboard_release_queue,
+	wayland_touch_release_queue,
+	wayland_output_release_queue,
+	wayland_region_destroy_queue,
+	wayland_region_add_queue,
+	wayland_region_subtract_queue,
+	wayland_subcompositor_destroy_queue,
+	wayland_subcompositor_get_subsurface_queue,
+	wayland_subsurface_destroy_queue,
+	wayland_subsurface_set_position_queue,
+	wayland_subsurface_place_above_queue,
+	wayland_subsurface_place_below_queue,
+	wayland_subsurface_set_sync_queue,
+	wayland_subsurface_set_desync_queue,
+	wayland_fixes_destroy_queue,
+	wayland_fixes_destroy_registry_queue,
+	wayland_fixes_ack_global_remove_queue,
+	linux_dmabuf_v1_linux_dmabuf_v1_destroy_queue,
+	linux_dmabuf_v1_linux_dmabuf_v1_create_params_queue,
+	linux_dmabuf_v1_linux_dmabuf_v1_get_default_feedback_queue,
+	linux_dmabuf_v1_linux_dmabuf_v1_get_surface_feedback_queue,
+	linux_dmabuf_v1_linux_buffer_params_v1_destroy_queue,
+	linux_dmabuf_v1_linux_buffer_params_v1_add_queue,
+	linux_dmabuf_v1_linux_buffer_params_v1_create_queue,
+	linux_dmabuf_v1_linux_buffer_params_v1_create_immed_queue,
+	linux_dmabuf_v1_linux_buffer_params_v1_set_sampling_device_queue,
+	linux_dmabuf_v1_linux_dmabuf_feedback_v1_destroy_queue,
+	xdg_shell_wm_base_destroy_queue,
+	xdg_shell_wm_base_create_positioner_queue,
+	xdg_shell_wm_base_get_xdg_surface_queue,
+	xdg_shell_wm_base_pong_queue,
+	xdg_shell_positioner_destroy_queue,
+	xdg_shell_positioner_set_size_queue,
+	xdg_shell_positioner_set_anchor_rect_queue,
+	xdg_shell_positioner_set_anchor_queue,
+	xdg_shell_positioner_set_gravity_queue,
+	xdg_shell_positioner_set_constraint_adjustment_queue,
+	xdg_shell_positioner_set_offset_queue,
+	xdg_shell_positioner_set_reactive_queue,
+	xdg_shell_positioner_set_parent_size_queue,
+	xdg_shell_positioner_set_parent_configure_queue,
+	xdg_shell_surface_destroy_queue,
+	xdg_shell_surface_get_toplevel_queue,
+	xdg_shell_surface_get_popup_queue,
+	xdg_shell_surface_set_window_geometry_queue,
+	xdg_shell_surface_ack_configure_queue,
+	xdg_shell_toplevel_destroy_queue,
+	xdg_shell_toplevel_set_parent_queue,
+	xdg_shell_toplevel_set_title_queue,
+	xdg_shell_toplevel_set_app_id_queue,
+	xdg_shell_toplevel_show_window_menu_queue,
+	xdg_shell_toplevel_move_queue,
+	xdg_shell_toplevel_resize_queue,
+	xdg_shell_toplevel_set_max_size_queue,
+	xdg_shell_toplevel_set_min_size_queue,
+	xdg_shell_toplevel_set_maximized_queue,
+	xdg_shell_toplevel_unset_maximized_queue,
+	xdg_shell_toplevel_set_fullscreen_queue,
+	xdg_shell_toplevel_unset_fullscreen_queue,
+	xdg_shell_toplevel_set_minimized_queue,
+	xdg_shell_popup_destroy_queue,
+	xdg_shell_popup_grab_queue,
+	xdg_shell_popup_reposition_queue,
+}
+
+wayland_display_sync_queue :: proc(client: ^Client, req: wayland.Display_Sync_Request) -> (ret: wayland.Callback, err: runtime.Allocator_Error) #optional_allocator_error {
+	client.next_id += 1
+	id := client.next_id
+	wayland.display_sync_request_write(&client.requests_byte_buffer, req, id) or_return
+	register_object(client, id, wayland.CALLBACK_INTERFACE)
+	return wayland.Callback(id), nil
+}
+
+wayland_display_get_registry_queue :: proc(client: ^Client, req: wayland.Display_Get_Registry_Request) -> (ret: wayland.Registry, err: runtime.Allocator_Error) #optional_allocator_error {
+	client.next_id += 1
+	id := client.next_id
+	wayland.display_get_registry_request_write(&client.requests_byte_buffer, req, id) or_return
+	register_object(client, id, wayland.REGISTRY_INTERFACE)
+	return wayland.Registry(id), nil
+}
+
+wayland_registry_bind_queue :: proc(client: ^Client, req: wayland.Registry_Bind_Request) -> (ret: u32, err: runtime.Allocator_Error) #optional_allocator_error {
+	client.next_id += 1
+	id := client.next_id
+	wayland.registry_bind_request_write(&client.requests_byte_buffer, req, id) or_return
+	return id, nil
+}
+
+wayland_compositor_create_surface_queue :: proc(client: ^Client, req: wayland.Compositor_Create_Surface_Request) -> (ret: wayland.Surface, err: runtime.Allocator_Error) #optional_allocator_error {
+	client.next_id += 1
+	id := client.next_id
+	wayland.compositor_create_surface_request_write(&client.requests_byte_buffer, req, id) or_return
+	register_object(client, id, wayland.SURFACE_INTERFACE)
+	return wayland.Surface(id), nil
+}
+
+wayland_compositor_create_region_queue :: proc(client: ^Client, req: wayland.Compositor_Create_Region_Request) -> (ret: wayland.Region, err: runtime.Allocator_Error) #optional_allocator_error {
+	client.next_id += 1
+	id := client.next_id
+	wayland.compositor_create_region_request_write(&client.requests_byte_buffer, req, id) or_return
+	register_object(client, id, wayland.REGION_INTERFACE)
+	return wayland.Region(id), nil
+}
+
+wayland_compositor_release_queue :: proc(client: ^Client, req: wayland.Compositor_Release_Request) -> runtime.Allocator_Error {
+	wayland.compositor_release_request_write(&client.requests_byte_buffer, req) or_return
+	delete_key(&client.id_to_interface, u32(req.compositor))
+	return nil
+}
+
+wayland_shm_pool_create_buffer_queue :: proc(client: ^Client, req: wayland.Shm_Pool_Create_Buffer_Request) -> (ret: wayland.Buffer, err: runtime.Allocator_Error) #optional_allocator_error {
+	client.next_id += 1
+	id := client.next_id
+	wayland.shm_pool_create_buffer_request_write(&client.requests_byte_buffer, req, id) or_return
+	register_object(client, id, wayland.BUFFER_INTERFACE)
+	return wayland.Buffer(id), nil
+}
+
+wayland_shm_pool_destroy_queue :: proc(client: ^Client, req: wayland.Shm_Pool_Destroy_Request) -> runtime.Allocator_Error {
+	wayland.shm_pool_destroy_request_write(&client.requests_byte_buffer, req) or_return
+	delete_key(&client.id_to_interface, u32(req.shm_pool))
+	return nil
+}
+
+wayland_shm_pool_resize_queue :: proc(client: ^Client, req: wayland.Shm_Pool_Resize_Request) -> runtime.Allocator_Error {
+	wayland.shm_pool_resize_request_write(&client.requests_byte_buffer, req) or_return
+	return nil
+}
+
+wayland_shm_create_pool_queue :: proc(client: ^Client, req: wayland.Shm_Create_Pool_Request) -> (ret: wayland.Shm_Pool, err: runtime.Allocator_Error) #optional_allocator_error {
+	client.next_id += 1
+	id := client.next_id
+	wayland.shm_create_pool_request_write(&client.requests_byte_buffer, req, id) or_return
+	register_object(client, id, wayland.SHM_POOL_INTERFACE)
+	append(&client.outgoing_fds, req.fd)
+	return wayland.Shm_Pool(id), nil
+}
+
+wayland_shm_release_queue :: proc(client: ^Client, req: wayland.Shm_Release_Request) -> runtime.Allocator_Error {
+	wayland.shm_release_request_write(&client.requests_byte_buffer, req) or_return
+	delete_key(&client.id_to_interface, u32(req.shm))
+	return nil
+}
+
+wayland_buffer_destroy_queue :: proc(client: ^Client, req: wayland.Buffer_Destroy_Request) -> runtime.Allocator_Error {
+	wayland.buffer_destroy_request_write(&client.requests_byte_buffer, req) or_return
+	delete_key(&client.id_to_interface, u32(req.buffer))
+	return nil
+}
+
+wayland_data_offer_accept_queue :: proc(client: ^Client, req: wayland.Data_Offer_Accept_Request) -> runtime.Allocator_Error {
+	wayland.data_offer_accept_request_write(&client.requests_byte_buffer, req) or_return
+	return nil
+}
+
+wayland_data_offer_receive_queue :: proc(client: ^Client, req: wayland.Data_Offer_Receive_Request) -> runtime.Allocator_Error {
+	wayland.data_offer_receive_request_write(&client.requests_byte_buffer, req) or_return
+	append(&client.outgoing_fds, req.fd)
+	return nil
+}
+
+wayland_data_offer_destroy_queue :: proc(client: ^Client, req: wayland.Data_Offer_Destroy_Request) -> runtime.Allocator_Error {
+	wayland.data_offer_destroy_request_write(&client.requests_byte_buffer, req) or_return
+	delete_key(&client.id_to_interface, u32(req.data_offer))
+	return nil
+}
+
+wayland_data_offer_finish_queue :: proc(client: ^Client, req: wayland.Data_Offer_Finish_Request) -> runtime.Allocator_Error {
+	wayland.data_offer_finish_request_write(&client.requests_byte_buffer, req) or_return
+	return nil
+}
+
+wayland_data_offer_set_actions_queue :: proc(client: ^Client, req: wayland.Data_Offer_Set_Actions_Request) -> runtime.Allocator_Error {
+	wayland.data_offer_set_actions_request_write(&client.requests_byte_buffer, req) or_return
+	return nil
+}
+
+wayland_data_source_offer_queue :: proc(client: ^Client, req: wayland.Data_Source_Offer_Request) -> runtime.Allocator_Error {
+	wayland.data_source_offer_request_write(&client.requests_byte_buffer, req) or_return
+	return nil
+}
+
+wayland_data_source_destroy_queue :: proc(client: ^Client, req: wayland.Data_Source_Destroy_Request) -> runtime.Allocator_Error {
+	wayland.data_source_destroy_request_write(&client.requests_byte_buffer, req) or_return
+	delete_key(&client.id_to_interface, u32(req.data_source))
+	return nil
+}
+
+wayland_data_source_set_actions_queue :: proc(client: ^Client, req: wayland.Data_Source_Set_Actions_Request) -> runtime.Allocator_Error {
+	wayland.data_source_set_actions_request_write(&client.requests_byte_buffer, req) or_return
+	return nil
+}
+
+wayland_data_device_start_drag_queue :: proc(client: ^Client, req: wayland.Data_Device_Start_Drag_Request) -> runtime.Allocator_Error {
+	wayland.data_device_start_drag_request_write(&client.requests_byte_buffer, req) or_return
+	return nil
+}
+
+wayland_data_device_set_selection_queue :: proc(client: ^Client, req: wayland.Data_Device_Set_Selection_Request) -> runtime.Allocator_Error {
+	wayland.data_device_set_selection_request_write(&client.requests_byte_buffer, req) or_return
+	return nil
+}
+
+wayland_data_device_release_queue :: proc(client: ^Client, req: wayland.Data_Device_Release_Request) -> runtime.Allocator_Error {
+	wayland.data_device_release_request_write(&client.requests_byte_buffer, req) or_return
+	delete_key(&client.id_to_interface, u32(req.data_device))
+	return nil
+}
+
+wayland_data_device_manager_create_data_source_queue :: proc(client: ^Client, req: wayland.Data_Device_Manager_Create_Data_Source_Request) -> (ret: wayland.Data_Source, err: runtime.Allocator_Error) #optional_allocator_error {
+	client.next_id += 1
+	id := client.next_id
+	wayland.data_device_manager_create_data_source_request_write(&client.requests_byte_buffer, req, id) or_return
+	register_object(client, id, wayland.DATA_SOURCE_INTERFACE)
+	return wayland.Data_Source(id), nil
+}
+
+wayland_data_device_manager_get_data_device_queue :: proc(client: ^Client, req: wayland.Data_Device_Manager_Get_Data_Device_Request) -> (ret: wayland.Data_Device, err: runtime.Allocator_Error) #optional_allocator_error {
+	client.next_id += 1
+	id := client.next_id
+	wayland.data_device_manager_get_data_device_request_write(&client.requests_byte_buffer, req, id) or_return
+	register_object(client, id, wayland.DATA_DEVICE_INTERFACE)
+	return wayland.Data_Device(id), nil
+}
+
+wayland_data_device_manager_release_queue :: proc(client: ^Client, req: wayland.Data_Device_Manager_Release_Request) -> runtime.Allocator_Error {
+	wayland.data_device_manager_release_request_write(&client.requests_byte_buffer, req) or_return
+	delete_key(&client.id_to_interface, u32(req.data_device_manager))
+	return nil
+}
+
+wayland_shell_get_shell_surface_queue :: proc(client: ^Client, req: wayland.Shell_Get_Shell_Surface_Request) -> (ret: wayland.Shell_Surface, err: runtime.Allocator_Error) #optional_allocator_error {
+	client.next_id += 1
+	id := client.next_id
+	wayland.shell_get_shell_surface_request_write(&client.requests_byte_buffer, req, id) or_return
+	register_object(client, id, wayland.SHELL_SURFACE_INTERFACE)
+	return wayland.Shell_Surface(id), nil
+}
+
+wayland_shell_surface_pong_queue :: proc(client: ^Client, req: wayland.Shell_Surface_Pong_Request) -> runtime.Allocator_Error {
+	wayland.shell_surface_pong_request_write(&client.requests_byte_buffer, req) or_return
+	return nil
+}
+
+wayland_shell_surface_move_queue :: proc(client: ^Client, req: wayland.Shell_Surface_Move_Request) -> runtime.Allocator_Error {
+	wayland.shell_surface_move_request_write(&client.requests_byte_buffer, req) or_return
+	return nil
+}
+
+wayland_shell_surface_resize_queue :: proc(client: ^Client, req: wayland.Shell_Surface_Resize_Request) -> runtime.Allocator_Error {
+	wayland.shell_surface_resize_request_write(&client.requests_byte_buffer, req) or_return
+	return nil
+}
+
+wayland_shell_surface_set_toplevel_queue :: proc(client: ^Client, req: wayland.Shell_Surface_Set_Toplevel_Request) -> runtime.Allocator_Error {
+	wayland.shell_surface_set_toplevel_request_write(&client.requests_byte_buffer, req) or_return
+	return nil
+}
+
+wayland_shell_surface_set_transient_queue :: proc(client: ^Client, req: wayland.Shell_Surface_Set_Transient_Request) -> runtime.Allocator_Error {
+	wayland.shell_surface_set_transient_request_write(&client.requests_byte_buffer, req) or_return
+	return nil
+}
+
+wayland_shell_surface_set_fullscreen_queue :: proc(client: ^Client, req: wayland.Shell_Surface_Set_Fullscreen_Request) -> runtime.Allocator_Error {
+	wayland.shell_surface_set_fullscreen_request_write(&client.requests_byte_buffer, req) or_return
+	return nil
+}
+
+wayland_shell_surface_set_popup_queue :: proc(client: ^Client, req: wayland.Shell_Surface_Set_Popup_Request) -> runtime.Allocator_Error {
+	wayland.shell_surface_set_popup_request_write(&client.requests_byte_buffer, req) or_return
+	return nil
+}
+
+wayland_shell_surface_set_maximized_queue :: proc(client: ^Client, req: wayland.Shell_Surface_Set_Maximized_Request) -> runtime.Allocator_Error {
+	wayland.shell_surface_set_maximized_request_write(&client.requests_byte_buffer, req) or_return
+	return nil
+}
+
+wayland_shell_surface_set_title_queue :: proc(client: ^Client, req: wayland.Shell_Surface_Set_Title_Request) -> runtime.Allocator_Error {
+	wayland.shell_surface_set_title_request_write(&client.requests_byte_buffer, req) or_return
+	return nil
+}
+
+wayland_shell_surface_set_class_queue :: proc(client: ^Client, req: wayland.Shell_Surface_Set_Class_Request) -> runtime.Allocator_Error {
+	wayland.shell_surface_set_class_request_write(&client.requests_byte_buffer, req) or_return
+	return nil
+}
+
+wayland_surface_destroy_queue :: proc(client: ^Client, req: wayland.Surface_Destroy_Request) -> runtime.Allocator_Error {
+	wayland.surface_destroy_request_write(&client.requests_byte_buffer, req) or_return
+	delete_key(&client.id_to_interface, u32(req.surface))
+	return nil
+}
+
+wayland_surface_attach_queue :: proc(client: ^Client, req: wayland.Surface_Attach_Request) -> runtime.Allocator_Error {
+	wayland.surface_attach_request_write(&client.requests_byte_buffer, req) or_return
+	return nil
+}
+
+wayland_surface_damage_queue :: proc(client: ^Client, req: wayland.Surface_Damage_Request) -> runtime.Allocator_Error {
+	wayland.surface_damage_request_write(&client.requests_byte_buffer, req) or_return
+	return nil
+}
+
+wayland_surface_frame_queue :: proc(client: ^Client, req: wayland.Surface_Frame_Request) -> (ret: wayland.Callback, err: runtime.Allocator_Error) #optional_allocator_error {
+	client.next_id += 1
+	id := client.next_id
+	wayland.surface_frame_request_write(&client.requests_byte_buffer, req, id) or_return
+	register_object(client, id, wayland.CALLBACK_INTERFACE)
+	return wayland.Callback(id), nil
+}
+
+wayland_surface_set_opaque_region_queue :: proc(client: ^Client, req: wayland.Surface_Set_Opaque_Region_Request) -> runtime.Allocator_Error {
+	wayland.surface_set_opaque_region_request_write(&client.requests_byte_buffer, req) or_return
+	return nil
+}
+
+wayland_surface_set_input_region_queue :: proc(client: ^Client, req: wayland.Surface_Set_Input_Region_Request) -> runtime.Allocator_Error {
+	wayland.surface_set_input_region_request_write(&client.requests_byte_buffer, req) or_return
+	return nil
+}
+
+wayland_surface_commit_queue :: proc(client: ^Client, req: wayland.Surface_Commit_Request) -> runtime.Allocator_Error {
+	wayland.surface_commit_request_write(&client.requests_byte_buffer, req) or_return
+	return nil
+}
+
+wayland_surface_set_buffer_transform_queue :: proc(client: ^Client, req: wayland.Surface_Set_Buffer_Transform_Request) -> runtime.Allocator_Error {
+	wayland.surface_set_buffer_transform_request_write(&client.requests_byte_buffer, req) or_return
+	return nil
+}
+
+wayland_surface_set_buffer_scale_queue :: proc(client: ^Client, req: wayland.Surface_Set_Buffer_Scale_Request) -> runtime.Allocator_Error {
+	wayland.surface_set_buffer_scale_request_write(&client.requests_byte_buffer, req) or_return
+	return nil
+}
+
+wayland_surface_damage_buffer_queue :: proc(client: ^Client, req: wayland.Surface_Damage_Buffer_Request) -> runtime.Allocator_Error {
+	wayland.surface_damage_buffer_request_write(&client.requests_byte_buffer, req) or_return
+	return nil
+}
+
+wayland_surface_offset_queue :: proc(client: ^Client, req: wayland.Surface_Offset_Request) -> runtime.Allocator_Error {
+	wayland.surface_offset_request_write(&client.requests_byte_buffer, req) or_return
+	return nil
+}
+
+wayland_surface_get_release_queue :: proc(client: ^Client, req: wayland.Surface_Get_Release_Request) -> (ret: wayland.Callback, err: runtime.Allocator_Error) #optional_allocator_error {
+	client.next_id += 1
+	id := client.next_id
+	wayland.surface_get_release_request_write(&client.requests_byte_buffer, req, id) or_return
+	register_object(client, id, wayland.CALLBACK_INTERFACE)
+	return wayland.Callback(id), nil
+}
+
+wayland_seat_get_pointer_queue :: proc(client: ^Client, req: wayland.Seat_Get_Pointer_Request) -> (ret: wayland.Pointer, err: runtime.Allocator_Error) #optional_allocator_error {
+	client.next_id += 1
+	id := client.next_id
+	wayland.seat_get_pointer_request_write(&client.requests_byte_buffer, req, id) or_return
+	register_object(client, id, wayland.POINTER_INTERFACE)
+	return wayland.Pointer(id), nil
+}
+
+wayland_seat_get_keyboard_queue :: proc(client: ^Client, req: wayland.Seat_Get_Keyboard_Request) -> (ret: wayland.Keyboard, err: runtime.Allocator_Error) #optional_allocator_error {
+	client.next_id += 1
+	id := client.next_id
+	wayland.seat_get_keyboard_request_write(&client.requests_byte_buffer, req, id) or_return
+	register_object(client, id, wayland.KEYBOARD_INTERFACE)
+	return wayland.Keyboard(id), nil
+}
+
+wayland_seat_get_touch_queue :: proc(client: ^Client, req: wayland.Seat_Get_Touch_Request) -> (ret: wayland.Touch, err: runtime.Allocator_Error) #optional_allocator_error {
+	client.next_id += 1
+	id := client.next_id
+	wayland.seat_get_touch_request_write(&client.requests_byte_buffer, req, id) or_return
+	register_object(client, id, wayland.TOUCH_INTERFACE)
+	return wayland.Touch(id), nil
+}
+
+wayland_seat_release_queue :: proc(client: ^Client, req: wayland.Seat_Release_Request) -> runtime.Allocator_Error {
+	wayland.seat_release_request_write(&client.requests_byte_buffer, req) or_return
+	delete_key(&client.id_to_interface, u32(req.seat))
+	return nil
+}
+
+wayland_pointer_set_cursor_queue :: proc(client: ^Client, req: wayland.Pointer_Set_Cursor_Request) -> runtime.Allocator_Error {
+	wayland.pointer_set_cursor_request_write(&client.requests_byte_buffer, req) or_return
+	return nil
+}
+
+wayland_pointer_release_queue :: proc(client: ^Client, req: wayland.Pointer_Release_Request) -> runtime.Allocator_Error {
+	wayland.pointer_release_request_write(&client.requests_byte_buffer, req) or_return
+	delete_key(&client.id_to_interface, u32(req.pointer))
+	return nil
+}
+
+wayland_keyboard_release_queue :: proc(client: ^Client, req: wayland.Keyboard_Release_Request) -> runtime.Allocator_Error {
+	wayland.keyboard_release_request_write(&client.requests_byte_buffer, req) or_return
+	delete_key(&client.id_to_interface, u32(req.keyboard))
+	return nil
+}
+
+wayland_touch_release_queue :: proc(client: ^Client, req: wayland.Touch_Release_Request) -> runtime.Allocator_Error {
+	wayland.touch_release_request_write(&client.requests_byte_buffer, req) or_return
+	delete_key(&client.id_to_interface, u32(req.touch))
+	return nil
+}
+
+wayland_output_release_queue :: proc(client: ^Client, req: wayland.Output_Release_Request) -> runtime.Allocator_Error {
+	wayland.output_release_request_write(&client.requests_byte_buffer, req) or_return
+	delete_key(&client.id_to_interface, u32(req.output))
+	return nil
+}
+
+wayland_region_destroy_queue :: proc(client: ^Client, req: wayland.Region_Destroy_Request) -> runtime.Allocator_Error {
+	wayland.region_destroy_request_write(&client.requests_byte_buffer, req) or_return
+	delete_key(&client.id_to_interface, u32(req.region))
+	return nil
+}
+
+wayland_region_add_queue :: proc(client: ^Client, req: wayland.Region_Add_Request) -> runtime.Allocator_Error {
+	wayland.region_add_request_write(&client.requests_byte_buffer, req) or_return
+	return nil
+}
+
+wayland_region_subtract_queue :: proc(client: ^Client, req: wayland.Region_Subtract_Request) -> runtime.Allocator_Error {
+	wayland.region_subtract_request_write(&client.requests_byte_buffer, req) or_return
+	return nil
+}
+
+wayland_subcompositor_destroy_queue :: proc(client: ^Client, req: wayland.Subcompositor_Destroy_Request) -> runtime.Allocator_Error {
+	wayland.subcompositor_destroy_request_write(&client.requests_byte_buffer, req) or_return
+	delete_key(&client.id_to_interface, u32(req.subcompositor))
+	return nil
+}
+
+wayland_subcompositor_get_subsurface_queue :: proc(client: ^Client, req: wayland.Subcompositor_Get_Subsurface_Request) -> (ret: wayland.Subsurface, err: runtime.Allocator_Error) #optional_allocator_error {
+	client.next_id += 1
+	id := client.next_id
+	wayland.subcompositor_get_subsurface_request_write(&client.requests_byte_buffer, req, id) or_return
+	register_object(client, id, wayland.SUBSURFACE_INTERFACE)
+	return wayland.Subsurface(id), nil
+}
+
+wayland_subsurface_destroy_queue :: proc(client: ^Client, req: wayland.Subsurface_Destroy_Request) -> runtime.Allocator_Error {
+	wayland.subsurface_destroy_request_write(&client.requests_byte_buffer, req) or_return
+	delete_key(&client.id_to_interface, u32(req.subsurface))
+	return nil
+}
+
+wayland_subsurface_set_position_queue :: proc(client: ^Client, req: wayland.Subsurface_Set_Position_Request) -> runtime.Allocator_Error {
+	wayland.subsurface_set_position_request_write(&client.requests_byte_buffer, req) or_return
+	return nil
+}
+
+wayland_subsurface_place_above_queue :: proc(client: ^Client, req: wayland.Subsurface_Place_Above_Request) -> runtime.Allocator_Error {
+	wayland.subsurface_place_above_request_write(&client.requests_byte_buffer, req) or_return
+	return nil
+}
+
+wayland_subsurface_place_below_queue :: proc(client: ^Client, req: wayland.Subsurface_Place_Below_Request) -> runtime.Allocator_Error {
+	wayland.subsurface_place_below_request_write(&client.requests_byte_buffer, req) or_return
+	return nil
+}
+
+wayland_subsurface_set_sync_queue :: proc(client: ^Client, req: wayland.Subsurface_Set_Sync_Request) -> runtime.Allocator_Error {
+	wayland.subsurface_set_sync_request_write(&client.requests_byte_buffer, req) or_return
+	return nil
+}
+
+wayland_subsurface_set_desync_queue :: proc(client: ^Client, req: wayland.Subsurface_Set_Desync_Request) -> runtime.Allocator_Error {
+	wayland.subsurface_set_desync_request_write(&client.requests_byte_buffer, req) or_return
+	return nil
+}
+
+wayland_fixes_destroy_queue :: proc(client: ^Client, req: wayland.Fixes_Destroy_Request) -> runtime.Allocator_Error {
+	wayland.fixes_destroy_request_write(&client.requests_byte_buffer, req) or_return
+	delete_key(&client.id_to_interface, u32(req.fixes))
+	return nil
+}
+
+wayland_fixes_destroy_registry_queue :: proc(client: ^Client, req: wayland.Fixes_Destroy_Registry_Request) -> runtime.Allocator_Error {
+	wayland.fixes_destroy_registry_request_write(&client.requests_byte_buffer, req) or_return
+	return nil
+}
+
+wayland_fixes_ack_global_remove_queue :: proc(client: ^Client, req: wayland.Fixes_Ack_Global_Remove_Request) -> runtime.Allocator_Error {
+	wayland.fixes_ack_global_remove_request_write(&client.requests_byte_buffer, req) or_return
+	return nil
+}
+
+linux_dmabuf_v1_linux_dmabuf_v1_destroy_queue :: proc(client: ^Client, req: wp.Linux_Dmabuf_V1_Destroy_Request) -> runtime.Allocator_Error {
+	wp.linux_dmabuf_v1_destroy_request_write(&client.requests_byte_buffer, req) or_return
+	delete_key(&client.id_to_interface, u32(req.linux_dmabuf_v1))
+	return nil
+}
+
+linux_dmabuf_v1_linux_dmabuf_v1_create_params_queue :: proc(client: ^Client, req: wp.Linux_Dmabuf_V1_Create_Params_Request) -> (ret: wp.Linux_Buffer_Params_V1, err: runtime.Allocator_Error) #optional_allocator_error {
+	client.next_id += 1
+	id := client.next_id
+	wp.linux_dmabuf_v1_create_params_request_write(&client.requests_byte_buffer, req, id) or_return
+	register_object(client, id, wp.LINUX_BUFFER_PARAMS_V1_INTERFACE)
+	return wp.Linux_Buffer_Params_V1(id), nil
+}
+
+linux_dmabuf_v1_linux_dmabuf_v1_get_default_feedback_queue :: proc(client: ^Client, req: wp.Linux_Dmabuf_V1_Get_Default_Feedback_Request) -> (ret: wp.Linux_Dmabuf_Feedback_V1, err: runtime.Allocator_Error) #optional_allocator_error {
+	client.next_id += 1
+	id := client.next_id
+	wp.linux_dmabuf_v1_get_default_feedback_request_write(&client.requests_byte_buffer, req, id) or_return
+	register_object(client, id, wp.LINUX_DMABUF_FEEDBACK_V1_INTERFACE)
+	return wp.Linux_Dmabuf_Feedback_V1(id), nil
+}
+
+linux_dmabuf_v1_linux_dmabuf_v1_get_surface_feedback_queue :: proc(client: ^Client, req: wp.Linux_Dmabuf_V1_Get_Surface_Feedback_Request) -> (ret: wp.Linux_Dmabuf_Feedback_V1, err: runtime.Allocator_Error) #optional_allocator_error {
+	client.next_id += 1
+	id := client.next_id
+	wp.linux_dmabuf_v1_get_surface_feedback_request_write(&client.requests_byte_buffer, req, id) or_return
+	register_object(client, id, wp.LINUX_DMABUF_FEEDBACK_V1_INTERFACE)
+	return wp.Linux_Dmabuf_Feedback_V1(id), nil
+}
+
+linux_dmabuf_v1_linux_buffer_params_v1_destroy_queue :: proc(client: ^Client, req: wp.Linux_Buffer_Params_V1_Destroy_Request) -> runtime.Allocator_Error {
+	wp.linux_buffer_params_v1_destroy_request_write(&client.requests_byte_buffer, req) or_return
+	delete_key(&client.id_to_interface, u32(req.linux_buffer_params_v1))
+	return nil
+}
+
+linux_dmabuf_v1_linux_buffer_params_v1_add_queue :: proc(client: ^Client, req: wp.Linux_Buffer_Params_V1_Add_Request) -> runtime.Allocator_Error {
+	wp.linux_buffer_params_v1_add_request_write(&client.requests_byte_buffer, req) or_return
+	append(&client.outgoing_fds, req.fd)
+	return nil
+}
+
+linux_dmabuf_v1_linux_buffer_params_v1_create_queue :: proc(client: ^Client, req: wp.Linux_Buffer_Params_V1_Create_Request) -> runtime.Allocator_Error {
+	wp.linux_buffer_params_v1_create_request_write(&client.requests_byte_buffer, req) or_return
+	return nil
+}
+
+linux_dmabuf_v1_linux_buffer_params_v1_create_immed_queue :: proc(client: ^Client, req: wp.Linux_Buffer_Params_V1_Create_Immed_Request) -> (ret: wayland.Buffer, err: runtime.Allocator_Error) #optional_allocator_error {
+	client.next_id += 1
+	id := client.next_id
+	wp.linux_buffer_params_v1_create_immed_request_write(&client.requests_byte_buffer, req, id) or_return
+	register_object(client, id, wayland.BUFFER_INTERFACE)
+	return wayland.Buffer(id), nil
+}
+
+linux_dmabuf_v1_linux_buffer_params_v1_set_sampling_device_queue :: proc(client: ^Client, req: wp.Linux_Buffer_Params_V1_Set_Sampling_Device_Request) -> runtime.Allocator_Error {
+	wp.linux_buffer_params_v1_set_sampling_device_request_write(&client.requests_byte_buffer, req) or_return
+	return nil
+}
+
+linux_dmabuf_v1_linux_dmabuf_feedback_v1_destroy_queue :: proc(client: ^Client, req: wp.Linux_Dmabuf_Feedback_V1_Destroy_Request) -> runtime.Allocator_Error {
+	wp.linux_dmabuf_feedback_v1_destroy_request_write(&client.requests_byte_buffer, req) or_return
+	delete_key(&client.id_to_interface, u32(req.linux_dmabuf_feedback_v1))
+	return nil
+}
+
+xdg_shell_wm_base_destroy_queue :: proc(client: ^Client, req: xdg.Wm_Base_Destroy_Request) -> runtime.Allocator_Error {
+	xdg.wm_base_destroy_request_write(&client.requests_byte_buffer, req) or_return
+	delete_key(&client.id_to_interface, u32(req.wm_base))
+	return nil
+}
+
+xdg_shell_wm_base_create_positioner_queue :: proc(client: ^Client, req: xdg.Wm_Base_Create_Positioner_Request) -> (ret: xdg.Positioner, err: runtime.Allocator_Error) #optional_allocator_error {
+	client.next_id += 1
+	id := client.next_id
+	xdg.wm_base_create_positioner_request_write(&client.requests_byte_buffer, req, id) or_return
+	register_object(client, id, xdg.POSITIONER_INTERFACE)
+	return xdg.Positioner(id), nil
+}
+
+xdg_shell_wm_base_get_xdg_surface_queue :: proc(client: ^Client, req: xdg.Wm_Base_Get_Xdg_Surface_Request) -> (ret: xdg.Surface, err: runtime.Allocator_Error) #optional_allocator_error {
+	client.next_id += 1
+	id := client.next_id
+	xdg.wm_base_get_xdg_surface_request_write(&client.requests_byte_buffer, req, id) or_return
+	register_object(client, id, xdg.SURFACE_INTERFACE)
+	return xdg.Surface(id), nil
+}
+
+xdg_shell_wm_base_pong_queue :: proc(client: ^Client, req: xdg.Wm_Base_Pong_Request) -> runtime.Allocator_Error {
+	xdg.wm_base_pong_request_write(&client.requests_byte_buffer, req) or_return
+	return nil
+}
+
+xdg_shell_positioner_destroy_queue :: proc(client: ^Client, req: xdg.Positioner_Destroy_Request) -> runtime.Allocator_Error {
+	xdg.positioner_destroy_request_write(&client.requests_byte_buffer, req) or_return
+	delete_key(&client.id_to_interface, u32(req.positioner))
+	return nil
+}
+
+xdg_shell_positioner_set_size_queue :: proc(client: ^Client, req: xdg.Positioner_Set_Size_Request) -> runtime.Allocator_Error {
+	xdg.positioner_set_size_request_write(&client.requests_byte_buffer, req) or_return
+	return nil
+}
+
+xdg_shell_positioner_set_anchor_rect_queue :: proc(client: ^Client, req: xdg.Positioner_Set_Anchor_Rect_Request) -> runtime.Allocator_Error {
+	xdg.positioner_set_anchor_rect_request_write(&client.requests_byte_buffer, req) or_return
+	return nil
+}
+
+xdg_shell_positioner_set_anchor_queue :: proc(client: ^Client, req: xdg.Positioner_Set_Anchor_Request) -> runtime.Allocator_Error {
+	xdg.positioner_set_anchor_request_write(&client.requests_byte_buffer, req) or_return
+	return nil
+}
+
+xdg_shell_positioner_set_gravity_queue :: proc(client: ^Client, req: xdg.Positioner_Set_Gravity_Request) -> runtime.Allocator_Error {
+	xdg.positioner_set_gravity_request_write(&client.requests_byte_buffer, req) or_return
+	return nil
+}
+
+xdg_shell_positioner_set_constraint_adjustment_queue :: proc(client: ^Client, req: xdg.Positioner_Set_Constraint_Adjustment_Request) -> runtime.Allocator_Error {
+	xdg.positioner_set_constraint_adjustment_request_write(&client.requests_byte_buffer, req) or_return
+	return nil
+}
+
+xdg_shell_positioner_set_offset_queue :: proc(client: ^Client, req: xdg.Positioner_Set_Offset_Request) -> runtime.Allocator_Error {
+	xdg.positioner_set_offset_request_write(&client.requests_byte_buffer, req) or_return
+	return nil
+}
+
+xdg_shell_positioner_set_reactive_queue :: proc(client: ^Client, req: xdg.Positioner_Set_Reactive_Request) -> runtime.Allocator_Error {
+	xdg.positioner_set_reactive_request_write(&client.requests_byte_buffer, req) or_return
+	return nil
+}
+
+xdg_shell_positioner_set_parent_size_queue :: proc(client: ^Client, req: xdg.Positioner_Set_Parent_Size_Request) -> runtime.Allocator_Error {
+	xdg.positioner_set_parent_size_request_write(&client.requests_byte_buffer, req) or_return
+	return nil
+}
+
+xdg_shell_positioner_set_parent_configure_queue :: proc(client: ^Client, req: xdg.Positioner_Set_Parent_Configure_Request) -> runtime.Allocator_Error {
+	xdg.positioner_set_parent_configure_request_write(&client.requests_byte_buffer, req) or_return
+	return nil
+}
+
+xdg_shell_surface_destroy_queue :: proc(client: ^Client, req: xdg.Surface_Destroy_Request) -> runtime.Allocator_Error {
+	xdg.surface_destroy_request_write(&client.requests_byte_buffer, req) or_return
+	delete_key(&client.id_to_interface, u32(req.surface))
+	return nil
+}
+
+xdg_shell_surface_get_toplevel_queue :: proc(client: ^Client, req: xdg.Surface_Get_Toplevel_Request) -> (ret: xdg.Toplevel, err: runtime.Allocator_Error) #optional_allocator_error {
+	client.next_id += 1
+	id := client.next_id
+	xdg.surface_get_toplevel_request_write(&client.requests_byte_buffer, req, id) or_return
+	register_object(client, id, xdg.TOPLEVEL_INTERFACE)
+	return xdg.Toplevel(id), nil
+}
+
+xdg_shell_surface_get_popup_queue :: proc(client: ^Client, req: xdg.Surface_Get_Popup_Request) -> (ret: xdg.Popup, err: runtime.Allocator_Error) #optional_allocator_error {
+	client.next_id += 1
+	id := client.next_id
+	xdg.surface_get_popup_request_write(&client.requests_byte_buffer, req, id) or_return
+	register_object(client, id, xdg.POPUP_INTERFACE)
+	return xdg.Popup(id), nil
+}
+
+xdg_shell_surface_set_window_geometry_queue :: proc(client: ^Client, req: xdg.Surface_Set_Window_Geometry_Request) -> runtime.Allocator_Error {
+	xdg.surface_set_window_geometry_request_write(&client.requests_byte_buffer, req) or_return
+	return nil
+}
+
+xdg_shell_surface_ack_configure_queue :: proc(client: ^Client, req: xdg.Surface_Ack_Configure_Request) -> runtime.Allocator_Error {
+	xdg.surface_ack_configure_request_write(&client.requests_byte_buffer, req) or_return
+	return nil
+}
+
+xdg_shell_toplevel_destroy_queue :: proc(client: ^Client, req: xdg.Toplevel_Destroy_Request) -> runtime.Allocator_Error {
+	xdg.toplevel_destroy_request_write(&client.requests_byte_buffer, req) or_return
+	delete_key(&client.id_to_interface, u32(req.toplevel))
+	return nil
+}
+
+xdg_shell_toplevel_set_parent_queue :: proc(client: ^Client, req: xdg.Toplevel_Set_Parent_Request) -> runtime.Allocator_Error {
+	xdg.toplevel_set_parent_request_write(&client.requests_byte_buffer, req) or_return
+	return nil
+}
+
+xdg_shell_toplevel_set_title_queue :: proc(client: ^Client, req: xdg.Toplevel_Set_Title_Request) -> runtime.Allocator_Error {
+	xdg.toplevel_set_title_request_write(&client.requests_byte_buffer, req) or_return
+	return nil
+}
+
+xdg_shell_toplevel_set_app_id_queue :: proc(client: ^Client, req: xdg.Toplevel_Set_App_Id_Request) -> runtime.Allocator_Error {
+	xdg.toplevel_set_app_id_request_write(&client.requests_byte_buffer, req) or_return
+	return nil
+}
+
+xdg_shell_toplevel_show_window_menu_queue :: proc(client: ^Client, req: xdg.Toplevel_Show_Window_Menu_Request) -> runtime.Allocator_Error {
+	xdg.toplevel_show_window_menu_request_write(&client.requests_byte_buffer, req) or_return
+	return nil
+}
+
+xdg_shell_toplevel_move_queue :: proc(client: ^Client, req: xdg.Toplevel_Move_Request) -> runtime.Allocator_Error {
+	xdg.toplevel_move_request_write(&client.requests_byte_buffer, req) or_return
+	return nil
+}
+
+xdg_shell_toplevel_resize_queue :: proc(client: ^Client, req: xdg.Toplevel_Resize_Request) -> runtime.Allocator_Error {
+	xdg.toplevel_resize_request_write(&client.requests_byte_buffer, req) or_return
+	return nil
+}
+
+xdg_shell_toplevel_set_max_size_queue :: proc(client: ^Client, req: xdg.Toplevel_Set_Max_Size_Request) -> runtime.Allocator_Error {
+	xdg.toplevel_set_max_size_request_write(&client.requests_byte_buffer, req) or_return
+	return nil
+}
+
+xdg_shell_toplevel_set_min_size_queue :: proc(client: ^Client, req: xdg.Toplevel_Set_Min_Size_Request) -> runtime.Allocator_Error {
+	xdg.toplevel_set_min_size_request_write(&client.requests_byte_buffer, req) or_return
+	return nil
+}
+
+xdg_shell_toplevel_set_maximized_queue :: proc(client: ^Client, req: xdg.Toplevel_Set_Maximized_Request) -> runtime.Allocator_Error {
+	xdg.toplevel_set_maximized_request_write(&client.requests_byte_buffer, req) or_return
+	return nil
+}
+
+xdg_shell_toplevel_unset_maximized_queue :: proc(client: ^Client, req: xdg.Toplevel_Unset_Maximized_Request) -> runtime.Allocator_Error {
+	xdg.toplevel_unset_maximized_request_write(&client.requests_byte_buffer, req) or_return
+	return nil
+}
+
+xdg_shell_toplevel_set_fullscreen_queue :: proc(client: ^Client, req: xdg.Toplevel_Set_Fullscreen_Request) -> runtime.Allocator_Error {
+	xdg.toplevel_set_fullscreen_request_write(&client.requests_byte_buffer, req) or_return
+	return nil
+}
+
+xdg_shell_toplevel_unset_fullscreen_queue :: proc(client: ^Client, req: xdg.Toplevel_Unset_Fullscreen_Request) -> runtime.Allocator_Error {
+	xdg.toplevel_unset_fullscreen_request_write(&client.requests_byte_buffer, req) or_return
+	return nil
+}
+
+xdg_shell_toplevel_set_minimized_queue :: proc(client: ^Client, req: xdg.Toplevel_Set_Minimized_Request) -> runtime.Allocator_Error {
+	xdg.toplevel_set_minimized_request_write(&client.requests_byte_buffer, req) or_return
+	return nil
+}
+
+xdg_shell_popup_destroy_queue :: proc(client: ^Client, req: xdg.Popup_Destroy_Request) -> runtime.Allocator_Error {
+	xdg.popup_destroy_request_write(&client.requests_byte_buffer, req) or_return
+	delete_key(&client.id_to_interface, u32(req.popup))
+	return nil
+}
+
+xdg_shell_popup_grab_queue :: proc(client: ^Client, req: xdg.Popup_Grab_Request) -> runtime.Allocator_Error {
+	xdg.popup_grab_request_write(&client.requests_byte_buffer, req) or_return
+	return nil
+}
+
+xdg_shell_popup_reposition_queue :: proc(client: ^Client, req: xdg.Popup_Reposition_Request) -> runtime.Allocator_Error {
+	xdg.popup_reposition_request_write(&client.requests_byte_buffer, req) or_return
+	return nil
+}
+
 Event :: union {
 	wayland.Display_Error_Event,
 	wayland.Display_Delete_Id_Event,
@@ -209,4 +1021,3 @@ Event :: union {
 	xdg.Popup_Popup_Done_Event,
 	xdg.Popup_Repositioned_Event,
 }
-

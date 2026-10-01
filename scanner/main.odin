@@ -16,13 +16,13 @@
 //  .../
 package scanner
 
-import "vendor:darwin/CoreVideo"
-import "core:unicode/utf8"
 import "core:strings"
 import "core:log"
 import "core:os"
 import "core:fmt"
 import "core:encoding/xml"
+
+client_file := #load("client.odin.scan")
 
 main :: proc() {
 	defer free_all(context.temp_allocator)
@@ -83,5 +83,7 @@ main :: proc() {
 		log.error(write_err)
 		return
 	}
-	_ = os.remove(fmt.tprintf("%v/wayland.odin", target))
+	if target == "client" {
+		_ = os.write_entire_file("client/client.odin", client_file)
+	}
 }

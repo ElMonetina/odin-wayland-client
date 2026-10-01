@@ -196,8 +196,126 @@ write_description :: proc(sb: ^strings.Builder, desc: string) {
 	fmt.sbprintf(sb, "/*\n\t%v\n*/\n", desc)
 }
 
+interface_base_name :: proc(interface: Interface, allocator := context.temp_allocator) -> string {
+	stripped := strings.trim_prefix(interface.name, find_prefix(interface.name))
+	return strings.to_ada_case(strings.to_upper(stripped, allocator), allocator)
+}
+
+interface_const_name :: proc(interface: Interface, allocator := context.temp_allocator) -> string {
+	return fmt.tprintf("%v_INTERFACE", strings.to_upper(interface_base_name(interface, allocator), allocator))
+}
+
+request_queue_proc_name :: proc(p: Protocol, interface: Interface, request: Message, allocator := context.temp_allocator) -> string {
+	request_name := strings.to_lower(strings.to_ada_case(request.name, allocator), allocator)
+	return fmt.tprintf("%v_%v_%v_queue", p.name, strings.to_lower(interface_base_name(interface, allocator), allocator), request_name)
+}
+
+request_struct_name :: proc(p: Protocol, interface: Interface, request: Message, allocator := context.temp_allocator) -> string {
+	request_name := strings.to_ada_case(fmt.tprintf("%v_Request", request.name), allocator)
+	return fmt.tprintf("%v.%v_%v", p.pkg, interface_base_name(interface, allocator), request_name)
+}
+
+request_write_proc_name :: proc(p: Protocol, interface: Interface, request: Message, allocator := context.temp_allocator) -> string {
+	request_name := strings.to_lower(strings.to_ada_case(fmt.tprintf("%v_Request", request.name), allocator), allocator)
+	return fmt.tprintf("%v.%v_%v_write", p.pkg, strings.to_lower(interface_base_name(interface, allocator), allocator), request_name)
+}
+
+lookup_interface :: proc(protocols: []Protocol, interface_name: string, allocator := context.temp_allocator) -> (pkg: string, base: string, found: bool) {
+	if interface_name == "" {
+		return "", "", false
+	}
+	for p in protocols {
+		for i in p.interfaces {
+			if i.name == interface_name {
+				return p.pkg, interface_base_name(i, allocator), true
+			}
+		}
+	}
+	return "", "", false
+}
+
+write_client_request_queue :: proc(sb: ^strings.Builder, protocols: []Protocol, allocator := context.temp_allocator) {
+	fmt.sbprintf(sb, "request_queue :: proc{{\n")
+	for p in protocols {
+		for i in p.interfaces {
+			for req in i.requests {
+				fmt.sbprintf(sb, "\t%v,\n", request_queue_proc_name(p, i, req, allocator))
+			}
+		}
+	}
+	fmt.sbprintf(sb, "}\n\n")
+	for p in protocols {
+		for i in p.interfaces {
+			for req in i.requests {
+				write_request_queue_proc(sb, protocols, p, i, req, allocator)
+			}
+		}
+	}
+}
+
+write_request_queue_proc :: proc(sb: ^strings.Builder, protocols: []Protocol, p: Protocol, interface: Interface, request: Message, allocator := context.temp_allocator) {
+	new_id_arg: Arg
+	returns_new_id := false
+	for arg in request.args {
+		if arg.type == "new_id" {
+			new_id_arg = arg
+			returns_new_id = true
+			break
+		}
+	}
+	new_id_pkg, new_id_base: string
+	new_id_is_object := false
+	if returns_new_id {
+		new_id_pkg, new_id_base, new_id_is_object = lookup_interface(protocols, new_id_arg.interface, allocator)
+	}
+
+	fmt.sbprintf(sb, "%v :: proc(client: ^Client, req: %v) -> ", request_queue_proc_name(p, interface, request, allocator), request_struct_name(p, interface, request, allocator))
+	switch {
+	case !returns_new_id:
+		fmt.sbprintf(sb, "runtime.Allocator_Error {{\n")
+	case new_id_is_object:
+		fmt.sbprintf(sb, "(ret: %v.%v, err: runtime.Allocator_Error) #optional_allocator_error {{\n", new_id_pkg, new_id_base)
+	case:
+		fmt.sbprintf(sb, "(ret: u32, err: runtime.Allocator_Error) #optional_allocator_error {{\n")
+	}
+
+	if !returns_new_id {
+		fmt.sbprintf(sb, "\t%v(&client.requests_byte_buffer, req) or_return\n", request_write_proc_name(p, interface, request, allocator))
+	} else {
+		fmt.sbprintf(sb, "\tclient.next_id += 1\n")
+		fmt.sbprintf(sb, "\tid := client.next_id\n")
+		fmt.sbprintf(sb, "\t%v(&client.requests_byte_buffer, req, id) or_return\n", request_write_proc_name(p, interface, request, allocator))
+		if new_id_is_object {
+			fmt.sbprintf(sb, "\tregister_object(client, id, %v.%v)\n", new_id_pkg, interface_const_name_by_base(new_id_base, allocator))
+		}
+	}
+	for arg in request.args {
+		if arg.type == "fd" {
+			fmt.sbprintf(sb, "\tappend(&client.outgoing_fds, req.%v)\n", arg.name)
+		}
+	}
+	if request.is_destructor {
+		fmt.sbprintf(sb, "\tdelete_key(&client.id_to_interface, u32(req.%v))\n", strings.to_lower(interface_base_name(interface, allocator), allocator))
+	}
+
+	switch {
+	case !returns_new_id:
+		fmt.sbprintf(sb, "\treturn nil\n")
+	case new_id_is_object:
+		fmt.sbprintf(sb, "\treturn %v.%v(id), nil\n", new_id_pkg, new_id_base)
+	case:
+		fmt.sbprintf(sb, "\treturn id, nil\n")
+	}
+	fmt.sbprintf(sb, "}\n\n")
+}
+
+interface_const_name_by_base :: proc(base: string, allocator := context.temp_allocator) -> string {
+	return fmt.tprintf("%v_INTERFACE", strings.to_upper(base, allocator))
+}
+
 write_client_glue_code :: proc(sb: ^strings.Builder, protocols: []Protocol, allocator := context.temp_allocator) {
 	fmt.sbprintf(sb, "package client\n\n")
+	fmt.sbprintf(sb, "import \"base:runtime\"\n")
 	fmt.sbprintf(sb, "import \"wayland\"\n")
 	for p in protocols {
 		if p.pkg != "wayland" {
@@ -217,6 +335,8 @@ write_client_glue_code :: proc(sb: ^strings.Builder, protocols: []Protocol, allo
 		}
 	}
 	fmt.sbprintf(sb, "}\n\n")
+
+	write_client_request_queue(sb, protocols, allocator)
 	fmt.sbprintf(sb, "Event :: union {{\n")
 	for p in protocols {
 		for i in p.interfaces {
@@ -228,6 +348,5 @@ write_client_glue_code :: proc(sb: ^strings.Builder, protocols: []Protocol, allo
 			}
 		}
 	}
-	fmt.sbprintf(sb, "}\n\n")
-
+	fmt.sbprintf(sb, "}\n")
 }
