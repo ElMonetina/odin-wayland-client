@@ -56,6 +56,8 @@ Entry :: struct {
 
 create_protocol :: proc(elements: []xml.Element, file_name: string, allocator := context.temp_allocator) -> Protocol {
 	p: Protocol
+
+	// TODO(gabri): improve this, should read an interface and extract the namespace. e.g: zwp -> wp, zext -> ext, etc.
 	p.pkg = package_name_from_file_name(file_name, allocator)
 	p.interfaces = make([dynamic]Interface, allocator)
 	p.current_interface_index = -1
