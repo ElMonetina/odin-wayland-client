@@ -3,11 +3,10 @@
 package main
 
 import "core:log"
-import "core:os"
 import "core:sys/linux"
-import "wayland:client"
-import wl "wayland:client/wayland"
-import xdg "wayland:client/xdg_shell"
+import wlc "../../client"
+import wl "../../client/wayland"
+import xdg "../../client/xdg"
 
 WIDTH :: i32(800)
 HEIGHT :: i32(600)
@@ -15,7 +14,7 @@ STRIDE :: 4 * WIDTH
 TILE :: int(64)
 
 App :: struct {
-	wayland:       client.Client,
+	wayland:       wlc.Client,
 	wl_registry:   wl.Registry,
 	wl_compositor: wl.Compositor,
 	wl_shm:        wl.Shm,
@@ -36,57 +35,57 @@ main :: proc() {
 
 	app: App
 
-	created, client_err := client.create()
+	created, client_err := wlc.create()
 	ensure(client_err == nil)
 	app.wayland = created
-	defer client.destroy(&app.wayland)
+	defer wlc.destroy(&app.wayland)
 	free_all(context.temp_allocator)
 
 	registry := wl.Display_Get_Registry_Request { display = wl.display }
-	app.wl_registry, client_err = client.request_queue(&app.wayland, registry)
+	app.wl_registry, client_err = wlc.request_queue(&app.wayland, registry)
 	ensure(client_err == nil)
 	err := register_globals(&app)
 	ensure(err == nil)
 
 	create_surface := wl.Compositor_Create_Surface_Request { compositor = app.wl_compositor }
-	app.wl_surface, client_err = client.request_queue(&app.wayland, create_surface)
+	app.wl_surface, client_err = wlc.request_queue(&app.wayland, create_surface)
 	ensure(client_err == nil)
 
 	get_xdg := xdg.Wm_Base_Get_Xdg_Surface_Request {
 		wm_base = app.xdg_wm_base,
 		surface = app.wl_surface,
 	}
-	app.xdg_surface, client_err = client.request_queue(&app.wayland, get_xdg)
+	app.xdg_surface, client_err = wlc.request_queue(&app.wayland, get_xdg)
 	ensure(client_err == nil)
 
 	get_toplevel := xdg.Surface_Get_Toplevel_Request { surface = app.xdg_surface }
-	app.xdg_toplevel, client_err = client.request_queue(&app.wayland, get_toplevel)
+	app.xdg_toplevel, client_err = wlc.request_queue(&app.wayland, get_toplevel)
 	ensure(client_err == nil)
 
 	set_title := xdg.Toplevel_Set_Title_Request {
 		toplevel = app.xdg_toplevel,
 		title    = "checkerboard",
 	}
-	client.request_queue(&app.wayland, set_title)
+	wlc.request_queue(&app.wayland, set_title)
 
 	commit := wl.Surface_Commit_Request { surface = app.wl_surface }
-	client.request_queue(&app.wayland, commit)
+	wlc.request_queue(&app.wayland, commit)
 
 	event_loop(&app)
 }
 
-register_globals :: proc(app: ^App) -> client.Error {
-	client.roundtrip(&app.wayland) or_return
-	for ev in client.poll_event(&app.wayland) {
+register_globals :: proc(app: ^App) -> wlc.Error {
+	wlc.roundtrip(&app.wayland) or_return
+	for ev in wlc.poll_event(&app.wayland) {
 		#partial switch e in ev {
 		case wl.Registry_Global_Event:
 			switch e.interface {
 			case wl.COMPOSITOR_INTERFACE:
-				app.wl_compositor = client.bind_compositor(&app.wayland, app.wl_registry, e) or_return
+				app.wl_compositor = wlc.bind_compositor(&app.wayland, app.wl_registry, e) or_return
 			case wl.SHM_INTERFACE:
-				app.wl_shm = client.bind_shm(&app.wayland, app.wl_registry, e) or_return
+				app.wl_shm = wlc.bind_shm(&app.wayland, app.wl_registry, e) or_return
 			case xdg.WM_BASE_INTERFACE:
-				app.xdg_wm_base = client.bind_wm_base(&app.wayland, app.wl_registry, e) or_return
+				app.xdg_wm_base = wlc.bind_wm_base(&app.wayland, app.wl_registry, e) or_return
 			}
 		}
 	}
@@ -101,13 +100,13 @@ event_loop :: proc(app: ^App) {
 }
 
 handle_events :: proc(app: ^App) {
-	err := client.roundtrip(&app.wayland)
+	err := wlc.roundtrip(&app.wayland)
 	if err != nil {
 		log.error(err)
 		app.quitting = true
 		return
 	}
-	for ev in client.poll_event(&app.wayland) {
+	for ev in wlc.poll_event(&app.wayland) {
 		#partial switch e in ev {
 		case wl.Display_Error_Event:
 			log.error(e.object_id, wl.Display_Error(e.code), e.message)
@@ -117,7 +116,7 @@ handle_events :: proc(app: ^App) {
 				surface = app.xdg_surface,
 				serial  = e.serial,
 			}
-			client.request_queue(&app.wayland, ack)
+			wlc.request_queue(&app.wayland, ack)
 			if !app.configured {
 				create_shm_buffer(app)
 				draw(app)
@@ -129,7 +128,7 @@ handle_events :: proc(app: ^App) {
 				wm_base = app.xdg_wm_base,
 				serial  = e.serial,
 			}
-			client.request_queue(&app.wayland, pong)
+			wlc.request_queue(&app.wayland, pong)
 		case xdg.Toplevel_Close_Event:
 			app.quitting = true
 		}
@@ -140,13 +139,13 @@ create_shm_buffer :: proc(app: ^App) {
 	pool_size := i32(WIDTH * HEIGHT * 4)
 	file_size := pool_size
 
-	app.shm_fd, app.pool_data, _ = client.create_shm_file(file_size)
+	app.shm_fd, app.pool_data, _ = wlc.create_shm_file(file_size)
 	create_pool := wl.Shm_Create_Pool_Request {
 		shm  = app.wl_shm,
 		fd   = app.shm_fd,
 		size = pool_size,
 	}
-	app.shm_pool, _ = client.request_queue(&app.wayland, create_pool)
+	app.shm_pool, _ = wlc.request_queue(&app.wayland, create_pool)
 
 	create_buffer := wl.Shm_Pool_Create_Buffer_Request {
 		shm_pool = app.shm_pool,
@@ -156,7 +155,7 @@ create_shm_buffer :: proc(app: ^App) {
 		stride   = STRIDE,
 		format   = wl.Shm_Format.Xrgb8888,
 	}
-	app.wl_buffer, _ = client.request_queue(&app.wayland, create_buffer)
+	app.wl_buffer, _ = wlc.request_queue(&app.wayland, create_buffer)
 }
 
 draw :: proc(app: ^App) {
@@ -183,7 +182,7 @@ present :: proc(app: ^App) {
 		x       = 0,
 		y       = 0,
 	}
-	client.request_queue(&app.wayland, attach)
+	wlc.request_queue(&app.wayland, attach)
 
 	damage := wl.Surface_Damage_Request {
 		surface = app.wl_surface,
@@ -192,8 +191,8 @@ present :: proc(app: ^App) {
 		width   = WIDTH,
 		height  = HEIGHT,
 	}
-	client.request_queue(&app.wayland, damage)
+	wlc.request_queue(&app.wayland, damage)
 
 	commit := wl.Surface_Commit_Request { surface = app.wl_surface }
-	client.request_queue(&app.wayland, commit)
+	wlc.request_queue(&app.wayland, commit)
 }
