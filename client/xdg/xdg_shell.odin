@@ -276,14 +276,14 @@ POSITIONER_SET_ANCHOR_REQUEST_OPCODE :: 3
 */
 Positioner_Set_Anchor_Request :: struct {
 	positioner: Positioner,
-	anchor: u32,
+	anchor: Positioner_Anchor,
 }
 positioner_set_anchor_request_write :: proc(buf: ^[dynamic]byte, req: Positioner_Set_Anchor_Request) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
 	object := u32(req.positioner)
 	opcode := u16(POSITIONER_SET_ANCHOR_REQUEST_OPCODE)
 	size   := u16(8 + size_of(req.anchor))
 	num_appended += util.write(buf, object, opcode, size) or_return
-	num_appended += util.write(buf, req.anchor) or_return
+	num_appended += util.write(buf, u32(req.anchor)) or_return
 	return
 }
 
@@ -299,14 +299,14 @@ POSITIONER_SET_GRAVITY_REQUEST_OPCODE :: 4
 */
 Positioner_Set_Gravity_Request :: struct {
 	positioner: Positioner,
-	gravity: u32,
+	gravity: Positioner_Gravity,
 }
 positioner_set_gravity_request_write :: proc(buf: ^[dynamic]byte, req: Positioner_Set_Gravity_Request) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
 	object := u32(req.positioner)
 	opcode := u16(POSITIONER_SET_GRAVITY_REQUEST_OPCODE)
 	size   := u16(8 + size_of(req.gravity))
 	num_appended += util.write(buf, object, opcode, size) or_return
-	num_appended += util.write(buf, req.gravity) or_return
+	num_appended += util.write(buf, u32(req.gravity)) or_return
 	return
 }
 
@@ -328,14 +328,14 @@ POSITIONER_SET_CONSTRAINT_ADJUSTMENT_REQUEST_OPCODE :: 5
 */
 Positioner_Set_Constraint_Adjustment_Request :: struct {
 	positioner: Positioner,
-	constraint_adjustment: u32,
+	constraint_adjustment: Positioner_Constraint_Adjustment_Set,
 }
 positioner_set_constraint_adjustment_request_write :: proc(buf: ^[dynamic]byte, req: Positioner_Set_Constraint_Adjustment_Request) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
 	object := u32(req.positioner)
 	opcode := u16(POSITIONER_SET_CONSTRAINT_ADJUSTMENT_REQUEST_OPCODE)
 	size   := u16(8 + size_of(req.constraint_adjustment))
 	num_appended += util.write(buf, object, opcode, size) or_return
-	num_appended += util.write(buf, req.constraint_adjustment) or_return
+	num_appended += util.write(buf, transmute(u32)req.constraint_adjustment) or_return
 	return
 }
 
@@ -1000,7 +1000,7 @@ Toplevel_Resize_Request :: struct {
 	toplevel: Toplevel,
 	seat: wayland.Seat,
 	serial: u32,
-	edges: u32,
+	edges: Toplevel_Resize_Edge,
 }
 toplevel_resize_request_write :: proc(buf: ^[dynamic]byte, req: Toplevel_Resize_Request) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
 	object := u32(req.toplevel)
@@ -1008,7 +1008,7 @@ toplevel_resize_request_write :: proc(buf: ^[dynamic]byte, req: Toplevel_Resize_
 	size   := u16(8 + size_of(req.serial) + size_of(req.edges))
 	num_appended += util.write(buf, object, opcode, size) or_return
 	num_appended += util.write(buf, req.serial) or_return
-	num_appended += util.write(buf, req.edges) or_return
+	num_appended += util.write(buf, u32(req.edges)) or_return
 	return
 }
 

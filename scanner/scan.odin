@@ -40,6 +40,7 @@ Arg :: struct {
 	name:      string,
 	type:      string,
 	interface: string,
+	enum_ref:  string,
 }
 
 Enum :: struct {
@@ -188,15 +189,14 @@ attrib_value :: proc(e: xml.Element, key: string) -> (value: string, found: bool
 }
 
 create_arg :: proc(e: xml.Element) -> Arg {
-	name := e.attribs[0].val
-	type := e.attribs[1].val
-	interface: string
-	if len(e.attribs) > 2 {
-		interface = e.attribs[2].val if e.attribs[2].key == "interface" else ""
-	}
-	return {name, type, interface}
+	name, _ := attrib_value(e, "name")
+	arg_type, _ := attrib_value(e, "type")
+	interface, _ := attrib_value(e, "interface")
+	enum_ref, _ := attrib_value(e, "enum")
+	return {name, arg_type, interface, enum_ref}
 }
 
+// FIXME(gabri): this is stupid
 package_name_from_file_name :: proc(name: string, allocator := context.temp_allocator) -> string {
 	pkg_runes := make([dynamic]rune, allocator)
 	for r in name {
@@ -215,3 +215,7 @@ package_name_from_file_name :: proc(name: string, allocator := context.temp_allo
 	}
 	return "wp"
 }
+
+// TODO(gabri): need a proc to find, given the name, the enum type for message args: store the index into the enums array
+// in the arg struct.
+// This will need to be done in a second pass, to have the full protocol representation ready.

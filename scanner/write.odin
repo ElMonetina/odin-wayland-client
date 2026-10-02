@@ -18,11 +18,11 @@ write_client_protocol :: proc(sb: ^strings.Builder, p: Protocol, allocator := co
 		fmt.sbprintf(sb, "display := Display(1)\n\n")
 	}
 	for interface in p.interfaces {
-		write_client_interface(sb, interface, p.pkg, allocator)
+		write_client_interface(sb, p, interface, p.pkg, allocator)
 	}
 }
 
-write_client_interface :: proc(sb: ^strings.Builder, interface: Interface, pkg_name: string, allocator := context.temp_allocator) {
+write_client_interface :: proc(sb: ^strings.Builder, p: Protocol, interface: Interface, pkg_name: string, allocator := context.temp_allocator) {
 	name := interface.name
 	stripped_name := strings.trim_prefix(name, find_prefix(name))
 	stripped_name = strings.to_upper(stripped_name, allocator)
@@ -43,7 +43,7 @@ write_client_interface :: proc(sb: ^strings.Builder, interface: Interface, pkg_n
 		fmt.sbprintf(sb, "\t%v: %v,\n", strings.to_lower(stripped_name, allocator), strings.to_ada_case(stripped_name, allocator))
 		returns_new_id: bool
 		for arg in req.args {
-			write_arg(sb, arg, pkg_name, allocator)
+			write_arg(sb, p, pkg_name, interface.name, arg, allocator)
 			if arg.type == "new_id" {
 				returns_new_id = true
 			}
@@ -84,9 +84,15 @@ write_client_interface :: proc(sb: ^strings.Builder, interface: Interface, pkg_n
 				continue
 			}
 			if arg.name != "id" && arg.name != arg_interface {
-				if arg.type == "object" {
+				_, is_bitfield, has_enum := enum_arg_type(p, interface.name, arg, allocator)
+				switch {
+				case has_enum && is_bitfield:
+					fmt.sbprintf(sb, "\tnum_appended += util.write(buf, transmute(u32)req.%v) or_return\n", arg.name)
+				case has_enum:
+					fmt.sbprintf(sb, "\tnum_appended += util.write(buf, %v(req.%v)) or_return\n", wayland_to_odin_type(arg.type), arg.name)
+				case arg.type == "object":
 					fmt.sbprintf(sb, "\tnum_appended += util.write(buf, u32(req.%v)) or_return\n", arg.name)
-				} else {
+				case:
 					fmt.sbprintf(sb, "\tnum_appended += util.write(buf, req.%v) or_return\n", arg.name)
 				}
 			}
@@ -109,7 +115,7 @@ write_client_interface :: proc(sb: ^strings.Builder, interface: Interface, pkg_n
 		fmt.sbprintf(sb, "\t%v: %v,\n", strings.to_lower(stripped_name, allocator), strings.to_ada_case(stripped_name, allocator))
 		has_fd: bool
 		for arg in ev.args {
-			write_arg(sb, arg, pkg_name, allocator)
+			write_arg(sb, p, pkg_name, interface.name, arg, allocator)
 			if arg.type == "fd" {
 				has_fd = true
 			}
@@ -132,6 +138,11 @@ write_client_interface :: proc(sb: ^strings.Builder, interface: Interface, pkg_n
 				fmt.sbprintf(sb, "\t%v: u32\n", arg.name)
 				fmt.sbprintf(sb, "\t%v, r = util.read_u32(buf[n:]); n += r\n", arg.name)
 				fmt.sbprintf(sb, "\te.%v = %v(%v)\n", arg.name, interface_type_name(arg.interface, pkg_name, allocator), arg.name)
+				continue
+			}
+			if enum_type, _, has_enum := enum_arg_type(p, interface.name, arg, allocator); has_enum {
+				fmt.sbprintf(sb, "\tval_%v, _ := util.read_%v(buf[n:]); n += 4\n", arg.name, wayland_to_odin_type(arg.type))
+				fmt.sbprintf(sb, "\te.%v = transmute(%v)val_%v\n", arg.name, enum_type, arg.name)
 				continue
 			}
 			read_type := wayland_to_odin_type(arg.type)
@@ -195,10 +206,51 @@ interface_type_name :: proc(interface_name: string, pkg_name: string, allocator 
 	return object
 }
 
-write_arg :: proc(sb: ^strings.Builder, arg: Arg, pkg_name: string, allocator := context.temp_allocator) {
+lookup_enum :: proc(p: Protocol, iface_name, ref: string, allocator := context.temp_allocator) -> (type_name: string, is_bitfield: bool, found: bool) {
+	if ref == "" {
+		return "", false, false
+	}
+	owner_name := iface_name
+	enum_name := ref
+	if dot := strings.index_byte(ref, '.'); dot >= 0 {
+		owner_name = ref[:dot]
+		enum_name = ref[dot + 1:]
+	}
+	for i in p.interfaces {
+		if i.name != owner_name {
+			continue
+		}
+		base := interface_base_name(i, allocator)
+		for e in i.enums {
+			if e.name == enum_name {
+				return fmt.tprintf("%v_%v", base, strings.to_ada_case(enum_name, allocator)), e.is_bit_set, true
+			}
+		}
+	}
+	return "", false, false
+}
+
+enum_arg_type :: proc(p: Protocol, iface_name: string, arg: Arg, allocator := context.temp_allocator) -> (type_name: string, is_bitfield: bool, found: bool) {
+	if arg.type != "int" && arg.type != "uint" {
+		return "", false, false
+	}
+	name, bitfield, ok := lookup_enum(p, iface_name, arg.enum_ref, allocator)
+	if !ok {
+		return "", false, false
+	}
+	if bitfield {
+		name = fmt.tprintf("%v_Set", name)
+	}
+	return name, bitfield, true
+}
+
+write_arg :: proc(sb: ^strings.Builder, p: Protocol, pkg_name, iface_name: string, arg: Arg, allocator := context.temp_allocator) {
 	odin_type := wayland_to_odin_type(arg.type)
+	enum_type, _, has_enum := enum_arg_type(p, iface_name, arg, allocator)
 	if arg.name == "object_id" {
 		fmt.sbprintf(sb, "\t%v: u32,\n", arg.name)
+	} else if has_enum {
+		fmt.sbprintf(sb, "\t%v: %v,\n", arg.name, enum_type)
 	} else if arg.interface != "" {
 		fmt.sbprintf(sb, "\t%v: %v,\n", arg.name, interface_type_name(arg.interface, pkg_name, allocator))
 	} else {

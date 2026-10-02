@@ -256,7 +256,7 @@ create_swapchain :: proc(client: ^wlc.Client, create_info: Swapchain_Create_Info
 			width         = create_info.width,
 			height        = create_info.height,
 			format        = format,
-			flags         = transmute(u32)create_info.buffer_params_flags, // TODO(gabri): fix the generator, must use the bitset in the req/ev struct
+			flags         = create_info.buffer_params_flags, // TODO(gabri): fix the generator, must use the bitset in the req/ev struct
 		}
 		sc.buffers[i], _ = wlc.request_queue(client, create_immed)
 

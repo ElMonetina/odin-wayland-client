@@ -394,7 +394,7 @@ Linux_Buffer_Params_V1_Create_Request :: struct {
 	width: i32,
 	height: i32,
 	format: u32,
-	flags: u32,
+	flags: Linux_Buffer_Params_V1_Flags_Set,
 }
 linux_buffer_params_v1_create_request_write :: proc(buf: ^[dynamic]byte, req: Linux_Buffer_Params_V1_Create_Request) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
 	object := u32(req.linux_buffer_params_v1)
@@ -404,7 +404,7 @@ linux_buffer_params_v1_create_request_write :: proc(buf: ^[dynamic]byte, req: Li
 	num_appended += util.write(buf, req.width) or_return
 	num_appended += util.write(buf, req.height) or_return
 	num_appended += util.write(buf, req.format) or_return
-	num_appended += util.write(buf, req.flags) or_return
+	num_appended += util.write(buf, transmute(u32)req.flags) or_return
 	return
 }
 
@@ -440,7 +440,7 @@ Linux_Buffer_Params_V1_Create_Immed_Request :: struct {
 	width: i32,
 	height: i32,
 	format: u32,
-	flags: u32,
+	flags: Linux_Buffer_Params_V1_Flags_Set,
 }
 linux_buffer_params_v1_create_immed_request_write :: proc(buf: ^[dynamic]byte, req: Linux_Buffer_Params_V1_Create_Immed_Request, new_id: u32) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
 	object := u32(req.linux_buffer_params_v1)
@@ -450,7 +450,7 @@ linux_buffer_params_v1_create_immed_request_write :: proc(buf: ^[dynamic]byte, r
 	num_appended += util.write(buf, req.width) or_return
 	num_appended += util.write(buf, req.height) or_return
 	num_appended += util.write(buf, req.format) or_return
-	num_appended += util.write(buf, req.flags) or_return
+	num_appended += util.write(buf, transmute(u32)req.flags) or_return
 	num_appended += util.write(buf, new_id) or_return
 	return
 }
@@ -796,13 +796,14 @@ LINUX_DMABUF_FEEDBACK_V1_TRANCHE_FLAGS_EVENT_OPCODE :: 6
 */
 Linux_Dmabuf_Feedback_V1_Tranche_Flags_Event :: struct {
 	linux_dmabuf_feedback_v1: Linux_Dmabuf_Feedback_V1,
-	flags: u32,
+	flags: Linux_Dmabuf_Feedback_V1_Tranche_Flags_Set,
 }
 linux_dmabuf_feedback_v1_tranche_flags_event_read :: proc(buf: []byte) -> (Linux_Dmabuf_Feedback_V1_Tranche_Flags_Event, int) {
 	e: Linux_Dmabuf_Feedback_V1_Tranche_Flags_Event
 	r: int
 	n := r
-	e.flags, r = util.read_u32(buf[n:]); n += r
+	val_flags, _ := util.read_u32(buf[n:]); n += 4
+	e.flags = transmute(Linux_Dmabuf_Feedback_V1_Tranche_Flags_Set)val_flags
 	return e, n
 }
 

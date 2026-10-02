@@ -376,7 +376,7 @@ Shm_Pool_Create_Buffer_Request :: struct {
 	width: i32,
 	height: i32,
 	stride: i32,
-	format: u32,
+	format: Shm_Format,
 }
 shm_pool_create_buffer_request_write :: proc(buf: ^[dynamic]byte, req: Shm_Pool_Create_Buffer_Request, new_id: u32) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
 	object := u32(req.shm_pool)
@@ -387,7 +387,7 @@ shm_pool_create_buffer_request_write :: proc(buf: ^[dynamic]byte, req: Shm_Pool_
 	num_appended += util.write(buf, req.width) or_return
 	num_appended += util.write(buf, req.height) or_return
 	num_appended += util.write(buf, req.stride) or_return
-	num_appended += util.write(buf, req.format) or_return
+	num_appended += util.write(buf, u32(req.format)) or_return
 	num_appended += util.write(buf, new_id) or_return
 	return
 }
@@ -515,13 +515,14 @@ SHM_FORMAT_EVENT_OPCODE :: 0
 */
 Shm_Format_Event :: struct {
 	shm: Shm,
-	format: u32,
+	format: Shm_Format,
 }
 shm_format_event_read :: proc(buf: []byte) -> (Shm_Format_Event, int) {
 	e: Shm_Format_Event
 	r: int
 	n := r
-	e.format, r = util.read_u32(buf[n:]); n += r
+	val_format, _ := util.read_u32(buf[n:]); n += 4
+	e.format = transmute(Shm_Format)val_format
 	return e, n
 }
 
@@ -923,16 +924,16 @@ DATA_OFFER_SET_ACTIONS_REQUEST_OPCODE :: 4
 */
 Data_Offer_Set_Actions_Request :: struct {
 	data_offer: Data_Offer,
-	dnd_actions: u32,
-	preferred_action: u32,
+	dnd_actions: Data_Device_Manager_Dnd_Action_Set,
+	preferred_action: Data_Device_Manager_Dnd_Action_Set,
 }
 data_offer_set_actions_request_write :: proc(buf: ^[dynamic]byte, req: Data_Offer_Set_Actions_Request) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
 	object := u32(req.data_offer)
 	opcode := u16(DATA_OFFER_SET_ACTIONS_REQUEST_OPCODE)
 	size   := u16(8 + size_of(req.dnd_actions) + size_of(req.preferred_action))
 	num_appended += util.write(buf, object, opcode, size) or_return
-	num_appended += util.write(buf, req.dnd_actions) or_return
-	num_appended += util.write(buf, req.preferred_action) or_return
+	num_appended += util.write(buf, transmute(u32)req.dnd_actions) or_return
+	num_appended += util.write(buf, transmute(u32)req.preferred_action) or_return
 	return
 }
 
@@ -962,13 +963,14 @@ DATA_OFFER_SOURCE_ACTIONS_EVENT_OPCODE :: 1
 */
 Data_Offer_Source_Actions_Event :: struct {
 	data_offer: Data_Offer,
-	source_actions: u32,
+	source_actions: Data_Device_Manager_Dnd_Action_Set,
 }
 data_offer_source_actions_event_read :: proc(buf: []byte) -> (Data_Offer_Source_Actions_Event, int) {
 	e: Data_Offer_Source_Actions_Event
 	r: int
 	n := r
-	e.source_actions, r = util.read_u32(buf[n:]); n += r
+	val_source_actions, _ := util.read_u32(buf[n:]); n += 4
+	e.source_actions = transmute(Data_Device_Manager_Dnd_Action_Set)val_source_actions
 	return e, n
 }
 
@@ -1012,13 +1014,14 @@ DATA_OFFER_ACTION_EVENT_OPCODE :: 2
 */
 Data_Offer_Action_Event :: struct {
 	data_offer: Data_Offer,
-	dnd_action: u32,
+	dnd_action: Data_Device_Manager_Dnd_Action_Set,
 }
 data_offer_action_event_read :: proc(buf: []byte) -> (Data_Offer_Action_Event, int) {
 	e: Data_Offer_Action_Event
 	r: int
 	n := r
-	e.dnd_action, r = util.read_u32(buf[n:]); n += r
+	val_dnd_action, _ := util.read_u32(buf[n:]); n += 4
+	e.dnd_action = transmute(Data_Device_Manager_Dnd_Action_Set)val_dnd_action
 	return e, n
 }
 
@@ -1092,14 +1095,14 @@ DATA_SOURCE_SET_ACTIONS_REQUEST_OPCODE :: 2
 */
 Data_Source_Set_Actions_Request :: struct {
 	data_source: Data_Source,
-	dnd_actions: u32,
+	dnd_actions: Data_Device_Manager_Dnd_Action_Set,
 }
 data_source_set_actions_request_write :: proc(buf: ^[dynamic]byte, req: Data_Source_Set_Actions_Request) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
 	object := u32(req.data_source)
 	opcode := u16(DATA_SOURCE_SET_ACTIONS_REQUEST_OPCODE)
 	size   := u16(8 + size_of(req.dnd_actions))
 	num_appended += util.write(buf, object, opcode, size) or_return
-	num_appended += util.write(buf, req.dnd_actions) or_return
+	num_appended += util.write(buf, transmute(u32)req.dnd_actions) or_return
 	return
 }
 
@@ -1246,13 +1249,14 @@ DATA_SOURCE_ACTION_EVENT_OPCODE :: 5
 */
 Data_Source_Action_Event :: struct {
 	data_source: Data_Source,
-	dnd_action: u32,
+	dnd_action: Data_Device_Manager_Dnd_Action_Set,
 }
 data_source_action_event_read :: proc(buf: []byte) -> (Data_Source_Action_Event, int) {
 	e: Data_Source_Action_Event
 	r: int
 	n := r
-	e.dnd_action, r = util.read_u32(buf[n:]); n += r
+	val_dnd_action, _ := util.read_u32(buf[n:]); n += 4
+	e.dnd_action = transmute(Data_Device_Manager_Dnd_Action_Set)val_dnd_action
 	return e, n
 }
 
@@ -1731,7 +1735,7 @@ Shell_Surface_Resize_Request :: struct {
 	shell_surface: Shell_Surface,
 	seat: Seat,
 	serial: u32,
-	edges: u32,
+	edges: Shell_Surface_Resize_Set,
 }
 shell_surface_resize_request_write :: proc(buf: ^[dynamic]byte, req: Shell_Surface_Resize_Request) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
 	object := u32(req.shell_surface)
@@ -1739,7 +1743,7 @@ shell_surface_resize_request_write :: proc(buf: ^[dynamic]byte, req: Shell_Surfa
 	size   := u16(8 + size_of(req.serial) + size_of(req.edges))
 	num_appended += util.write(buf, object, opcode, size) or_return
 	num_appended += util.write(buf, req.serial) or_return
-	num_appended += util.write(buf, req.edges) or_return
+	num_appended += util.write(buf, transmute(u32)req.edges) or_return
 	return
 }
 
@@ -1775,7 +1779,7 @@ Shell_Surface_Set_Transient_Request :: struct {
 	parent: Surface,
 	x: i32,
 	y: i32,
-	flags: u32,
+	flags: Shell_Surface_Transient_Set,
 }
 shell_surface_set_transient_request_write :: proc(buf: ^[dynamic]byte, req: Shell_Surface_Set_Transient_Request) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
 	object := u32(req.shell_surface)
@@ -1785,7 +1789,7 @@ shell_surface_set_transient_request_write :: proc(buf: ^[dynamic]byte, req: Shel
 	num_appended += util.write(buf, u32(req.parent)) or_return
 	num_appended += util.write(buf, req.x) or_return
 	num_appended += util.write(buf, req.y) or_return
-	num_appended += util.write(buf, req.flags) or_return
+	num_appended += util.write(buf, transmute(u32)req.flags) or_return
 	return
 }
 
@@ -1827,7 +1831,7 @@ SHELL_SURFACE_SET_FULLSCREEN_REQUEST_OPCODE :: 5
 */
 Shell_Surface_Set_Fullscreen_Request :: struct {
 	shell_surface: Shell_Surface,
-	method: u32,
+	method: Shell_Surface_Fullscreen_Method,
 	framerate: u32,
 	output: Output,
 }
@@ -1836,7 +1840,7 @@ shell_surface_set_fullscreen_request_write :: proc(buf: ^[dynamic]byte, req: She
 	opcode := u16(SHELL_SURFACE_SET_FULLSCREEN_REQUEST_OPCODE)
 	size   := u16(8 + size_of(req.method) + size_of(req.framerate))
 	num_appended += util.write(buf, object, opcode, size) or_return
-	num_appended += util.write(buf, req.method) or_return
+	num_appended += util.write(buf, u32(req.method)) or_return
 	num_appended += util.write(buf, req.framerate) or_return
 	return
 }
@@ -1870,7 +1874,7 @@ Shell_Surface_Set_Popup_Request :: struct {
 	parent: Surface,
 	x: i32,
 	y: i32,
-	flags: u32,
+	flags: Shell_Surface_Transient_Set,
 }
 shell_surface_set_popup_request_write :: proc(buf: ^[dynamic]byte, req: Shell_Surface_Set_Popup_Request) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
 	object := u32(req.shell_surface)
@@ -1881,7 +1885,7 @@ shell_surface_set_popup_request_write :: proc(buf: ^[dynamic]byte, req: Shell_Su
 	num_appended += util.write(buf, u32(req.parent)) or_return
 	num_appended += util.write(buf, req.x) or_return
 	num_appended += util.write(buf, req.y) or_return
-	num_appended += util.write(buf, req.flags) or_return
+	num_appended += util.write(buf, transmute(u32)req.flags) or_return
 	return
 }
 
@@ -2002,7 +2006,7 @@ SHELL_SURFACE_CONFIGURE_EVENT_OPCODE :: 1
 */
 Shell_Surface_Configure_Event :: struct {
 	shell_surface: Shell_Surface,
-	edges: u32,
+	edges: Shell_Surface_Resize_Set,
 	width: i32,
 	height: i32,
 }
@@ -2010,7 +2014,8 @@ shell_surface_configure_event_read :: proc(buf: []byte) -> (Shell_Surface_Config
 	e: Shell_Surface_Configure_Event
 	r: int
 	n := r
-	e.edges, r = util.read_u32(buf[n:]); n += r
+	val_edges, _ := util.read_u32(buf[n:]); n += 4
+	e.edges = transmute(Shell_Surface_Resize_Set)val_edges
 	e.width, r = util.read_i32(buf[n:]); n += r
 	e.height, r = util.read_i32(buf[n:]); n += r
 	return e, n
@@ -2480,14 +2485,14 @@ SURFACE_SET_BUFFER_TRANSFORM_REQUEST_OPCODE :: 7
 */
 Surface_Set_Buffer_Transform_Request :: struct {
 	surface: Surface,
-	transform: i32,
+	transform: Output_Transform,
 }
 surface_set_buffer_transform_request_write :: proc(buf: ^[dynamic]byte, req: Surface_Set_Buffer_Transform_Request) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
 	object := u32(req.surface)
 	opcode := u16(SURFACE_SET_BUFFER_TRANSFORM_REQUEST_OPCODE)
 	size   := u16(8 + size_of(req.transform))
 	num_appended += util.write(buf, object, opcode, size) or_return
-	num_appended += util.write(buf, req.transform) or_return
+	num_appended += util.write(buf, i32(req.transform)) or_return
 	return
 }
 
@@ -2740,13 +2745,14 @@ SURFACE_PREFERRED_BUFFER_TRANSFORM_EVENT_OPCODE :: 3
 */
 Surface_Preferred_Buffer_Transform_Event :: struct {
 	surface: Surface,
-	transform: u32,
+	transform: Output_Transform,
 }
 surface_preferred_buffer_transform_event_read :: proc(buf: []byte) -> (Surface_Preferred_Buffer_Transform_Event, int) {
 	e: Surface_Preferred_Buffer_Transform_Event
 	r: int
 	n := r
-	e.transform, r = util.read_u32(buf[n:]); n += r
+	val_transform, _ := util.read_u32(buf[n:]); n += 4
+	e.transform = transmute(Output_Transform)val_transform
 	return e, n
 }
 
@@ -2891,13 +2897,14 @@ SEAT_CAPABILITIES_EVENT_OPCODE :: 0
 */
 Seat_Capabilities_Event :: struct {
 	seat: Seat,
-	capabilities: u32,
+	capabilities: Seat_Capability_Set,
 }
 seat_capabilities_event_read :: proc(buf: []byte) -> (Seat_Capabilities_Event, int) {
 	e: Seat_Capabilities_Event
 	r: int
 	n := r
-	e.capabilities, r = util.read_u32(buf[n:]); n += r
+	val_capabilities, _ := util.read_u32(buf[n:]); n += 4
+	e.capabilities = transmute(Seat_Capability_Set)val_capabilities
 	return e, n
 }
 
@@ -3135,7 +3142,7 @@ Pointer_Button_Event :: struct {
 	serial: u32,
 	time: u32,
 	button: u32,
-	state: u32,
+	state: Pointer_Button_State,
 }
 pointer_button_event_read :: proc(buf: []byte) -> (Pointer_Button_Event, int) {
 	e: Pointer_Button_Event
@@ -3144,7 +3151,8 @@ pointer_button_event_read :: proc(buf: []byte) -> (Pointer_Button_Event, int) {
 	e.serial, r = util.read_u32(buf[n:]); n += r
 	e.time, r = util.read_u32(buf[n:]); n += r
 	e.button, r = util.read_u32(buf[n:]); n += r
-	e.state, r = util.read_u32(buf[n:]); n += r
+	val_state, _ := util.read_u32(buf[n:]); n += 4
+	e.state = transmute(Pointer_Button_State)val_state
 	return e, n
 }
 
@@ -3170,7 +3178,7 @@ POINTER_AXIS_EVENT_OPCODE :: 4
 Pointer_Axis_Event :: struct {
 	pointer: Pointer,
 	time: u32,
-	axis: u32,
+	axis: Pointer_Axis,
 	value: util.Fixed,
 }
 pointer_axis_event_read :: proc(buf: []byte) -> (Pointer_Axis_Event, int) {
@@ -3178,7 +3186,8 @@ pointer_axis_event_read :: proc(buf: []byte) -> (Pointer_Axis_Event, int) {
 	r: int
 	n := r
 	e.time, r = util.read_u32(buf[n:]); n += r
-	e.axis, r = util.read_u32(buf[n:]); n += r
+	val_axis, _ := util.read_u32(buf[n:]); n += 4
+	e.axis = transmute(Pointer_Axis)val_axis
 	e.value, r = util.read_fixed(buf[n:]); n += r
 	return e, n
 }
@@ -3260,13 +3269,14 @@ POINTER_AXIS_SOURCE_EVENT_OPCODE :: 6
 */
 Pointer_Axis_Source_Event :: struct {
 	pointer: Pointer,
-	axis_source: u32,
+	axis_source: Pointer_Axis_Source,
 }
 pointer_axis_source_event_read :: proc(buf: []byte) -> (Pointer_Axis_Source_Event, int) {
 	e: Pointer_Axis_Source_Event
 	r: int
 	n := r
-	e.axis_source, r = util.read_u32(buf[n:]); n += r
+	val_axis_source, _ := util.read_u32(buf[n:]); n += 4
+	e.axis_source = transmute(Pointer_Axis_Source)val_axis_source
 	return e, n
 }
 
@@ -3290,14 +3300,15 @@ POINTER_AXIS_STOP_EVENT_OPCODE :: 7
 Pointer_Axis_Stop_Event :: struct {
 	pointer: Pointer,
 	time: u32,
-	axis: u32,
+	axis: Pointer_Axis,
 }
 pointer_axis_stop_event_read :: proc(buf: []byte) -> (Pointer_Axis_Stop_Event, int) {
 	e: Pointer_Axis_Stop_Event
 	r: int
 	n := r
 	e.time, r = util.read_u32(buf[n:]); n += r
-	e.axis, r = util.read_u32(buf[n:]); n += r
+	val_axis, _ := util.read_u32(buf[n:]); n += 4
+	e.axis = transmute(Pointer_Axis)val_axis
 	return e, n
 }
 
@@ -3336,14 +3347,15 @@ POINTER_AXIS_DISCRETE_EVENT_OPCODE :: 8
 */
 Pointer_Axis_Discrete_Event :: struct {
 	pointer: Pointer,
-	axis: u32,
+	axis: Pointer_Axis,
 	discrete: i32,
 }
 pointer_axis_discrete_event_read :: proc(buf: []byte) -> (Pointer_Axis_Discrete_Event, int) {
 	e: Pointer_Axis_Discrete_Event
 	r: int
 	n := r
-	e.axis, r = util.read_u32(buf[n:]); n += r
+	val_axis, _ := util.read_u32(buf[n:]); n += 4
+	e.axis = transmute(Pointer_Axis)val_axis
 	e.discrete, r = util.read_i32(buf[n:]); n += r
 	return e, n
 }
@@ -3374,14 +3386,15 @@ POINTER_AXIS_VALUE120_EVENT_OPCODE :: 9
 */
 Pointer_Axis_Value120_Event :: struct {
 	pointer: Pointer,
-	axis: u32,
+	axis: Pointer_Axis,
 	value120: i32,
 }
 pointer_axis_value120_event_read :: proc(buf: []byte) -> (Pointer_Axis_Value120_Event, int) {
 	e: Pointer_Axis_Value120_Event
 	r: int
 	n := r
-	e.axis, r = util.read_u32(buf[n:]); n += r
+	val_axis, _ := util.read_u32(buf[n:]); n += 4
+	e.axis = transmute(Pointer_Axis)val_axis
 	e.value120, r = util.read_i32(buf[n:]); n += r
 	return e, n
 }
@@ -3426,15 +3439,17 @@ POINTER_AXIS_RELATIVE_DIRECTION_EVENT_OPCODE :: 10
 */
 Pointer_Axis_Relative_Direction_Event :: struct {
 	pointer: Pointer,
-	axis: u32,
-	direction: u32,
+	axis: Pointer_Axis,
+	direction: Pointer_Axis_Relative_Direction,
 }
 pointer_axis_relative_direction_event_read :: proc(buf: []byte) -> (Pointer_Axis_Relative_Direction_Event, int) {
 	e: Pointer_Axis_Relative_Direction_Event
 	r: int
 	n := r
-	e.axis, r = util.read_u32(buf[n:]); n += r
-	e.direction, r = util.read_u32(buf[n:]); n += r
+	val_axis, _ := util.read_u32(buf[n:]); n += 4
+	e.axis = transmute(Pointer_Axis)val_axis
+	val_direction, _ := util.read_u32(buf[n:]); n += 4
+	e.direction = transmute(Pointer_Axis_Relative_Direction)val_direction
 	return e, n
 }
 
@@ -3565,7 +3580,7 @@ KEYBOARD_KEYMAP_EVENT_OPCODE :: 0
 */
 Keyboard_Keymap_Event :: struct {
 	keyboard: Keyboard,
-	format: u32,
+	format: Keyboard_Keymap_Format,
 	fd: linux.Fd,
 	size: u32,
 }
@@ -3573,7 +3588,8 @@ keyboard_keymap_event_read :: proc(buf: []byte, fds: ^[dynamic; 28]linux.Fd) -> 
 	e: Keyboard_Keymap_Event
 	r: int
 	n := r
-	e.format, r = util.read_u32(buf[n:]); n += r
+	val_format, _ := util.read_u32(buf[n:]); n += 4
+	e.format = transmute(Keyboard_Keymap_Format)val_format
 	e.fd = pop_front(fds)
 	e.size, r = util.read_u32(buf[n:]); n += r
 	return e, n
@@ -3673,7 +3689,7 @@ Keyboard_Key_Event :: struct {
 	serial: u32,
 	time: u32,
 	key: u32,
-	state: u32,
+	state: Keyboard_Key_State,
 }
 keyboard_key_event_read :: proc(buf: []byte) -> (Keyboard_Key_Event, int) {
 	e: Keyboard_Key_Event
@@ -3682,7 +3698,8 @@ keyboard_key_event_read :: proc(buf: []byte) -> (Keyboard_Key_Event, int) {
 	e.serial, r = util.read_u32(buf[n:]); n += r
 	e.time, r = util.read_u32(buf[n:]); n += r
 	e.key, r = util.read_u32(buf[n:]); n += r
-	e.state, r = util.read_u32(buf[n:]); n += r
+	val_state, _ := util.read_u32(buf[n:]); n += 4
+	e.state = transmute(Keyboard_Key_State)val_state
 	return e, n
 }
 
@@ -4063,10 +4080,10 @@ Output_Geometry_Event :: struct {
 	y: i32,
 	physical_width: i32,
 	physical_height: i32,
-	subpixel: i32,
+	subpixel: Output_Subpixel,
 	make: string,
 	model: string,
-	transform: i32,
+	transform: Output_Transform,
 }
 output_geometry_event_read :: proc(buf: []byte) -> (Output_Geometry_Event, int) {
 	e: Output_Geometry_Event
@@ -4076,10 +4093,12 @@ output_geometry_event_read :: proc(buf: []byte) -> (Output_Geometry_Event, int) 
 	e.y, r = util.read_i32(buf[n:]); n += r
 	e.physical_width, r = util.read_i32(buf[n:]); n += r
 	e.physical_height, r = util.read_i32(buf[n:]); n += r
-	e.subpixel, r = util.read_i32(buf[n:]); n += r
+	val_subpixel, _ := util.read_i32(buf[n:]); n += 4
+	e.subpixel = transmute(Output_Subpixel)val_subpixel
 	e.make, r = util.read_string(buf[n:]); n += r
 	e.model, r = util.read_string(buf[n:]); n += r
-	e.transform, r = util.read_i32(buf[n:]); n += r
+	val_transform, _ := util.read_i32(buf[n:]); n += 4
+	e.transform = transmute(Output_Transform)val_transform
 	return e, n
 }
 
@@ -4121,7 +4140,7 @@ OUTPUT_MODE_EVENT_OPCODE :: 1
 */
 Output_Mode_Event :: struct {
 	output: Output,
-	flags: u32,
+	flags: Output_Mode_Set,
 	width: i32,
 	height: i32,
 	refresh: i32,
@@ -4130,7 +4149,8 @@ output_mode_event_read :: proc(buf: []byte) -> (Output_Mode_Event, int) {
 	e: Output_Mode_Event
 	r: int
 	n := r
-	e.flags, r = util.read_u32(buf[n:]); n += r
+	val_flags, _ := util.read_u32(buf[n:]); n += 4
+	e.flags = transmute(Output_Mode_Set)val_flags
 	e.width, r = util.read_i32(buf[n:]); n += r
 	e.height, r = util.read_i32(buf[n:]); n += r
 	e.refresh, r = util.read_i32(buf[n:]); n += r
