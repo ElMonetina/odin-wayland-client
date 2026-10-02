@@ -16,7 +16,7 @@ package main
 
 import client "wayland/client" // Client glue code and helpers
 import wl "wayland/client/wayland" // The generated protocol code
-import xdg "wayland/client/xdg_shell"
+import xdg "wayland/client/xdg/"
 
 main :: proc() {
 	client, _ := client.create()
