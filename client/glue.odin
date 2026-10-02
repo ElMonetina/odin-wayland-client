@@ -267,7 +267,40 @@ wayland_display_get_registry_queue :: proc(client: ^Client, req: wayland.Display
 wayland_registry_bind_queue :: proc(client: ^Client, req: wayland.Registry_Bind_Request) -> (ret: u32, err: runtime.Allocator_Error) #optional_allocator_error {
 	client.next_id += 1
 	id := client.next_id
-	wayland.registry_bind_request_write(&client.requests_byte_buffer, req, id) or_return
+	rb := req
+	switch rb.interface {
+	case wayland.COMPOSITOR_INTERFACE:
+		rb.version = min(rb.version, wayland.COMPOSITOR_VERSION)
+		register_object(client, id, wayland.COMPOSITOR_INTERFACE)
+	case wayland.SHM_INTERFACE:
+		rb.version = min(rb.version, wayland.SHM_VERSION)
+		register_object(client, id, wayland.SHM_INTERFACE)
+	case wayland.DATA_DEVICE_MANAGER_INTERFACE:
+		rb.version = min(rb.version, wayland.DATA_DEVICE_MANAGER_VERSION)
+		register_object(client, id, wayland.DATA_DEVICE_MANAGER_INTERFACE)
+	case wayland.SHELL_INTERFACE:
+		rb.version = min(rb.version, wayland.SHELL_VERSION)
+		register_object(client, id, wayland.SHELL_INTERFACE)
+	case wayland.SEAT_INTERFACE:
+		rb.version = min(rb.version, wayland.SEAT_VERSION)
+		register_object(client, id, wayland.SEAT_INTERFACE)
+	case wayland.OUTPUT_INTERFACE:
+		rb.version = min(rb.version, wayland.OUTPUT_VERSION)
+		register_object(client, id, wayland.OUTPUT_INTERFACE)
+	case wayland.SUBCOMPOSITOR_INTERFACE:
+		rb.version = min(rb.version, wayland.SUBCOMPOSITOR_VERSION)
+		register_object(client, id, wayland.SUBCOMPOSITOR_INTERFACE)
+	case wayland.FIXES_INTERFACE:
+		rb.version = min(rb.version, wayland.FIXES_VERSION)
+		register_object(client, id, wayland.FIXES_INTERFACE)
+	case wp.LINUX_DMABUF_V1_INTERFACE:
+		rb.version = min(rb.version, wp.LINUX_DMABUF_V1_VERSION)
+		register_object(client, id, wp.LINUX_DMABUF_V1_INTERFACE)
+	case xdg.WM_BASE_INTERFACE:
+		rb.version = min(rb.version, xdg.WM_BASE_VERSION)
+		register_object(client, id, xdg.WM_BASE_INTERFACE)
+	}
+	wayland.registry_bind_request_write(&client.requests_byte_buffer, rb, id) or_return
 	return id, nil
 }
 
@@ -1449,5 +1482,105 @@ event_read :: proc(client: ^Client, interface: string, object_id: u32, opcode: u
 		}
 	}
 	return {}, nil
+}
+
+bind_compositor :: proc(client: ^Client, registry: wayland.Registry, e: wayland.Registry_Global_Event) -> (wayland.Compositor, Error) {
+	id, err := request_queue(client, wayland.Registry_Bind_Request {
+		registry  = registry,
+		name      = e.name,
+		interface = wayland.COMPOSITOR_INTERFACE,
+		version   = e.version,
+	})
+	return wayland.Compositor(id), err
+}
+
+bind_shm :: proc(client: ^Client, registry: wayland.Registry, e: wayland.Registry_Global_Event) -> (wayland.Shm, Error) {
+	id, err := request_queue(client, wayland.Registry_Bind_Request {
+		registry  = registry,
+		name      = e.name,
+		interface = wayland.SHM_INTERFACE,
+		version   = e.version,
+	})
+	return wayland.Shm(id), err
+}
+
+bind_data_device_manager :: proc(client: ^Client, registry: wayland.Registry, e: wayland.Registry_Global_Event) -> (wayland.Data_Device_Manager, Error) {
+	id, err := request_queue(client, wayland.Registry_Bind_Request {
+		registry  = registry,
+		name      = e.name,
+		interface = wayland.DATA_DEVICE_MANAGER_INTERFACE,
+		version   = e.version,
+	})
+	return wayland.Data_Device_Manager(id), err
+}
+
+bind_shell :: proc(client: ^Client, registry: wayland.Registry, e: wayland.Registry_Global_Event) -> (wayland.Shell, Error) {
+	id, err := request_queue(client, wayland.Registry_Bind_Request {
+		registry  = registry,
+		name      = e.name,
+		interface = wayland.SHELL_INTERFACE,
+		version   = e.version,
+	})
+	return wayland.Shell(id), err
+}
+
+bind_seat :: proc(client: ^Client, registry: wayland.Registry, e: wayland.Registry_Global_Event) -> (wayland.Seat, Error) {
+	id, err := request_queue(client, wayland.Registry_Bind_Request {
+		registry  = registry,
+		name      = e.name,
+		interface = wayland.SEAT_INTERFACE,
+		version   = e.version,
+	})
+	return wayland.Seat(id), err
+}
+
+bind_output :: proc(client: ^Client, registry: wayland.Registry, e: wayland.Registry_Global_Event) -> (wayland.Output, Error) {
+	id, err := request_queue(client, wayland.Registry_Bind_Request {
+		registry  = registry,
+		name      = e.name,
+		interface = wayland.OUTPUT_INTERFACE,
+		version   = e.version,
+	})
+	return wayland.Output(id), err
+}
+
+bind_subcompositor :: proc(client: ^Client, registry: wayland.Registry, e: wayland.Registry_Global_Event) -> (wayland.Subcompositor, Error) {
+	id, err := request_queue(client, wayland.Registry_Bind_Request {
+		registry  = registry,
+		name      = e.name,
+		interface = wayland.SUBCOMPOSITOR_INTERFACE,
+		version   = e.version,
+	})
+	return wayland.Subcompositor(id), err
+}
+
+bind_fixes :: proc(client: ^Client, registry: wayland.Registry, e: wayland.Registry_Global_Event) -> (wayland.Fixes, Error) {
+	id, err := request_queue(client, wayland.Registry_Bind_Request {
+		registry  = registry,
+		name      = e.name,
+		interface = wayland.FIXES_INTERFACE,
+		version   = e.version,
+	})
+	return wayland.Fixes(id), err
+}
+
+bind_linux_dmabuf_v1 :: proc(client: ^Client, registry: wayland.Registry, e: wayland.Registry_Global_Event) -> (wp.Linux_Dmabuf_V1, Error) {
+	id, err := request_queue(client, wayland.Registry_Bind_Request {
+		registry  = registry,
+		name      = e.name,
+		interface = wp.LINUX_DMABUF_V1_INTERFACE,
+		version   = e.version,
+	})
+	return wp.Linux_Dmabuf_V1(id), err
+}
+
+bind_wm_base :: proc(client: ^Client, registry: wayland.Registry, e: wayland.Registry_Global_Event) -> (xdg.Wm_Base, Error) {
+	id, err := request_queue(client, wayland.Registry_Bind_Request {
+		registry  = registry,
+		name      = e.name,
+		interface = xdg.WM_BASE_INTERFACE,
+		version   = e.version,
+	})
+	return xdg.Wm_Base(id), err
 }
 

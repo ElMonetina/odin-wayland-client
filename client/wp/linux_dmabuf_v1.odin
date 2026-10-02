@@ -122,7 +122,6 @@ LINUX_DMABUF_V1_CREATE_PARAMS_REQUEST_OPCODE :: 1
 */
 Linux_Dmabuf_V1_Create_Params_Request :: struct {
 	linux_dmabuf_v1: Linux_Dmabuf_V1,
-	params_id: Linux_Buffer_Params_V1,
 }
 linux_dmabuf_v1_create_params_request_write :: proc(buf: ^[dynamic]byte, req: Linux_Dmabuf_V1_Create_Params_Request, new_id: u32) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
 	object := u32(req.linux_dmabuf_v1)
@@ -142,7 +141,6 @@ LINUX_DMABUF_V1_GET_DEFAULT_FEEDBACK_REQUEST_OPCODE :: 2
 */
 Linux_Dmabuf_V1_Get_Default_Feedback_Request :: struct {
 	linux_dmabuf_v1: Linux_Dmabuf_V1,
-	id: Linux_Dmabuf_Feedback_V1,
 }
 linux_dmabuf_v1_get_default_feedback_request_write :: proc(buf: ^[dynamic]byte, req: Linux_Dmabuf_V1_Get_Default_Feedback_Request, new_id: u32) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
 	object := u32(req.linux_dmabuf_v1)
@@ -164,15 +162,15 @@ LINUX_DMABUF_V1_GET_SURFACE_FEEDBACK_REQUEST_OPCODE :: 3
 */
 Linux_Dmabuf_V1_Get_Surface_Feedback_Request :: struct {
 	linux_dmabuf_v1: Linux_Dmabuf_V1,
-	id: Linux_Dmabuf_Feedback_V1,
 	surface: wayland.Surface,
 }
 linux_dmabuf_v1_get_surface_feedback_request_write :: proc(buf: ^[dynamic]byte, req: Linux_Dmabuf_V1_Get_Surface_Feedback_Request, new_id: u32) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
 	object := u32(req.linux_dmabuf_v1)
 	opcode := u16(LINUX_DMABUF_V1_GET_SURFACE_FEEDBACK_REQUEST_OPCODE)
-	size   := u16(8 + size_of(new_id))
+	size   := u16(8 + size_of(new_id) + size_of(req.surface))
 	num_appended += util.write(buf, object, opcode, size) or_return
 	num_appended += util.write(buf, new_id) or_return
+	num_appended += util.write(buf, u32(req.surface)) or_return
 	return
 }
 
@@ -317,7 +315,7 @@ Linux_Buffer_Params_V1_Add_Request :: struct {
 linux_buffer_params_v1_add_request_write :: proc(buf: ^[dynamic]byte, req: Linux_Buffer_Params_V1_Add_Request) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
 	object := u32(req.linux_buffer_params_v1)
 	opcode := u16(LINUX_BUFFER_PARAMS_V1_ADD_REQUEST_OPCODE)
-	size   := u16(8 + size_of(req.fd) + size_of(req.plane_idx) + size_of(req.offset) + size_of(req.stride) + size_of(req.modifier_hi) + size_of(req.modifier_lo))
+	size   := u16(8 + size_of(req.plane_idx) + size_of(req.offset) + size_of(req.stride) + size_of(req.modifier_hi) + size_of(req.modifier_lo))
 	num_appended += util.write(buf, object, opcode, size) or_return
 	num_appended += util.write(buf, req.plane_idx) or_return
 	num_appended += util.write(buf, req.offset) or_return
@@ -436,7 +434,6 @@ LINUX_BUFFER_PARAMS_V1_CREATE_IMMED_REQUEST_OPCODE :: 3
 */
 Linux_Buffer_Params_V1_Create_Immed_Request :: struct {
 	linux_buffer_params_v1: Linux_Buffer_Params_V1,
-	buffer_id: wayland.Buffer,
 	width: i32,
 	height: i32,
 	format: u32,
@@ -445,13 +442,13 @@ Linux_Buffer_Params_V1_Create_Immed_Request :: struct {
 linux_buffer_params_v1_create_immed_request_write :: proc(buf: ^[dynamic]byte, req: Linux_Buffer_Params_V1_Create_Immed_Request, new_id: u32) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
 	object := u32(req.linux_buffer_params_v1)
 	opcode := u16(LINUX_BUFFER_PARAMS_V1_CREATE_IMMED_REQUEST_OPCODE)
-	size   := u16(8 + size_of(req.width) + size_of(req.height) + size_of(req.format) + size_of(req.flags) + size_of(new_id))
+	size   := u16(8 + size_of(new_id) + size_of(req.width) + size_of(req.height) + size_of(req.format) + size_of(req.flags))
 	num_appended += util.write(buf, object, opcode, size) or_return
+	num_appended += util.write(buf, new_id) or_return
 	num_appended += util.write(buf, req.width) or_return
 	num_appended += util.write(buf, req.height) or_return
 	num_appended += util.write(buf, req.format) or_return
 	num_appended += util.write(buf, transmute(u32)req.flags) or_return
-	num_appended += util.write(buf, new_id) or_return
 	return
 }
 
@@ -478,7 +475,7 @@ Linux_Buffer_Params_V1_Set_Sampling_Device_Request :: struct {
 linux_buffer_params_v1_set_sampling_device_request_write :: proc(buf: ^[dynamic]byte, req: Linux_Buffer_Params_V1_Set_Sampling_Device_Request) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
 	object := u32(req.linux_buffer_params_v1)
 	opcode := u16(LINUX_BUFFER_PARAMS_V1_SET_SAMPLING_DEVICE_REQUEST_OPCODE)
-	size   := u16(8 + size_of(req.device))
+	size   := u16(8 + util.compute_array_size(req.device))
 	num_appended += util.write(buf, object, opcode, size) or_return
 	num_appended += util.write(buf, req.device) or_return
 	return

@@ -72,7 +72,6 @@ WM_BASE_CREATE_POSITIONER_REQUEST_OPCODE :: 1
 */
 Wm_Base_Create_Positioner_Request :: struct {
 	wm_base: Wm_Base,
-	id: Positioner,
 }
 wm_base_create_positioner_request_write :: proc(buf: ^[dynamic]byte, req: Wm_Base_Create_Positioner_Request, new_id: u32) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
 	object := u32(req.wm_base)
@@ -100,15 +99,15 @@ WM_BASE_GET_XDG_SURFACE_REQUEST_OPCODE :: 2
 */
 Wm_Base_Get_Xdg_Surface_Request :: struct {
 	wm_base: Wm_Base,
-	id: Surface,
 	surface: wayland.Surface,
 }
 wm_base_get_xdg_surface_request_write :: proc(buf: ^[dynamic]byte, req: Wm_Base_Get_Xdg_Surface_Request, new_id: u32) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
 	object := u32(req.wm_base)
 	opcode := u16(WM_BASE_GET_XDG_SURFACE_REQUEST_OPCODE)
-	size   := u16(8 + size_of(new_id))
+	size   := u16(8 + size_of(new_id) + size_of(req.surface))
 	num_appended += util.write(buf, object, opcode, size) or_return
 	num_appended += util.write(buf, new_id) or_return
+	num_appended += util.write(buf, u32(req.surface)) or_return
 	return
 }
 
@@ -566,7 +565,6 @@ SURFACE_GET_TOPLEVEL_REQUEST_OPCODE :: 1
 */
 Surface_Get_Toplevel_Request :: struct {
 	surface: Surface,
-	id: Toplevel,
 }
 surface_get_toplevel_request_write :: proc(buf: ^[dynamic]byte, req: Surface_Get_Toplevel_Request, new_id: u32) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
 	object := u32(req.surface)
@@ -590,17 +588,17 @@ SURFACE_GET_POPUP_REQUEST_OPCODE :: 2
 */
 Surface_Get_Popup_Request :: struct {
 	surface: Surface,
-	id: Popup,
 	parent: Surface,
 	positioner: Positioner,
 }
 surface_get_popup_request_write :: proc(buf: ^[dynamic]byte, req: Surface_Get_Popup_Request, new_id: u32) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
 	object := u32(req.surface)
 	opcode := u16(SURFACE_GET_POPUP_REQUEST_OPCODE)
-	size   := u16(8 + size_of(req.parent) + size_of(new_id))
+	size   := u16(8 + size_of(new_id) + size_of(req.parent) + size_of(req.positioner))
 	num_appended += util.write(buf, object, opcode, size) or_return
-	num_appended += util.write(buf, u32(req.parent)) or_return
 	num_appended += util.write(buf, new_id) or_return
+	num_appended += util.write(buf, u32(req.parent)) or_return
+	num_appended += util.write(buf, u32(req.positioner)) or_return
 	return
 }
 
@@ -921,8 +919,9 @@ Toplevel_Show_Window_Menu_Request :: struct {
 toplevel_show_window_menu_request_write :: proc(buf: ^[dynamic]byte, req: Toplevel_Show_Window_Menu_Request) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
 	object := u32(req.toplevel)
 	opcode := u16(TOPLEVEL_SHOW_WINDOW_MENU_REQUEST_OPCODE)
-	size   := u16(8 + size_of(req.serial) + size_of(req.x) + size_of(req.y))
+	size   := u16(8 + size_of(req.seat) + size_of(req.serial) + size_of(req.x) + size_of(req.y))
 	num_appended += util.write(buf, object, opcode, size) or_return
+	num_appended += util.write(buf, u32(req.seat)) or_return
 	num_appended += util.write(buf, req.serial) or_return
 	num_appended += util.write(buf, req.x) or_return
 	num_appended += util.write(buf, req.y) or_return
@@ -956,8 +955,9 @@ Toplevel_Move_Request :: struct {
 toplevel_move_request_write :: proc(buf: ^[dynamic]byte, req: Toplevel_Move_Request) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
 	object := u32(req.toplevel)
 	opcode := u16(TOPLEVEL_MOVE_REQUEST_OPCODE)
-	size   := u16(8 + size_of(req.serial))
+	size   := u16(8 + size_of(req.seat) + size_of(req.serial))
 	num_appended += util.write(buf, object, opcode, size) or_return
+	num_appended += util.write(buf, u32(req.seat)) or_return
 	num_appended += util.write(buf, req.serial) or_return
 	return
 }
@@ -1005,8 +1005,9 @@ Toplevel_Resize_Request :: struct {
 toplevel_resize_request_write :: proc(buf: ^[dynamic]byte, req: Toplevel_Resize_Request) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
 	object := u32(req.toplevel)
 	opcode := u16(TOPLEVEL_RESIZE_REQUEST_OPCODE)
-	size   := u16(8 + size_of(req.serial) + size_of(req.edges))
+	size   := u16(8 + size_of(req.seat) + size_of(req.serial) + size_of(req.edges))
 	num_appended += util.write(buf, object, opcode, size) or_return
+	num_appended += util.write(buf, u32(req.seat)) or_return
 	num_appended += util.write(buf, req.serial) or_return
 	num_appended += util.write(buf, u32(req.edges)) or_return
 	return
@@ -1215,8 +1216,9 @@ Toplevel_Set_Fullscreen_Request :: struct {
 toplevel_set_fullscreen_request_write :: proc(buf: ^[dynamic]byte, req: Toplevel_Set_Fullscreen_Request) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
 	object := u32(req.toplevel)
 	opcode := u16(TOPLEVEL_SET_FULLSCREEN_REQUEST_OPCODE)
-	size   := u16(8)
+	size   := u16(8 + size_of(req.output))
 	num_appended += util.write(buf, object, opcode, size) or_return
+	num_appended += util.write(buf, u32(req.output)) or_return
 	return
 }
 
@@ -1553,8 +1555,9 @@ Popup_Grab_Request :: struct {
 popup_grab_request_write :: proc(buf: ^[dynamic]byte, req: Popup_Grab_Request) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
 	object := u32(req.popup)
 	opcode := u16(POPUP_GRAB_REQUEST_OPCODE)
-	size   := u16(8 + size_of(req.serial))
+	size   := u16(8 + size_of(req.seat) + size_of(req.serial))
 	num_appended += util.write(buf, object, opcode, size) or_return
+	num_appended += util.write(buf, u32(req.seat)) or_return
 	num_appended += util.write(buf, req.serial) or_return
 	return
 }
@@ -1593,8 +1596,9 @@ Popup_Reposition_Request :: struct {
 popup_reposition_request_write :: proc(buf: ^[dynamic]byte, req: Popup_Reposition_Request) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
 	object := u32(req.popup)
 	opcode := u16(POPUP_REPOSITION_REQUEST_OPCODE)
-	size   := u16(8 + size_of(req.token))
+	size   := u16(8 + size_of(req.positioner) + size_of(req.token))
 	num_appended += util.write(buf, object, opcode, size) or_return
+	num_appended += util.write(buf, u32(req.positioner)) or_return
 	num_appended += util.write(buf, req.token) or_return
 	return
 }

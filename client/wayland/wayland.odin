@@ -59,7 +59,6 @@ DISPLAY_SYNC_REQUEST_OPCODE :: 0
 */
 Display_Sync_Request :: struct {
 	display: Display,
-	callback: Callback,
 }
 display_sync_request_write :: proc(buf: ^[dynamic]byte, req: Display_Sync_Request, new_id: u32) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
 	object := u32(req.display)
@@ -84,7 +83,6 @@ DISPLAY_GET_REGISTRY_REQUEST_OPCODE :: 1
 */
 Display_Get_Registry_Request :: struct {
 	display: Display,
-	registry: Registry,
 }
 display_get_registry_request_write :: proc(buf: ^[dynamic]byte, req: Display_Get_Registry_Request, new_id: u32) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
 	object := u32(req.display)
@@ -193,14 +191,17 @@ REGISTRY_BIND_REQUEST_OPCODE :: 0
 Registry_Bind_Request :: struct {
 	registry: Registry,
 	name: u32,
-	id: u32,
+	interface: string,
+	version: u32,
 }
 registry_bind_request_write :: proc(buf: ^[dynamic]byte, req: Registry_Bind_Request, new_id: u32) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
 	object := u32(req.registry)
 	opcode := u16(REGISTRY_BIND_REQUEST_OPCODE)
-	size   := u16(8 + size_of(req.name) + size_of(new_id))
+	size   := u16(8 + size_of(req.name) + util.compute_string_size(req.interface) + size_of(req.version) + size_of(new_id))
 	num_appended += util.write(buf, object, opcode, size) or_return
 	num_appended += util.write(buf, req.name) or_return
+	num_appended += util.write(buf, req.interface) or_return
+	num_appended += util.write(buf, req.version) or_return
 	num_appended += util.write(buf, new_id) or_return
 	return
 }
@@ -298,7 +299,6 @@ COMPOSITOR_CREATE_SURFACE_REQUEST_OPCODE :: 0
 */
 Compositor_Create_Surface_Request :: struct {
 	compositor: Compositor,
-	id: Surface,
 }
 compositor_create_surface_request_write :: proc(buf: ^[dynamic]byte, req: Compositor_Create_Surface_Request, new_id: u32) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
 	object := u32(req.compositor)
@@ -315,7 +315,6 @@ COMPOSITOR_CREATE_REGION_REQUEST_OPCODE :: 1
 */
 Compositor_Create_Region_Request :: struct {
 	compositor: Compositor,
-	id: Region,
 }
 compositor_create_region_request_write :: proc(buf: ^[dynamic]byte, req: Compositor_Create_Region_Request, new_id: u32) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
 	object := u32(req.compositor)
@@ -371,7 +370,6 @@ SHM_POOL_CREATE_BUFFER_REQUEST_OPCODE :: 0
 */
 Shm_Pool_Create_Buffer_Request :: struct {
 	shm_pool: Shm_Pool,
-	id: Buffer,
 	offset: i32,
 	width: i32,
 	height: i32,
@@ -381,14 +379,14 @@ Shm_Pool_Create_Buffer_Request :: struct {
 shm_pool_create_buffer_request_write :: proc(buf: ^[dynamic]byte, req: Shm_Pool_Create_Buffer_Request, new_id: u32) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
 	object := u32(req.shm_pool)
 	opcode := u16(SHM_POOL_CREATE_BUFFER_REQUEST_OPCODE)
-	size   := u16(8 + size_of(req.offset) + size_of(req.width) + size_of(req.height) + size_of(req.stride) + size_of(req.format) + size_of(new_id))
+	size   := u16(8 + size_of(new_id) + size_of(req.offset) + size_of(req.width) + size_of(req.height) + size_of(req.stride) + size_of(req.format))
 	num_appended += util.write(buf, object, opcode, size) or_return
+	num_appended += util.write(buf, new_id) or_return
 	num_appended += util.write(buf, req.offset) or_return
 	num_appended += util.write(buf, req.width) or_return
 	num_appended += util.write(buf, req.height) or_return
 	num_appended += util.write(buf, req.stride) or_return
 	num_appended += util.write(buf, u32(req.format)) or_return
-	num_appended += util.write(buf, new_id) or_return
 	return
 }
 
@@ -471,17 +469,16 @@ SHM_CREATE_POOL_REQUEST_OPCODE :: 0
 */
 Shm_Create_Pool_Request :: struct {
 	shm: Shm,
-	id: Shm_Pool,
 	fd: linux.Fd,
 	size: i32,
 }
 shm_create_pool_request_write :: proc(buf: ^[dynamic]byte, req: Shm_Create_Pool_Request, new_id: u32) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
 	object := u32(req.shm)
 	opcode := u16(SHM_CREATE_POOL_REQUEST_OPCODE)
-	size   := u16(8 + size_of(req.fd) + size_of(req.size) + size_of(new_id))
+	size   := u16(8 + size_of(new_id) + size_of(req.size))
 	num_appended += util.write(buf, object, opcode, size) or_return
-	num_appended += util.write(buf, req.size) or_return
 	num_appended += util.write(buf, new_id) or_return
+	num_appended += util.write(buf, req.size) or_return
 	return
 }
 
@@ -839,7 +836,7 @@ Data_Offer_Receive_Request :: struct {
 data_offer_receive_request_write :: proc(buf: ^[dynamic]byte, req: Data_Offer_Receive_Request) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
 	object := u32(req.data_offer)
 	opcode := u16(DATA_OFFER_RECEIVE_REQUEST_OPCODE)
-	size   := u16(8 + util.compute_string_size(req.mime_type) + size_of(req.fd))
+	size   := u16(8 + util.compute_string_size(req.mime_type))
 	num_appended += util.write(buf, object, opcode, size) or_return
 	num_appended += util.write(buf, req.mime_type) or_return
 	return
@@ -1546,7 +1543,6 @@ DATA_DEVICE_MANAGER_CREATE_DATA_SOURCE_REQUEST_OPCODE :: 0
 */
 Data_Device_Manager_Create_Data_Source_Request :: struct {
 	data_device_manager: Data_Device_Manager,
-	id: Data_Source,
 }
 data_device_manager_create_data_source_request_write :: proc(buf: ^[dynamic]byte, req: Data_Device_Manager_Create_Data_Source_Request, new_id: u32) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
 	object := u32(req.data_device_manager)
@@ -1563,15 +1559,15 @@ DATA_DEVICE_MANAGER_GET_DATA_DEVICE_REQUEST_OPCODE :: 1
 */
 Data_Device_Manager_Get_Data_Device_Request :: struct {
 	data_device_manager: Data_Device_Manager,
-	id: Data_Device,
 	seat: Seat,
 }
 data_device_manager_get_data_device_request_write :: proc(buf: ^[dynamic]byte, req: Data_Device_Manager_Get_Data_Device_Request, new_id: u32) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
 	object := u32(req.data_device_manager)
 	opcode := u16(DATA_DEVICE_MANAGER_GET_DATA_DEVICE_REQUEST_OPCODE)
-	size   := u16(8 + size_of(new_id))
+	size   := u16(8 + size_of(new_id) + size_of(req.seat))
 	num_appended += util.write(buf, object, opcode, size) or_return
 	num_appended += util.write(buf, new_id) or_return
+	num_appended += util.write(buf, u32(req.seat)) or_return
 	return
 }
 
@@ -1649,15 +1645,15 @@ SHELL_GET_SHELL_SURFACE_REQUEST_OPCODE :: 0
 */
 Shell_Get_Shell_Surface_Request :: struct {
 	shell: Shell,
-	id: Shell_Surface,
 	surface: Surface,
 }
 shell_get_shell_surface_request_write :: proc(buf: ^[dynamic]byte, req: Shell_Get_Shell_Surface_Request, new_id: u32) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
 	object := u32(req.shell)
 	opcode := u16(SHELL_GET_SHELL_SURFACE_REQUEST_OPCODE)
-	size   := u16(8 + size_of(new_id))
+	size   := u16(8 + size_of(new_id) + size_of(req.surface))
 	num_appended += util.write(buf, object, opcode, size) or_return
 	num_appended += util.write(buf, new_id) or_return
+	num_appended += util.write(buf, u32(req.surface)) or_return
 	return
 }
 
@@ -1717,8 +1713,9 @@ Shell_Surface_Move_Request :: struct {
 shell_surface_move_request_write :: proc(buf: ^[dynamic]byte, req: Shell_Surface_Move_Request) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
 	object := u32(req.shell_surface)
 	opcode := u16(SHELL_SURFACE_MOVE_REQUEST_OPCODE)
-	size   := u16(8 + size_of(req.serial))
+	size   := u16(8 + size_of(req.seat) + size_of(req.serial))
 	num_appended += util.write(buf, object, opcode, size) or_return
+	num_appended += util.write(buf, u32(req.seat)) or_return
 	num_appended += util.write(buf, req.serial) or_return
 	return
 }
@@ -1740,8 +1737,9 @@ Shell_Surface_Resize_Request :: struct {
 shell_surface_resize_request_write :: proc(buf: ^[dynamic]byte, req: Shell_Surface_Resize_Request) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
 	object := u32(req.shell_surface)
 	opcode := u16(SHELL_SURFACE_RESIZE_REQUEST_OPCODE)
-	size   := u16(8 + size_of(req.serial) + size_of(req.edges))
+	size   := u16(8 + size_of(req.seat) + size_of(req.serial) + size_of(req.edges))
 	num_appended += util.write(buf, object, opcode, size) or_return
+	num_appended += util.write(buf, u32(req.seat)) or_return
 	num_appended += util.write(buf, req.serial) or_return
 	num_appended += util.write(buf, transmute(u32)req.edges) or_return
 	return
@@ -1838,10 +1836,11 @@ Shell_Surface_Set_Fullscreen_Request :: struct {
 shell_surface_set_fullscreen_request_write :: proc(buf: ^[dynamic]byte, req: Shell_Surface_Set_Fullscreen_Request) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
 	object := u32(req.shell_surface)
 	opcode := u16(SHELL_SURFACE_SET_FULLSCREEN_REQUEST_OPCODE)
-	size   := u16(8 + size_of(req.method) + size_of(req.framerate))
+	size   := u16(8 + size_of(req.method) + size_of(req.framerate) + size_of(req.output))
 	num_appended += util.write(buf, object, opcode, size) or_return
 	num_appended += util.write(buf, u32(req.method)) or_return
 	num_appended += util.write(buf, req.framerate) or_return
+	num_appended += util.write(buf, u32(req.output)) or_return
 	return
 }
 
@@ -1879,8 +1878,9 @@ Shell_Surface_Set_Popup_Request :: struct {
 shell_surface_set_popup_request_write :: proc(buf: ^[dynamic]byte, req: Shell_Surface_Set_Popup_Request) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
 	object := u32(req.shell_surface)
 	opcode := u16(SHELL_SURFACE_SET_POPUP_REQUEST_OPCODE)
-	size   := u16(8 + size_of(req.serial) + size_of(req.parent) + size_of(req.x) + size_of(req.y) + size_of(req.flags))
+	size   := u16(8 + size_of(req.seat) + size_of(req.serial) + size_of(req.parent) + size_of(req.x) + size_of(req.y) + size_of(req.flags))
 	num_appended += util.write(buf, object, opcode, size) or_return
+	num_appended += util.write(buf, u32(req.seat)) or_return
 	num_appended += util.write(buf, req.serial) or_return
 	num_appended += util.write(buf, u32(req.parent)) or_return
 	num_appended += util.write(buf, req.x) or_return
@@ -1917,8 +1917,9 @@ Shell_Surface_Set_Maximized_Request :: struct {
 shell_surface_set_maximized_request_write :: proc(buf: ^[dynamic]byte, req: Shell_Surface_Set_Maximized_Request) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
 	object := u32(req.shell_surface)
 	opcode := u16(SHELL_SURFACE_SET_MAXIMIZED_REQUEST_OPCODE)
-	size   := u16(8)
+	size   := u16(8 + size_of(req.output))
 	num_appended += util.write(buf, object, opcode, size) or_return
+	num_appended += util.write(buf, u32(req.output)) or_return
 	return
 }
 
@@ -2215,8 +2216,9 @@ Surface_Attach_Request :: struct {
 surface_attach_request_write :: proc(buf: ^[dynamic]byte, req: Surface_Attach_Request) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
 	object := u32(req.surface)
 	opcode := u16(SURFACE_ATTACH_REQUEST_OPCODE)
-	size   := u16(8 + size_of(req.x) + size_of(req.y))
+	size   := u16(8 + size_of(req.buffer) + size_of(req.x) + size_of(req.y))
 	num_appended += util.write(buf, object, opcode, size) or_return
+	num_appended += util.write(buf, u32(req.buffer)) or_return
 	num_appended += util.write(buf, req.x) or_return
 	num_appended += util.write(buf, req.y) or_return
 	return
@@ -2302,7 +2304,6 @@ SURFACE_FRAME_REQUEST_OPCODE :: 3
 */
 Surface_Frame_Request :: struct {
 	surface: Surface,
-	callback: Callback,
 }
 surface_frame_request_write :: proc(buf: ^[dynamic]byte, req: Surface_Frame_Request, new_id: u32) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
 	object := u32(req.surface)
@@ -2347,8 +2348,9 @@ Surface_Set_Opaque_Region_Request :: struct {
 surface_set_opaque_region_request_write :: proc(buf: ^[dynamic]byte, req: Surface_Set_Opaque_Region_Request) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
 	object := u32(req.surface)
 	opcode := u16(SURFACE_SET_OPAQUE_REGION_REQUEST_OPCODE)
-	size   := u16(8)
+	size   := u16(8 + size_of(req.region))
 	num_appended += util.write(buf, object, opcode, size) or_return
+	num_appended += util.write(buf, u32(req.region)) or_return
 	return
 }
 
@@ -2384,8 +2386,9 @@ Surface_Set_Input_Region_Request :: struct {
 surface_set_input_region_request_write :: proc(buf: ^[dynamic]byte, req: Surface_Set_Input_Region_Request) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
 	object := u32(req.surface)
 	opcode := u16(SURFACE_SET_INPUT_REGION_REQUEST_OPCODE)
-	size   := u16(8)
+	size   := u16(8 + size_of(req.region))
 	num_appended += util.write(buf, object, opcode, size) or_return
+	num_appended += util.write(buf, u32(req.region)) or_return
 	return
 }
 
@@ -2645,7 +2648,6 @@ SURFACE_GET_RELEASE_REQUEST_OPCODE :: 11
 */
 Surface_Get_Release_Request :: struct {
 	surface: Surface,
-	callback: Callback,
 }
 surface_get_release_request_write :: proc(buf: ^[dynamic]byte, req: Surface_Get_Release_Request, new_id: u32) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
 	object := u32(req.surface)
@@ -2792,7 +2794,6 @@ SEAT_GET_POINTER_REQUEST_OPCODE :: 0
 */
 Seat_Get_Pointer_Request :: struct {
 	seat: Seat,
-	id: Pointer,
 }
 seat_get_pointer_request_write :: proc(buf: ^[dynamic]byte, req: Seat_Get_Pointer_Request, new_id: u32) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
 	object := u32(req.seat)
@@ -2816,7 +2817,6 @@ SEAT_GET_KEYBOARD_REQUEST_OPCODE :: 1
 */
 Seat_Get_Keyboard_Request :: struct {
 	seat: Seat,
-	id: Keyboard,
 }
 seat_get_keyboard_request_write :: proc(buf: ^[dynamic]byte, req: Seat_Get_Keyboard_Request, new_id: u32) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
 	object := u32(req.seat)
@@ -2840,7 +2840,6 @@ SEAT_GET_TOUCH_REQUEST_OPCODE :: 2
 */
 Seat_Get_Touch_Request :: struct {
 	seat: Seat,
-	id: Touch,
 }
 seat_get_touch_request_write :: proc(buf: ^[dynamic]byte, req: Seat_Get_Touch_Request, new_id: u32) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
 	object := u32(req.seat)
@@ -3018,9 +3017,10 @@ Pointer_Set_Cursor_Request :: struct {
 pointer_set_cursor_request_write :: proc(buf: ^[dynamic]byte, req: Pointer_Set_Cursor_Request) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
 	object := u32(req.pointer)
 	opcode := u16(POINTER_SET_CURSOR_REQUEST_OPCODE)
-	size   := u16(8 + size_of(req.serial) + size_of(req.hotspot_x) + size_of(req.hotspot_y))
+	size   := u16(8 + size_of(req.serial) + size_of(req.surface) + size_of(req.hotspot_x) + size_of(req.hotspot_y))
 	num_appended += util.write(buf, object, opcode, size) or_return
 	num_appended += util.write(buf, req.serial) or_return
+	num_appended += util.write(buf, u32(req.surface)) or_return
 	num_appended += util.write(buf, req.hotspot_x) or_return
 	num_appended += util.write(buf, req.hotspot_y) or_return
 	return
@@ -4465,17 +4465,17 @@ SUBCOMPOSITOR_GET_SUBSURFACE_REQUEST_OPCODE :: 1
 */
 Subcompositor_Get_Subsurface_Request :: struct {
 	subcompositor: Subcompositor,
-	id: Subsurface,
 	surface: Surface,
 	parent: Surface,
 }
 subcompositor_get_subsurface_request_write :: proc(buf: ^[dynamic]byte, req: Subcompositor_Get_Subsurface_Request, new_id: u32) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
 	object := u32(req.subcompositor)
 	opcode := u16(SUBCOMPOSITOR_GET_SUBSURFACE_REQUEST_OPCODE)
-	size   := u16(8 + size_of(req.parent) + size_of(new_id))
+	size   := u16(8 + size_of(new_id) + size_of(req.surface) + size_of(req.parent))
 	num_appended += util.write(buf, object, opcode, size) or_return
-	num_appended += util.write(buf, u32(req.parent)) or_return
 	num_appended += util.write(buf, new_id) or_return
+	num_appended += util.write(buf, u32(req.surface)) or_return
+	num_appended += util.write(buf, u32(req.parent)) or_return
 	return
 }
 
@@ -4712,8 +4712,9 @@ Fixes_Destroy_Registry_Request :: struct {
 fixes_destroy_registry_request_write :: proc(buf: ^[dynamic]byte, req: Fixes_Destroy_Registry_Request) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
 	object := u32(req.fixes)
 	opcode := u16(FIXES_DESTROY_REGISTRY_REQUEST_OPCODE)
-	size   := u16(8)
+	size   := u16(8 + size_of(req.registry))
 	num_appended += util.write(buf, object, opcode, size) or_return
+	num_appended += util.write(buf, u32(req.registry)) or_return
 	return
 }
 
@@ -4750,8 +4751,9 @@ Fixes_Ack_Global_Remove_Request :: struct {
 fixes_ack_global_remove_request_write :: proc(buf: ^[dynamic]byte, req: Fixes_Ack_Global_Remove_Request) -> (num_appended: int, err: runtime.Allocator_Error) #optional_allocator_error {
 	object := u32(req.fixes)
 	opcode := u16(FIXES_ACK_GLOBAL_REMOVE_REQUEST_OPCODE)
-	size   := u16(8 + size_of(req.name))
+	size   := u16(8 + size_of(req.registry) + size_of(req.name))
 	num_appended += util.write(buf, object, opcode, size) or_return
+	num_appended += util.write(buf, u32(req.registry)) or_return
 	num_appended += util.write(buf, req.name) or_return
 	return
 }

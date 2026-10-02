@@ -130,6 +130,21 @@ create_protocol :: proc(elements: []xml.Element, file_name: string, allocator :=
 			append(entries, entry)
 		}
 	}
+	for &interface in p.interfaces {
+		if interface.name != "wl_registry" {
+			continue
+		}
+		for &request in interface.requests {
+			if request.name != "bind" {
+				continue
+			}
+			clear(&request.args)
+			append(&request.args, Arg{"name", "uint", "", ""})
+			append(&request.args, Arg{"interface", "string", "", ""})
+			append(&request.args, Arg{"version", "uint", "", ""})
+			append(&request.args, Arg{"id", "new_id", "", ""})
+		}
+	}
 	return p
 }
 
