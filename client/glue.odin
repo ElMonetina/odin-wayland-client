@@ -1083,8 +1083,10 @@ event_read :: proc(client: ^Client, interface: string, object_id: u32, opcode: u
 	case wayland.CALLBACK_INTERFACE:
 		switch opcode {
 		case wayland.CALLBACK_DONE_EVENT_OPCODE:
+			decoded, _ := wayland.callback_done_event_read(data)
+			decoded.callback = wayland.Callback(object_id)
 			delete_key(&client.id_to_interface, object_id)
-			return {}, nil
+			return Event(decoded), nil
 		}
 	case wayland.COMPOSITOR_INTERFACE:
 		switch opcode {

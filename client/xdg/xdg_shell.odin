@@ -1,6 +1,6 @@
 package xdg
 
-import "../../util"
+import "../util"
 import "../wayland"
 import "core:sys/linux"
 import "base:runtime"

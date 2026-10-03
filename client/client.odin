@@ -5,7 +5,7 @@ import "base:runtime"
 import "core:os"
 import "core:strings"
 import "core:sys/linux"
-import "../util"
+import "util"
 import wl "wayland"
 
 Client :: struct {

@@ -1,6 +1,6 @@
 package wayland
 
-import "../../util"
+import "../util"
 import "core:sys/linux"
 import "base:runtime"
 

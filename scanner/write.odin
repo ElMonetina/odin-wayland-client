@@ -6,7 +6,7 @@ import "core:strings"
 
 write_client_protocol :: proc(sb: ^strings.Builder, p: Protocol, allocator := context.temp_allocator) {
 	fmt.sbprintf(sb, "package %v\n\n", p.pkg)
-	fmt.sbprintf(sb, "import \"../../util\"\n")
+	fmt.sbprintf(sb, "import \"../util\"\n")
 	if p.pkg != "wayland" {
 		fmt.sbprintf(sb, "import \"../wayland\"\n")
 	}
@@ -452,9 +452,6 @@ write_client_event_read :: proc(sb: ^strings.Builder, protocols: []Protocol, all
 					fmt.sbprintf(sb, "\t\t\tdecoded, _ := %v(data)\n", read_proc)
 					fmt.sbprintf(sb, "\t\t\tdelete_key(&client.id_to_interface, decoded.id)\n")
 					fmt.sbprintf(sb, "\t\t\treturn {{}}, nil\n")
-				case i.name == "wl_callback" && ev.name == "done":
-					fmt.sbprintf(sb, "\t\t\tdelete_key(&client.id_to_interface, object_id)\n")
-					fmt.sbprintf(sb, "\t\t\treturn {{}}, nil\n")
 				case:
 					new_id_arg: Arg
 					has_new_id := false
@@ -479,6 +476,9 @@ write_client_event_read :: proc(sb: ^strings.Builder, protocols: []Protocol, all
 						if found {
 							fmt.sbprintf(sb, "\t\t\tclient.id_to_interface[u32(decoded.%v)] = %v.%v\n", new_id_arg.name, nid_pkg, interface_const_name_by_base(nid_base, allocator))
 						}
+					}
+					if ev.is_destructor {
+						fmt.sbprintf(sb, "\t\t\tdelete_key(&client.id_to_interface, object_id)\n")
 					}
 					fmt.sbprintf(sb, "\t\t\treturn Event(decoded), nil\n")
 				}

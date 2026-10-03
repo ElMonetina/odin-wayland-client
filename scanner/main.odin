@@ -23,6 +23,7 @@ import "core:fmt"
 import "core:encoding/xml"
 
 client_file := #load("client.odin.scan")
+util_file := #load("util.odin.scan")
 vki_file := #load("vulkan_integration.odin.scan")
 drm_file := #load("drm_constants.odin.scan")
 
@@ -87,6 +88,10 @@ main :: proc() {
 	}
 	if target == "client" {
 		_ = os.write_entire_file("client/client.odin", client_file)
+		util_dir := "client/util/"
+		_ = os.remove_all(util_dir)
+		_ = os.make_directory(util_dir)
+		_ = os.write_entire_file(fmt.tprintf("%vutil.odin", util_dir), util_file)
 		vki_dir := "client/vki/"
 		_ = os.remove_all(vki_dir)
 		_ = os.make_directory(vki_dir)
