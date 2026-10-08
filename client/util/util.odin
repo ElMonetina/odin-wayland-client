@@ -128,7 +128,7 @@ Cmsghdr :: struct {
 SCM_RIGHTS :: 1
 
 CMSG_ALIGN :: #force_inline proc(n: uint) -> uint {return (n + 7) &~ 7}
-CMSG_LEN   :: #force_inline proc(n: uint) -> uint {return CMSG_ALIGN(size_of(Cmsghdr) + n)}
+CMSG_LEN   :: #force_inline proc(n: uint) -> uint {return CMSG_ALIGN(size_of(Cmsghdr)) + n}
 CMSG_SPACE :: #force_inline proc(n: uint) -> uint {return CMSG_ALIGN(size_of(Cmsghdr) + CMSG_ALIGN(n))}
 
 compute_string_size :: proc(str: string) -> int {
