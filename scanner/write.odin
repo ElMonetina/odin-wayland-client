@@ -494,7 +494,7 @@ write_client_event_read :: proc(sb: ^strings.Builder, protocols: []Protocol, all
 write_client_bind_helpers :: proc(sb: ^strings.Builder, protocols: []Protocol, allocator := context.temp_allocator) {
 	for g in bindable_globals(protocols, allocator) {
 		base := interface_base_name(g.iface, allocator)
-		fmt.sbprintf(sb, "bind_%v :: proc(client: ^Client, registry: wayland.Registry, e: wayland.Registry_Global_Event) -> (%v.%v, Error) {{\n", strings.to_lower(base, allocator), g.pkg, base)
+		fmt.sbprintf(sb, "bind_%v :: proc(client: ^Client, registry: wayland.Registry, e: wayland.Registry_Global_Event) -> (%v.%v, runtime.Allocator_Error) {{\n", strings.to_lower(base, allocator), g.pkg, base)
 		fmt.sbprintf(sb, "\tid, err := request_queue(client, wayland.Registry_Bind_Request {{\n")
 		fmt.sbprintf(sb, "\t\tregistry  = registry,\n")
 		fmt.sbprintf(sb, "\t\tname      = e.name,\n")

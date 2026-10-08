@@ -1486,7 +1486,7 @@ event_read :: proc(client: ^Client, interface: string, object_id: u32, opcode: u
 	return {}, nil
 }
 
-bind_compositor :: proc(client: ^Client, registry: wayland.Registry, e: wayland.Registry_Global_Event) -> (wayland.Compositor, Error) {
+bind_compositor :: proc(client: ^Client, registry: wayland.Registry, e: wayland.Registry_Global_Event) -> (wayland.Compositor, runtime.Allocator_Error) {
 	id, err := request_queue(client, wayland.Registry_Bind_Request {
 		registry  = registry,
 		name      = e.name,
@@ -1496,7 +1496,7 @@ bind_compositor :: proc(client: ^Client, registry: wayland.Registry, e: wayland.
 	return wayland.Compositor(id), err
 }
 
-bind_shm :: proc(client: ^Client, registry: wayland.Registry, e: wayland.Registry_Global_Event) -> (wayland.Shm, Error) {
+bind_shm :: proc(client: ^Client, registry: wayland.Registry, e: wayland.Registry_Global_Event) -> (wayland.Shm, runtime.Allocator_Error) {
 	id, err := request_queue(client, wayland.Registry_Bind_Request {
 		registry  = registry,
 		name      = e.name,
@@ -1506,7 +1506,7 @@ bind_shm :: proc(client: ^Client, registry: wayland.Registry, e: wayland.Registr
 	return wayland.Shm(id), err
 }
 
-bind_data_device_manager :: proc(client: ^Client, registry: wayland.Registry, e: wayland.Registry_Global_Event) -> (wayland.Data_Device_Manager, Error) {
+bind_data_device_manager :: proc(client: ^Client, registry: wayland.Registry, e: wayland.Registry_Global_Event) -> (wayland.Data_Device_Manager, runtime.Allocator_Error) {
 	id, err := request_queue(client, wayland.Registry_Bind_Request {
 		registry  = registry,
 		name      = e.name,
@@ -1516,7 +1516,7 @@ bind_data_device_manager :: proc(client: ^Client, registry: wayland.Registry, e:
 	return wayland.Data_Device_Manager(id), err
 }
 
-bind_shell :: proc(client: ^Client, registry: wayland.Registry, e: wayland.Registry_Global_Event) -> (wayland.Shell, Error) {
+bind_shell :: proc(client: ^Client, registry: wayland.Registry, e: wayland.Registry_Global_Event) -> (wayland.Shell, runtime.Allocator_Error) {
 	id, err := request_queue(client, wayland.Registry_Bind_Request {
 		registry  = registry,
 		name      = e.name,
@@ -1526,7 +1526,7 @@ bind_shell :: proc(client: ^Client, registry: wayland.Registry, e: wayland.Regis
 	return wayland.Shell(id), err
 }
 
-bind_seat :: proc(client: ^Client, registry: wayland.Registry, e: wayland.Registry_Global_Event) -> (wayland.Seat, Error) {
+bind_seat :: proc(client: ^Client, registry: wayland.Registry, e: wayland.Registry_Global_Event) -> (wayland.Seat, runtime.Allocator_Error) {
 	id, err := request_queue(client, wayland.Registry_Bind_Request {
 		registry  = registry,
 		name      = e.name,
@@ -1536,7 +1536,7 @@ bind_seat :: proc(client: ^Client, registry: wayland.Registry, e: wayland.Regist
 	return wayland.Seat(id), err
 }
 
-bind_output :: proc(client: ^Client, registry: wayland.Registry, e: wayland.Registry_Global_Event) -> (wayland.Output, Error) {
+bind_output :: proc(client: ^Client, registry: wayland.Registry, e: wayland.Registry_Global_Event) -> (wayland.Output, runtime.Allocator_Error) {
 	id, err := request_queue(client, wayland.Registry_Bind_Request {
 		registry  = registry,
 		name      = e.name,
@@ -1546,7 +1546,7 @@ bind_output :: proc(client: ^Client, registry: wayland.Registry, e: wayland.Regi
 	return wayland.Output(id), err
 }
 
-bind_subcompositor :: proc(client: ^Client, registry: wayland.Registry, e: wayland.Registry_Global_Event) -> (wayland.Subcompositor, Error) {
+bind_subcompositor :: proc(client: ^Client, registry: wayland.Registry, e: wayland.Registry_Global_Event) -> (wayland.Subcompositor, runtime.Allocator_Error) {
 	id, err := request_queue(client, wayland.Registry_Bind_Request {
 		registry  = registry,
 		name      = e.name,
@@ -1556,7 +1556,7 @@ bind_subcompositor :: proc(client: ^Client, registry: wayland.Registry, e: wayla
 	return wayland.Subcompositor(id), err
 }
 
-bind_fixes :: proc(client: ^Client, registry: wayland.Registry, e: wayland.Registry_Global_Event) -> (wayland.Fixes, Error) {
+bind_fixes :: proc(client: ^Client, registry: wayland.Registry, e: wayland.Registry_Global_Event) -> (wayland.Fixes, runtime.Allocator_Error) {
 	id, err := request_queue(client, wayland.Registry_Bind_Request {
 		registry  = registry,
 		name      = e.name,
@@ -1566,7 +1566,7 @@ bind_fixes :: proc(client: ^Client, registry: wayland.Registry, e: wayland.Regis
 	return wayland.Fixes(id), err
 }
 
-bind_linux_dmabuf_v1 :: proc(client: ^Client, registry: wayland.Registry, e: wayland.Registry_Global_Event) -> (wp.Linux_Dmabuf_V1, Error) {
+bind_linux_dmabuf_v1 :: proc(client: ^Client, registry: wayland.Registry, e: wayland.Registry_Global_Event) -> (wp.Linux_Dmabuf_V1, runtime.Allocator_Error) {
 	id, err := request_queue(client, wayland.Registry_Bind_Request {
 		registry  = registry,
 		name      = e.name,
@@ -1576,7 +1576,7 @@ bind_linux_dmabuf_v1 :: proc(client: ^Client, registry: wayland.Registry, e: way
 	return wp.Linux_Dmabuf_V1(id), err
 }
 
-bind_wm_base :: proc(client: ^Client, registry: wayland.Registry, e: wayland.Registry_Global_Event) -> (xdg.Wm_Base, Error) {
+bind_wm_base :: proc(client: ^Client, registry: wayland.Registry, e: wayland.Registry_Global_Event) -> (xdg.Wm_Base, runtime.Allocator_Error) {
 	id, err := request_queue(client, wayland.Registry_Bind_Request {
 		registry  = registry,
 		name      = e.name,
