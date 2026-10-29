@@ -126,13 +126,15 @@ send :: proc(client: ^Client) -> linux.Errno {
 	return .NONE
 }
 
-event_pending :: proc(client: ^Client) -> bool {
+event_pending :: proc(client: ^Client) -> (pending: bool, err: linux.Errno) {
 	pfd := linux.Poll_Fd{
 		fd     = client.wayland_socket,
 		events = {.IN},
 	}
-	linux.poll({pfd}, 0)
-	return .IN in pfd.revents
+	pfds := []linux.Poll_Fd{pfd}
+	ret := linux.poll(pfds, 0) or_return
+	pending = ret > 0
+	return
 }
 
 read :: proc(client: ^Client) -> Error {
@@ -157,7 +159,8 @@ read :: proc(client: ^Client) -> Error {
 }
 
 read_pending :: proc(client: ^Client) -> Error {
-	if event_pending(client) {
+	pending := event_pending(client) or_return
+	if pending {
 		read(client) or_return
 	}
 	return nil
@@ -239,6 +242,14 @@ create_shm_file :: proc(size: i32) -> (shm: linux.Fd, data: []byte, err: linux.E
 	linux.ftruncate(shm, i64(size)) or_return
 	ptr := linux.mmap(0, uint(size), {.READ, .WRITE}, {.SHARED}, shm) or_return
 	data = ([^]byte)(ptr)[:size]
+	return
+}
+
+resize_shm_file :: proc(shm: linux.Fd, old_data: []byte, new_size: i32) -> (data: []byte, err: linux.Errno) {
+	linux.munmap(raw_data(old_data), len(old_data)) or_return
+	linux.ftruncate(shm, i64(new_size)) or_return
+	ptr := linux.mmap(0, uint(new_size), {.READ, .WRITE}, {.SHARED}, shm) or_return
+	data = ([^]byte)(ptr)[:new_size]
 	return
 }
 
